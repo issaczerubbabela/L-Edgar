@@ -1,0 +1,64 @@
+# ── Android ──────────────────────────────────────────────────────────────────
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.dex
+*.ap_
+
+# Generated files
+bin/
+gen/
+out/
+release/
+
+# ── Gradle ───────────────────────────────────────────────────────────────────
+gradle-app.setting
+!gradle-wrapper.jar
+.gradletasknamecache
+buildSrc/build/
+buildSrc/.gradle/
+
+# ── Kotlin ───────────────────────────────────────────────────────────────────
+*.class
+*.kotlin_module
+
+# ── Room / SQLite ────────────────────────────────────────────────────────────
+*.db
+*.db-shm
+*.db-wal
+
+# ── Secrets & local config ───────────────────────────────────────────────────
+local.properties
+google-services.json
+keystore.properties
+*.jks
+*.keystore
+
+# ── OS & IDE ─────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.log
+
+# ── IntelliJ / Android Studio ────────────────────────────────────────────────
+/.idea/
+*.iml
+*.ipr
+*.iws
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+
+app/build/

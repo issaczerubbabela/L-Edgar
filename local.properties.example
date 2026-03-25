@@ -1,0 +1,17 @@
+# SheetSync — local.properties template
+# Copy this file to local.properties (git-ignored) and fill in your values.
+
+# Android SDK path (auto-set by Android Studio on first project open)
+# sdk.dir=C\:\\Users\\YourUsername\\AppData\\Local\\Android\\Sdk
+
+# ─── Google Apps Script Web App URL ──────────────────────────────────────────
+# IMPORTANT: the URL changes every time you do a "New Deployment".
+# After any script change, always do Deploy → New Deployment (not Test).
+#
+# Steps:
+#   1. Open your Google Sheet → Extensions → Apps Script
+#   2. Paste the script from scripts/AppsScript.gs
+#   3. Click Deploy → New Deployment
+#   4. Type: Web App | Execute as: Me | Who has access: Anyone
+#   5. Copy the URL below:
+# APPS_SCRIPT_URL=https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec
