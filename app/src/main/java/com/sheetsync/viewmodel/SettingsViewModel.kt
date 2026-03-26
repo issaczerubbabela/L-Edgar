@@ -1,37 +1,75 @@
 package com.sheetsync.viewmodel
 
+import android.content.Context
+import android.net.Uri
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sheetsync.BuildConfig
 import com.sheetsync.data.local.entity.ExpenseRecord
+import com.sheetsync.data.preferences.ThemePreferenceRepository
 import com.sheetsync.data.remote.ApiService
 import com.sheetsync.data.repository.ExpenseRepository
+import com.sheetsync.util.CsvParser
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+// ── State sealed classes ─────────────────────────────────────────────────────
 
 sealed class ImportState {
     object Idle : ImportState()
     object Loading : ImportState()
-    data class Success(val count: Int) : ImportState()
+    data class Success(val imported: Int, val skipped: Int) : ImportState()
     data class Error(val message: String) : ImportState()
 }
 
+// ── ViewModel ────────────────────────────────────────────────────────────────
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val repository: ExpenseRepository,
-    private val apiService: ApiService
+    private val apiService: ApiService,
+    private val themeRepository: ThemePreferenceRepository
 ) : ViewModel() {
 
-    private val _importState = MutableStateFlow<ImportState>(ImportState.Idle)
-    val importState: StateFlow<ImportState> = _importState
+    // ── Theme toggle ─────────────────────────────────────────────────────────
+    val isDarkTheme: StateFlow<Boolean> = themeRepository.isDarkTheme
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
-    fun importHistoricalData() {
-        if (_importState.value is ImportState.Loading) return
+    fun toggleTheme() {
+        viewModelScope.launch { themeRepository.setDarkTheme(!isDarkTheme.value) }
+    }
+
+    // ── Duplicate control (user-facing toggle) ───────────────────────────────
+    /** When true, records that already exist in Room are skipped during import. */
+    var skipDuplicates by mutableStateOf(true)
+
+    // ── Reset confirmation state ─────────────────────────────────────────────
+    var showResetConfirm by mutableStateOf(false)
+    var resetDone by mutableStateOf(false)
+
+    // ── Import state flows ───────────────────────────────────────────────────
+    private val _sheetsState = MutableStateFlow<ImportState>(ImportState.Idle)
+    val sheetsImportState: StateFlow<ImportState> = _sheetsState
+
+    private val _csvState = MutableStateFlow<ImportState>(ImportState.Idle)
+    val csvImportState: StateFlow<ImportState> = _csvState
+
+    // ── Google Sheets import ─────────────────────────────────────────────────
+
+    fun importFromSheets() {
+        if (_sheetsState.value is ImportState.Loading) return
         viewModelScope.launch {
-            _importState.value = ImportState.Loading
+            _sheetsState.value = ImportState.Loading
             try {
                 val response = apiService.importRecords(BuildConfig.APPS_SCRIPT_URL)
                 if (response.isSuccessful) {
@@ -40,25 +78,70 @@ class SettingsViewModel @Inject constructor(
                         ExpenseRecord(
                             date = dto.date,
                             type = dto.type,
-                            // Merge split columns back into a single category field
                             category = if (dto.type == "Expense") dto.expCategory else dto.incCategory,
                             description = dto.description,
                             amount = dto.amount,
                             paymentMode = dto.paymentMode,
                             remarks = dto.remarks,
-                            isSynced = true // already in Sheets — never push back
+                            isSynced = true
                         )
                     }
-                    records.forEach { repository.save(it) }
-                    _importState.value = ImportState.Success(records.size)
+                    val (imported, skipped) = insertRecords(records)
+                    _sheetsState.value = ImportState.Success(imported, skipped)
                 } else {
-                    _importState.value = ImportState.Error("Server error: HTTP ${response.code()}")
+                    _sheetsState.value = ImportState.Error("Server error: HTTP ${response.code()}")
                 }
             } catch (e: Exception) {
-                _importState.value = ImportState.Error(e.message ?: "Unknown error")
+                _sheetsState.value = ImportState.Error(e.message ?: "Unknown error")
             }
         }
     }
 
-    fun resetImportState() { _importState.value = ImportState.Idle }
+    // ── CSV import ───────────────────────────────────────────────────────────
+
+    fun importFromCsv(uri: Uri) {
+        if (_csvState.value is ImportState.Loading) return
+        viewModelScope.launch {
+            _csvState.value = ImportState.Loading
+            try {
+                val result = CsvParser.parse(context, uri)
+                val (imported, dedupSkipped) = insertRecords(result.records)
+                _csvState.value = ImportState.Success(imported, dedupSkipped + result.skippedLines)
+            } catch (e: Exception) {
+                _csvState.value = ImportState.Error(e.message ?: "Could not read file")
+            }
+        }
+    }
+
+    // ── Reset all data ───────────────────────────────────────────────────────
+
+    fun resetAllData() {
+        viewModelScope.launch {
+            repository.deleteAll()
+            showResetConfirm = false
+            resetDone = true
+        }
+    }
+
+    fun clearResetDone() { resetDone = false }
+
+    // ── Shared helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Insert [records] into Room.
+     * If [skipDuplicates] is true, checks for an existing record with the same
+     * date + type + category + amount before inserting.
+     * Returns (importedCount, skippedCount).
+     */
+    private suspend fun insertRecords(records: List<ExpenseRecord>): Pair<Int, Int> {
+        var imported = 0; var skipped = 0
+        for (record in records) {
+            val isDup = skipDuplicates && repository.isDuplicate(record.date, record.type, record.category, record.amount)
+            if (isDup) { skipped++ } else { repository.save(record); imported++ }
+        }
+        return imported to skipped
+    }
+
+    fun resetSheetsState() { _sheetsState.value = ImportState.Idle }
+    fun resetCsvState() { _csvState.value = ImportState.Idle }
 }

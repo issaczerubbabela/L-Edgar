@@ -7,7 +7,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -26,19 +25,25 @@ private val expenseCategories = listOf(
 private val incomeCategories = listOf(
     "Salary", "Freelance", "Business", "Investment", "Rental", "Gift", "Other"
 )
+private val transferCategories = listOf("Transfer")
 private val paymentModes = listOf(
     "UPI", "Cash", "Credit Card", "Debit Card", "Net Banking", "Wallet", "Other"
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LogScreen(innerPadding: PaddingValues, vm: LogViewModel = hiltViewModel()) {
+fun LogScreen(
+    innerPadding: PaddingValues,
+    onSaved: () -> Unit = {},
+    vm: LogViewModel = hiltViewModel()
+) {
     val snackbarHostState = remember { SnackbarHostState() }
     var showDatePicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(vm.saveSuccess) {
         if (vm.saveSuccess) {
             snackbarHostState.showSnackbar("Saved ✓")
+            onSaved()
             vm.resetSaveSuccess()
         }
     }
@@ -51,12 +56,19 @@ fun LogScreen(innerPadding: PaddingValues, vm: LogViewModel = hiltViewModel()) {
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { vm.save() },
-                icon = { Icon(Icons.Filled.Check, "Save") },
-                text = { Text("Save") }
-            )
+        bottomBar = {
+            Surface(color = MaterialTheme.colorScheme.surface) {
+                Column(modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding())) {
+                    Button(
+                        onClick = vm::save,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                    ) {
+                        Text("Log Transaction")
+                    }
+                }
+            }
         }
     ) { scaffoldPadding ->
         Column(
@@ -87,18 +99,26 @@ fun LogScreen(innerPadding: PaddingValues, vm: LogViewModel = hiltViewModel()) {
             // Expense / Income toggle
             Text("Type", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                listOf("Expense", "Income").forEachIndexed { index, label ->
+                val types = listOf("Expense", "Income", "Transfer")
+                types.forEachIndexed { index, label ->
                     SegmentedButton(
-                        shape = SegmentedButtonDefaults.itemShape(index, 2),
+                        shape = SegmentedButtonDefaults.itemShape(index, types.size),
                         selected = vm.selectedType == label,
-                        onClick = { vm.selectedType = label; vm.selectedCategory = "" },
+                        onClick = {
+                            vm.selectedType = label
+                            vm.selectedCategory = if (label == "Transfer") "Transfer" else ""
+                        },
                         label = { Text(label) }
                     )
                 }
             }
 
             // Category dropdown
-            val categories = if (vm.selectedType == "Expense") expenseCategories else incomeCategories
+            val categories = when (vm.selectedType) {
+                "Expense" -> expenseCategories
+                "Income" -> incomeCategories
+                else -> transferCategories
+            }
             DropdownField(
                 label = "Category",
                 options = categories,
@@ -141,8 +161,7 @@ fun LogScreen(innerPadding: PaddingValues, vm: LogViewModel = hiltViewModel()) {
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2
             )
-
-            Spacer(Modifier.height(72.dp)) // FAB clearance
+            Spacer(Modifier.height(8.dp))
         }
     }
 

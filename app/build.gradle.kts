@@ -87,4 +87,6 @@ dependencies {
     // Vico Charts
     implementation(libs.vico.compose.m3)
     implementation(libs.vico.core)
+    // DataStore
+    implementation(libs.androidx.datastore.preferences)
 }
