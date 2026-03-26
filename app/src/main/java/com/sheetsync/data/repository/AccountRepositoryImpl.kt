@@ -11,6 +11,8 @@ class AccountRepositoryImpl @Inject constructor(
 
     override fun getAllAccounts(): Flow<List<AccountRecord>> = dao.getAllAccounts()
 
+    override suspend fun getAccountById(accountId: Long): AccountRecord? = dao.getAccountById(accountId)
+
     override suspend fun save(record: AccountRecord): Long = dao.insert(record)
 
     override suspend fun delete(record: AccountRecord) = dao.delete(record)

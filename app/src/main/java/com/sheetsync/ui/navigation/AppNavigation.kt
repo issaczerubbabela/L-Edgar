@@ -22,15 +22,21 @@ import androidx.compose.ui.graphics.Color
 import com.sheetsync.ui.screens.HistoryScreen
 import com.sheetsync.ui.screens.InsightsScreen
 import com.sheetsync.ui.screens.LogScreen
+import com.sheetsync.ui.screens.AccountDetailScreen
+import com.sheetsync.ui.screens.AccountsScreen
+import com.sheetsync.ui.screens.AddAccountScreen
 import com.sheetsync.ui.screens.BudgetSettingScreen
 import com.sheetsync.ui.screens.SettingsScreen
 import com.sheetsync.ui.theme.FabRed
+import com.sheetsync.viewmodel.ACCOUNT_ROUTE_ADD
 
 sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
     object Log : Screen("log", "Log", Icons.Filled.AddCircle)
     object Trans : Screen("trans", "Trans.", Icons.Filled.MenuBook)
     object Stats : Screen("stats", "Stats", Icons.Filled.BarChart)
     object Accounts : Screen("accounts", "Accounts", Icons.Filled.Paid)
+    object AccountDetail : Screen("account_detail/{accountId}", "AccountDetail", Icons.Filled.Paid)
+    object AddAccount : Screen(ACCOUNT_ROUTE_ADD, "AddAccount", Icons.Filled.Paid)
     object More : Screen("more", "More", Icons.Filled.MoreHoriz)
     object BudgetSetting : Screen("budget_setting", "BudgetSetting", Icons.Filled.Settings)
 }
@@ -98,10 +104,35 @@ fun AppNavigation() {
                 )
             }
             composable(Screen.Stats.route) { InsightsScreen(innerPadding) }
-            composable(Screen.Accounts.route) { SettingsScreen(innerPadding) }
+            composable(Screen.Accounts.route) {
+                AccountsScreen(
+                    innerPadding = innerPadding,
+                    onAddAccount = {
+                        navController.navigate(Screen.AddAccount.route) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onOpenAccountDetail = { accountId ->
+                        navController.navigate("account_detail/$accountId")
+                    }
+                )
+            }
+            composable(Screen.AddAccount.route) {
+                AddAccountScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
+                    onSaved = { navController.popBackStack() }
+                )
+            }
             composable(Screen.More.route) { SettingsScreen(innerPadding) }
             composable(Screen.BudgetSetting.route) {
                 BudgetSettingScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable("account_detail/{accountId}") {
+                AccountDetailScreen(
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() }
                 )

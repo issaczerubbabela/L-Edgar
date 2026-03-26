@@ -41,6 +41,7 @@ data class TotalTabUiState(
     val selectedExportInterval: ExportInterval = ExportInterval.CURRENT_MONTH,
     val customStartDateInput: String = "",
     val customEndDateInput: String = "",
+    val pendingExportFileName: String? = null,
     val exportStatusMessage: String? = null
 )
 

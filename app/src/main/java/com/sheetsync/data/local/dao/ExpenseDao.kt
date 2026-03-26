@@ -55,6 +55,15 @@ interface ExpenseDao {
 
     @Query(
         """
+        SELECT * FROM expense_records
+        WHERE fromAccountId = :accountId OR toAccountId = :accountId
+        ORDER BY date DESC, id DESC
+        """
+    )
+    fun getRecordsForAccount(accountId: Long): Flow<List<ExpenseRecord>>
+
+    @Query(
+        """
         SELECT a.initialBalance + COALESCE(SUM(
             CASE
                 WHEN e.type = 'Income' AND e.toAccountId = :accountId THEN e.amount

@@ -19,4 +19,7 @@ interface AccountDao {
 
     @Query("SELECT * FROM account_records ORDER BY accountName ASC")
     fun getAllAccounts(): Flow<List<AccountRecord>>
+
+    @Query("SELECT * FROM account_records WHERE id = :accountId LIMIT 1")
+    suspend fun getAccountById(accountId: Long): AccountRecord?
 }

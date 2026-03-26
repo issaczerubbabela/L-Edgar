@@ -6,10 +6,15 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.*
+import com.sheetsync.data.local.entity.AccountRecord
 import com.sheetsync.data.local.entity.ExpenseRecord
+import com.sheetsync.data.repository.AccountRepository
 import com.sheetsync.data.repository.ExpenseRepository
 import com.sheetsync.sync.SyncWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
@@ -17,12 +22,19 @@ import javax.inject.Inject
 @HiltViewModel
 class LogViewModel @Inject constructor(
     private val repository: ExpenseRepository,
+    accountRepository: AccountRepository,
     private val workManager: WorkManager
 ) : ViewModel() {
+
+    val accounts: StateFlow<List<AccountRecord>> = accountRepository
+        .getAllAccounts()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     var selectedDate by mutableStateOf(LocalDate.now())
     var selectedType by mutableStateOf("Expense")
     var selectedCategory by mutableStateOf("")
+    var selectedFromAccountId by mutableStateOf<Long?>(null)
+    var selectedToAccountId by mutableStateOf<Long?>(null)
     var description by mutableStateOf("")
     var amount by mutableStateOf("")
     var selectedPaymentMode by mutableStateOf("")
@@ -35,18 +47,26 @@ class LogViewModel @Inject constructor(
         if (parsedAmount == null || parsedAmount <= 0.0) {
             errorMessage = "Enter a valid amount"; return
         }
-        if (selectedCategory.isBlank()) { errorMessage = "Select a category"; return }
-        if (selectedPaymentMode.isBlank()) { errorMessage = "Select a payment mode"; return }
+        if (selectedType == "Transfer") {
+            if (selectedFromAccountId == null) { errorMessage = "Select From Account"; return }
+            if (selectedToAccountId == null) { errorMessage = "Select To Account"; return }
+            if (selectedFromAccountId == selectedToAccountId) { errorMessage = "From and To accounts must differ"; return }
+        } else {
+            if (selectedCategory.isBlank()) { errorMessage = "Select a category"; return }
+            if (selectedPaymentMode.isBlank()) { errorMessage = "Select a payment mode"; return }
+        }
 
         viewModelScope.launch {
             val record = ExpenseRecord(
                 date = selectedDate.toString(),
                 type = selectedType,
-                category = selectedCategory,
+                category = if (selectedType == "Transfer") "Transfer" else selectedCategory,
                 description = description,
                 amount = parsedAmount,
-                paymentMode = selectedPaymentMode,
+                paymentMode = if (selectedType == "Transfer") "Transfer" else selectedPaymentMode,
                 remarks = remarks,
+                fromAccountId = selectedFromAccountId,
+                toAccountId = selectedToAccountId,
                 isSynced = false
             )
             repository.save(record)
@@ -63,6 +83,8 @@ class LogViewModel @Inject constructor(
         selectedDate = LocalDate.now()
         selectedType = "Expense"
         selectedCategory = ""
+        selectedFromAccountId = null
+        selectedToAccountId = null
         description = ""
         amount = ""
         selectedPaymentMode = ""

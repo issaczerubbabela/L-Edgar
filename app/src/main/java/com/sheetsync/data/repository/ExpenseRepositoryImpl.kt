@@ -15,6 +15,8 @@ class ExpenseRepositoryImpl @Inject constructor(
 
     override fun getByType(type: String): Flow<List<ExpenseRecord>> = dao.getByType(type)
 
+    override fun getRecordsForAccount(accountId: Long): Flow<List<ExpenseRecord>> = dao.getRecordsForAccount(accountId)
+
     override fun getAccountBalance(accountId: Long): Flow<Double> = dao.getAccountBalance(accountId)
 
     override fun getRecordsByDateRange(startDate: String, endDate: String): Flow<List<ExpenseRecord>> =

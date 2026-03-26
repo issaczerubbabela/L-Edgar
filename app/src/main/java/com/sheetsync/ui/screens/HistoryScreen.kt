@@ -130,7 +130,10 @@ fun HistoryScreen(
                         onSelectExportInterval = totalVm::selectExportInterval,
                         onCustomStartChanged = totalVm::updateCustomStart,
                         onCustomEndChanged = totalVm::updateCustomEnd,
-                        onExportConfirm = totalVm::exportData,
+                        onExportConfirm = totalVm::requestExportDocument,
+                        pendingExportFileName = totalState.pendingExportFileName,
+                        onConsumeExportRequest = totalVm::consumeExportRequest,
+                        onExportUriPicked = totalVm::exportDataToUri,
                         modifier = Modifier.fillMaxSize()
                     )
                     else -> DailyContent(state.groups, Modifier.fillMaxSize())

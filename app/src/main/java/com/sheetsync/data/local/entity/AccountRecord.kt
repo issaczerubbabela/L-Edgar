@@ -6,7 +6,7 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "account_records")
 data class AccountRecord(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val accountGroup: String,
     val accountName: String,
-    val accountType: String, // Cash | Bank | Card
     val initialBalance: Double
 )

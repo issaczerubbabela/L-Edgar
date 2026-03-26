@@ -1,16 +1,19 @@
 package com.sheetsync.viewmodel
 
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sheetsync.data.local.entity.AccountRecord
 import com.sheetsync.data.local.entity.BudgetRecord
 import com.sheetsync.data.local.entity.ExpenseRecord
+import com.sheetsync.data.repository.AccountRepository
 import com.sheetsync.data.repository.BudgetRepository
 import com.sheetsync.data.repository.ExpenseRepository
-import com.sheetsync.util.ExcelExportService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -20,7 +23,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.io.File
+import java.io.OutputStreamWriter
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -30,6 +33,7 @@ import javax.inject.Inject
 @HiltViewModel
 class TotalViewModel @Inject constructor(
     private val expenseRepository: ExpenseRepository,
+    private val accountRepository: AccountRepository,
     private val budgetRepository: BudgetRepository,
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
@@ -41,6 +45,7 @@ class TotalViewModel @Inject constructor(
     private val _selectedExportInterval = MutableStateFlow(ExportInterval.CURRENT_MONTH)
     private val _customStartDateInput = MutableStateFlow("")
     private val _customEndDateInput = MutableStateFlow("")
+    private val _pendingExportFileName = MutableStateFlow<String?>(null)
     private val _exportStatusMessage = MutableStateFlow<String?>(null)
 
     val uiState: StateFlow<TotalTabUiState> = combine(
@@ -53,6 +58,7 @@ class TotalViewModel @Inject constructor(
         _selectedExportInterval,
         _customStartDateInput,
         _customEndDateInput,
+        _pendingExportFileName,
         _exportStatusMessage
     ) { values ->
         val records = values[0] as List<ExpenseRecord>
@@ -64,7 +70,8 @@ class TotalViewModel @Inject constructor(
         val selectedExportInterval = values[6] as ExportInterval
         val customStart = values[7] as String
         val customEnd = values[8] as String
-        val exportMessage = values[9] as String?
+        val pendingExportFileName = values[9] as String?
+        val exportMessage = values[10] as String?
 
         val monthRecords = records.filterByYearMonth(selectedYm)
         val monthIncome = monthRecords.filter { it.type == "Income" }.sumOf { it.amount }
@@ -89,6 +96,7 @@ class TotalViewModel @Inject constructor(
             selectedExportInterval = selectedExportInterval,
             customStartDateInput = customStart,
             customEndDateInput = customEnd,
+            pendingExportFileName = pendingExportFileName,
             exportStatusMessage = exportMessage
         )
     }
@@ -127,10 +135,18 @@ class TotalViewModel @Inject constructor(
         _exportStatusMessage.value = null
     }
 
-    fun exportData() {
+    fun requestExportDocument() {
+        val ym = _selectedYearMonth.value
+        val stamp = ym.format(DateTimeFormatter.ofPattern("yyyy_MM", Locale.ENGLISH))
+        _pendingExportFileName.value = "sheetsync_export_${stamp}.csv"
+    }
+
+    fun consumeExportRequest() {
+        _pendingExportFileName.value = null
+    }
+
+    fun exportDataToUri(uri: Uri) {
         viewModelScope.launch {
-            val allRecords = expenseRepository.getAllRecords().first()
-            val allBudgets = budgetRepository.observeBudgets().first()
             val range = buildRange(_selectedExportInterval.value, _selectedYearMonth.value)
 
             if (range == null) {
@@ -138,24 +154,18 @@ class TotalViewModel @Inject constructor(
                 return@launch
             }
 
-            val filteredRecords = allRecords.filter { record ->
-                runCatching { LocalDate.parse(record.date) }.getOrNull()?.let { date ->
-                    date >= range.first && date <= range.second
-                } == true
-            }
+            val filteredRecords = expenseRepository
+                .getRecordsByDateRange(range.first.toString(), range.second.toString())
+                .first()
+            val accounts = accountRepository.getAllAccounts().first()
+            val accountMap = accounts.associateBy { it.id }
 
             val exported = runCatching {
-                ExcelExportService.exportToCsv(
-                    context = appContext,
-                    records = filteredRecords,
-                    budgets = allBudgets,
-                    title = _selectedExportInterval.value.label
-                )
+                writeCsv(uri, filteredRecords, accountMap)
             }
 
             if (exported.isSuccess) {
-                val file: File = exported.getOrThrow()
-                _exportStatusMessage.value = "Exported: ${file.name}"
+                _exportStatusMessage.value = "Export completed"
                 _showExportDialog.value = false
             } else {
                 _exportStatusMessage.value = "Export failed"
@@ -262,4 +272,37 @@ class TotalViewModel @Inject constructor(
             date.year == ym.year && date.monthValue == ym.monthValue
         } == true
     }
+
+    private suspend fun writeCsv(
+        uri: Uri,
+        records: List<ExpenseRecord>,
+        accountMap: Map<Long, AccountRecord>
+    ) = withContext(Dispatchers.IO) {
+        appContext.contentResolver.openOutputStream(uri)?.use { stream ->
+            OutputStreamWriter(stream).use { writer ->
+                writer.appendLine("Date,Type,Category/Account,Amount,Note")
+                records.forEach { record ->
+                    val categoryOrAccount = if (record.type == "Transfer") {
+                        val from = record.fromAccountId?.let { accountMap[it]?.accountName } ?: "Unknown"
+                        val to = record.toAccountId?.let { accountMap[it]?.accountName } ?: "Unknown"
+                        "Transfer: $from -> $to"
+                    } else {
+                        record.category
+                    }
+                    val note = record.remarks.ifBlank { record.description }
+                    writer.appendLine(
+                        listOf(
+                            csvEscape(record.date),
+                            csvEscape(record.type),
+                            csvEscape(categoryOrAccount),
+                            record.amount.toString(),
+                            csvEscape(note)
+                        ).joinToString(",")
+                    )
+                }
+            }
+        } ?: error("Unable to open output stream")
+    }
+
+    private fun csvEscape(value: String): String = "\"${value.replace("\"", "\"\"")}\""
 }

@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.sheetsync.data.local.entity.AccountRecord
 import com.sheetsync.viewmodel.LogViewModel
 import java.time.Instant
 import java.time.ZoneId
@@ -39,6 +40,7 @@ fun LogScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var showDatePicker by remember { mutableStateOf(false) }
+    val accounts by vm.accounts.collectAsState()
 
     LaunchedEffect(vm.saveSuccess) {
         if (vm.saveSuccess) {
@@ -107,24 +109,42 @@ fun LogScreen(
                         onClick = {
                             vm.selectedType = label
                             vm.selectedCategory = if (label == "Transfer") "Transfer" else ""
+                            vm.selectedFromAccountId = null
+                            vm.selectedToAccountId = null
+                            vm.selectedPaymentMode = if (label == "Transfer") "Transfer" else ""
                         },
                         label = { Text(label) }
                     )
                 }
             }
 
-            // Category dropdown
-            val categories = when (vm.selectedType) {
-                "Expense" -> expenseCategories
-                "Income" -> incomeCategories
-                else -> transferCategories
+            if (vm.selectedType == "Transfer") {
+                AccountDropdownField(
+                    label = "From Account",
+                    options = accounts,
+                    selectedId = vm.selectedFromAccountId,
+                    onSelect = { vm.selectedFromAccountId = it }
+                )
+                AccountDropdownField(
+                    label = "To Account",
+                    options = accounts,
+                    selectedId = vm.selectedToAccountId,
+                    onSelect = { vm.selectedToAccountId = it }
+                )
+            } else {
+                // Category dropdown
+                val categories = when (vm.selectedType) {
+                    "Expense" -> expenseCategories
+                    "Income" -> incomeCategories
+                    else -> transferCategories
+                }
+                DropdownField(
+                    label = "Category",
+                    options = categories,
+                    selected = vm.selectedCategory,
+                    onSelect = { vm.selectedCategory = it }
+                )
             }
-            DropdownField(
-                label = "Category",
-                options = categories,
-                selected = vm.selectedCategory,
-                onSelect = { vm.selectedCategory = it }
-            )
 
             // Description
             OutlinedTextField(
@@ -146,12 +166,14 @@ fun LogScreen(
             )
 
             // Payment Mode
-            DropdownField(
-                label = "Payment Mode",
-                options = paymentModes,
-                selected = vm.selectedPaymentMode,
-                onSelect = { vm.selectedPaymentMode = it }
-            )
+            if (vm.selectedType != "Transfer") {
+                DropdownField(
+                    label = "Payment Mode",
+                    options = paymentModes,
+                    selected = vm.selectedPaymentMode,
+                    onSelect = { vm.selectedPaymentMode = it }
+                )
+            }
 
             // Remarks
             OutlinedTextField(
@@ -204,6 +226,39 @@ fun DropdownField(label: String, options: List<String>, selected: String, onSele
                 DropdownMenuItem(
                     text = { Text(option) },
                     onClick = { onSelect(option); expanded = false }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AccountDropdownField(
+    label: String,
+    options: List<AccountRecord>,
+    selectedId: Long?,
+    onSelect: (Long) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selected = options.firstOrNull { it.id == selectedId }?.accountName.orEmpty()
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = selected,
+            onValueChange = {},
+            label = { Text(label) },
+            readOnly = true,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            modifier = Modifier.menuAnchor().fillMaxWidth()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { account ->
+                DropdownMenuItem(
+                    text = { Text(account.accountName) },
+                    onClick = {
+                        onSelect(account.id)
+                        expanded = false
+                    }
                 )
             }
         }
