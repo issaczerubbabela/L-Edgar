@@ -16,8 +16,11 @@ import com.sheetsync.util.CsvParser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -29,6 +32,10 @@ sealed class ImportState {
     object Loading : ImportState()
     data class Success(val imported: Int, val skipped: Int) : ImportState()
     data class Error(val message: String) : ImportState()
+}
+
+sealed class SettingsUiEvent {
+    data class ShowMessage(val message: String) : SettingsUiEvent()
 }
 
 // ── ViewModel ────────────────────────────────────────────────────────────────
@@ -64,6 +71,9 @@ class SettingsViewModel @Inject constructor(
     private val _csvState = MutableStateFlow<ImportState>(ImportState.Idle)
     val csvImportState: StateFlow<ImportState> = _csvState
 
+    private val _uiEvents = MutableSharedFlow<SettingsUiEvent>(replay = 0)
+    val uiEvents: SharedFlow<SettingsUiEvent> = _uiEvents.asSharedFlow()
+
     // ── Google Sheets import ─────────────────────────────────────────────────
 
     fun importFromSheets() {
@@ -73,21 +83,21 @@ class SettingsViewModel @Inject constructor(
             try {
                 val response = apiService.importRecords(BuildConfig.APPS_SCRIPT_URL)
                 if (response.isSuccessful) {
-                    val dtos = response.body() ?: emptyList()
-                    val records = dtos.map { dto ->
-                        ExpenseRecord(
-                            date = dto.date,
-                            type = dto.type,
-                            category = if (dto.type == "Expense") dto.expCategory else dto.incCategory,
-                            description = dto.description,
-                            amount = dto.amount,
-                            paymentMode = dto.paymentMode,
-                            remarks = dto.remarks,
-                            isSynced = true
-                        )
+                    val body = response.body()
+                    if (!body?.status.equals("ok", ignoreCase = true)) {
+                        _sheetsState.value = ImportState.Error(body?.message ?: "Import failed")
+                        return@launch
                     }
-                    val (imported, skipped) = insertRecords(records)
+
+                    val dtos = body?.data.orEmpty()
+                    val imported = repository.importRemoteRecords(dtos)
+                    val skipped = (dtos.size - imported).coerceAtLeast(0)
                     _sheetsState.value = ImportState.Success(imported, skipped)
+                    _uiEvents.emit(
+                        SettingsUiEvent.ShowMessage(
+                            "Sync complete. $imported new records imported."
+                        )
+                    )
                 } else {
                     _sheetsState.value = ImportState.Error("Server error: HTTP ${response.code()}")
                 }

@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sheetsync.data.local.entity.ExpenseRecord
 import com.sheetsync.data.repository.ExpenseRepository
+import com.sheetsync.util.parseFlexibleDate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -66,8 +67,32 @@ class HistoryViewModel @Inject constructor(
     var selectedDate: LocalDate? by mutableStateOf(null)
         private set
 
+    private var userAdjustedPeriod = false
+
     fun selectDate(date: LocalDate) {
         selectedDate = if (selectedDate == date) null else date
+    }
+
+    init {
+        viewModelScope.launch {
+            repository.getAllRecords().collect { all ->
+                if (userAdjustedPeriod || all.isEmpty()) return@collect
+
+                val selectedMonthHasData = all.any { record ->
+                    parseRecordDate(record)?.let { d ->
+                        d.year == _year.value && d.monthValue == _month.value
+                    } == true
+                }
+
+                if (!selectedMonthHasData) {
+                    val latest = all.mapNotNull { parseRecordDate(it) }.maxOrNull()
+                    if (latest != null) {
+                        _month.value = latest.monthValue
+                        _year.value = latest.year
+                    }
+                }
+            }
+        }
     }
 
     val uiState: StateFlow<HistoryUiState> =
@@ -79,7 +104,7 @@ class HistoryViewModel @Inject constructor(
 
             // ── Filter to current month ────────────────────────────────────
             val monthRecords = records.filter { r ->
-                runCatching { LocalDate.parse(r.date) }
+                runCatching { parseRecordDate(r) }
                     .getOrNull()?.let { d -> d.monthValue == month && d.year == year } == true
             }
 
@@ -89,7 +114,7 @@ class HistoryViewModel @Inject constructor(
             // ── Group by date for both Daily list and Calendar ─────────────
             val byDate: Map<LocalDate, List<ExpenseRecord>> = monthRecords
                 .mapNotNull { r ->
-                    runCatching { LocalDate.parse(r.date) }.getOrNull()?.let { it to r }
+                    parseRecordDate(r)?.let { it to r }
                 }
                 .groupBy({ it.first }, { it.second })
 
@@ -122,6 +147,7 @@ class HistoryViewModel @Inject constructor(
     fun prevMonth() = shiftMonth(-1)
 
     private fun shiftMonth(delta: Long) {
+        userAdjustedPeriod = true
         val next = LocalDate.of(_year.value, _month.value, 1).plusMonths(delta)
         _month.value = next.monthValue
         _year.value  = next.year
@@ -143,7 +169,7 @@ class HistoryViewModel @Inject constructor(
 
         // Also need out-of-month cells to show no-amount but maybe different month records
         val allByDate: Map<LocalDate, List<ExpenseRecord>> = allRecords
-            .mapNotNull { r -> runCatching { LocalDate.parse(r.date) }.getOrNull()?.let { it to r } }
+            .mapNotNull { r -> parseRecordDate(r)?.let { it to r } }
             .groupBy({ it.first }, { it.second })
 
         val leadingDays = when (firstDay.dayOfWeek) {
@@ -202,4 +228,7 @@ class HistoryViewModel @Inject constructor(
             totalTransactions = recs.size
         )
     }
+
+    private fun parseRecordDate(record: ExpenseRecord): LocalDate? =
+        parseFlexibleDate(record.date) ?: record.remoteTimestamp?.let(::parseFlexibleDate)
 }

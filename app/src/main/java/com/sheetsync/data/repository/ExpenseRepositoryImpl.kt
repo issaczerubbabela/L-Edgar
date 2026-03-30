@@ -2,6 +2,7 @@ package com.sheetsync.data.repository
 
 import com.sheetsync.data.local.dao.ExpenseDao
 import com.sheetsync.data.local.entity.ExpenseRecord
+import com.sheetsync.data.remote.ImportRecordDto
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 
@@ -32,4 +33,108 @@ class ExpenseRepositoryImpl @Inject constructor(
 
     override suspend fun isDuplicate(date: String, type: String, category: String, amount: Double): Boolean =
         dao.findDuplicate(date, type, category, amount) != null
+
+    override suspend fun importRemoteRecords(records: List<ImportRecordDto>): Int {
+        repairLegacyRecords()
+        if (records.isEmpty()) return 0
+
+        val existingTimestampSet = dao.getAllRemoteTimestamps().toMutableSet()
+        val existingFallbackSet = dao.getAllRecordsSnapshot()
+            .map { fallbackKey(it.date, it.type, it.description, it.amount) }
+            .toMutableSet()
+
+        val toInsert = mutableListOf<ExpenseRecord>()
+
+        records.forEach { dto ->
+            val resolvedType = canonicalType(dto.type)
+            val resolvedDate = normalizeDate(dto.date, dto.timestamp)
+            val mappedCategory = when {
+                resolvedType.equals("Expense", ignoreCase = true) -> dto.expCategory
+                resolvedType.equals("Income", ignoreCase = true) -> dto.incCategory
+                else -> dto.expCategory ?: dto.incCategory
+            }.orEmpty()
+
+            val timestamp = dto.timestamp?.trim().takeUnless { it.isNullOrBlank() }
+            val fallback = fallbackKey(resolvedDate, resolvedType, dto.description, dto.amount)
+
+            val isDuplicate =
+                (timestamp != null && existingTimestampSet.contains(timestamp)) ||
+                    existingFallbackSet.contains(fallback)
+
+            if (!isDuplicate) {
+                toInsert += ExpenseRecord(
+                    date = resolvedDate,
+                    type = resolvedType,
+                    category = mappedCategory,
+                    description = dto.description,
+                    amount = dto.amount,
+                    paymentMode = dto.paymentMode,
+                    remarks = dto.remarks,
+                    isSynced = true,
+                    remoteTimestamp = timestamp
+                )
+
+                if (timestamp != null) existingTimestampSet += timestamp
+                existingFallbackSet += fallback
+            }
+        }
+
+        if (toInsert.isNotEmpty()) dao.insertAll(toInsert)
+        return toInsert.size
+    }
+
+    private fun fallbackKey(date: String, type: String, description: String, amount: Double): String =
+        listOf(date, type, description.trim(), amount.toString()).joinToString("|")
+
+    private suspend fun repairLegacyRecords() {
+        val snapshot = dao.getAllRecordsSnapshot()
+        val normalized = snapshot.map { record ->
+            record.copy(
+                date = normalizeDate(record.date, null),
+                type = canonicalType(record.type)
+            )
+        }
+        if (normalized != snapshot) {
+            dao.insertAll(normalized)
+        }
+    }
+
+    private fun canonicalType(rawType: String): String {
+        val t = rawType.trim().lowercase()
+        return when {
+            t == "expense" -> "Expense"
+            t == "income" -> "Income"
+            t == "transfer" -> "Transfer"
+            else -> rawType.trim().replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        }
+    }
+
+    private fun normalizeDate(rawDate: String, rawTimestamp: String?): String {
+        val date = rawDate.trim()
+        if (date.matches(Regex("""\\d{4}-\\d{2}-\\d{2}"""))) return date
+
+        // Accept common ISO timestamp/date-time and keep date portion.
+        if (date.matches(Regex("""\\d{4}-\\d{2}-\\d{2}T.*"""))) return date.substring(0, 10)
+
+        // Handle M/D/YYYY and D/M/YYYY style values.
+        val slash = date.split("/")
+        if (slash.size == 3) {
+            val p0 = slash[0].trim().toIntOrNull()
+            val p1 = slash[1].trim().toIntOrNull()
+            val year = slash[2].trim().toIntOrNull()
+            if (p0 != null && p1 != null && year != null) {
+                val (month, day) = if (p0 > 12) p1 to p0 else p0 to p1
+                if (month in 1..12 && day in 1..31) {
+                    return "${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}"
+                }
+            }
+        }
+
+        // Last fallback: derive date from timestamp if present.
+        val ts = rawTimestamp?.trim().orEmpty()
+        if (ts.matches(Regex("""\\d{4}-\\d{2}-\\d{2}T.*"""))) return ts.substring(0, 10)
+        if (ts.matches(Regex("""\\d{4}-\\d{2}-\\d{2}"""))) return ts
+
+        return date
+    }
 }

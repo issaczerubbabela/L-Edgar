@@ -10,8 +10,17 @@ interface ExpenseDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(record: ExpenseRecord): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(records: List<ExpenseRecord>)
+
     @Query("SELECT * FROM expense_records ORDER BY date DESC")
     fun getAllRecords(): Flow<List<ExpenseRecord>>
+
+    @Query("SELECT * FROM expense_records")
+    suspend fun getAllRecordsSnapshot(): List<ExpenseRecord>
+
+    @Query("SELECT remoteTimestamp FROM expense_records WHERE remoteTimestamp IS NOT NULL AND remoteTimestamp != ''")
+    suspend fun getAllRemoteTimestamps(): List<String>
 
     @Query("SELECT * FROM expense_records WHERE type = :type ORDER BY date DESC")
     fun getByType(type: String): Flow<List<ExpenseRecord>>

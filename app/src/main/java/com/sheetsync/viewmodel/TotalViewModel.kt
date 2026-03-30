@@ -10,6 +10,7 @@ import com.sheetsync.data.local.entity.ExpenseRecord
 import com.sheetsync.data.repository.AccountRepository
 import com.sheetsync.data.repository.BudgetRepository
 import com.sheetsync.data.repository.ExpenseRepository
+import com.sheetsync.util.parseFlexibleDate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -47,6 +48,30 @@ class TotalViewModel @Inject constructor(
     private val _customEndDateInput = MutableStateFlow("")
     private val _pendingExportFileName = MutableStateFlow<String?>(null)
     private val _exportStatusMessage = MutableStateFlow<String?>(null)
+
+    private var userAdjustedMonth = false
+
+    init {
+        viewModelScope.launch {
+            expenseRepository.getAllRecords().collect { all ->
+                if (userAdjustedMonth || all.isEmpty()) return@collect
+
+                val selectedHasData = all.any { record ->
+                    parseRecordDate(record)?.let { d ->
+                        d.year == _selectedYearMonth.value.year &&
+                            d.monthValue == _selectedYearMonth.value.monthValue
+                    } == true
+                }
+
+                if (!selectedHasData) {
+                    val latest = all.mapNotNull { parseRecordDate(it) }.maxOrNull()
+                    if (latest != null) {
+                        _selectedYearMonth.value = YearMonth.of(latest.year, latest.monthValue)
+                    }
+                }
+            }
+        }
+    }
 
     val uiState: StateFlow<TotalTabUiState> = combine(
         expenseRepository.getAllRecords(),
@@ -103,9 +128,15 @@ class TotalViewModel @Inject constructor(
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TotalTabUiState())
 
-    fun nextMonth() = _selectedYearMonth.update { it.plusMonths(1) }
+    fun nextMonth() = _selectedYearMonth.update {
+        userAdjustedMonth = true
+        it.plusMonths(1)
+    }
 
-    fun prevMonth() = _selectedYearMonth.update { it.minusMonths(1) }
+    fun prevMonth() = _selectedYearMonth.update {
+        userAdjustedMonth = true
+        it.minusMonths(1)
+    }
 
     fun toggleBudgetSection() = _isBudgetExpanded.update { !it }
 
@@ -268,10 +299,13 @@ class TotalViewModel @Inject constructor(
     }
 
     private fun List<ExpenseRecord>.filterByYearMonth(ym: YearMonth): List<ExpenseRecord> = filter { record ->
-        runCatching { LocalDate.parse(record.date) }.getOrNull()?.let { date ->
+        parseRecordDate(record)?.let { date ->
             date.year == ym.year && date.monthValue == ym.monthValue
         } == true
     }
+
+    private fun parseRecordDate(record: ExpenseRecord): LocalDate? =
+        parseFlexibleDate(record.date) ?: record.remoteTimestamp?.let(::parseFlexibleDate)
 
     private suspend fun writeCsv(
         uri: Uri,

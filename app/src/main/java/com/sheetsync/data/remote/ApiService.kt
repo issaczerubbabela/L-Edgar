@@ -13,5 +13,5 @@ interface ApiService {
 
     /** GET all historical records from the Apps Script Web App for initial import. */
     @GET
-    suspend fun importRecords(@Url url: String): Response<List<ImportRecordDto>>
+    suspend fun importRecords(@Url url: String): Response<ImportResponse>
 }

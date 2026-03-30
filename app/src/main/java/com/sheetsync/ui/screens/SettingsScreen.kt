@@ -19,6 +19,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.sheetsync.ui.theme.ExpenseRed
 import com.sheetsync.ui.theme.IncomeGreen
 import com.sheetsync.viewmodel.ImportState
+import com.sheetsync.viewmodel.SettingsUiEvent
 import com.sheetsync.viewmodel.SettingsViewModel
 
 @Composable
@@ -30,6 +31,14 @@ fun SettingsScreen(innerPadding: PaddingValues, vm: SettingsViewModel = hiltView
 
     LaunchedEffect(vm.resetDone) {
         if (vm.resetDone) { snackbarHostState.showSnackbar("All data deleted."); vm.clearResetDone() }
+    }
+
+    LaunchedEffect(vm) {
+        vm.uiEvents.collect { event ->
+            when (event) {
+                is SettingsUiEvent.ShowMessage -> snackbarHostState.showSnackbar(event.message)
+            }
+        }
     }
 
     val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sheetsync.data.local.entity.ExpenseRecord
 import com.sheetsync.data.repository.ExpenseRepository
+import com.sheetsync.util.parseFlexibleDate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -57,7 +58,7 @@ class MonthlyViewModel @Inject constructor(
     ): MonthlyTabUiState {
         val today = LocalDate.now()
         val parsed = allRecords.mapNotNull { record ->
-            runCatching { LocalDate.parse(record.date) }.getOrNull()?.let { date -> date to record }
+            parseRecordDate(record)?.let { date -> date to record }
         }
 
         val yearRecords = parsed
@@ -107,7 +108,7 @@ class MonthlyViewModel @Inject constructor(
         val lastDay = YearMonth.of(year, month).atEndOfMonth()
 
         val monthRecords = records.filter { record ->
-            runCatching { LocalDate.parse(record.date) }
+            runCatching { parseRecordDate(record) }
                 .getOrNull()
                 ?.let { date -> date.monthValue == month && date.year == year } == true
         }
@@ -141,7 +142,7 @@ class MonthlyViewModel @Inject constructor(
             val weekEnd = minOf(weekStart.plusDays(6), monthEnd)
 
             val weekRecords = monthRecords.filter { record ->
-                runCatching { LocalDate.parse(record.date) }
+                runCatching { parseRecordDate(record) }
                     .getOrNull()
                     ?.let { date -> date >= weekStart && date <= weekEnd } == true
             }
@@ -168,4 +169,7 @@ class MonthlyViewModel @Inject constructor(
     private companion object {
         fun monthKey(year: Int, month: Int): String = "$year-$month"
     }
+
+    private fun parseRecordDate(record: ExpenseRecord): LocalDate? =
+        parseFlexibleDate(record.date) ?: record.remoteTimestamp?.let(::parseFlexibleDate)
 }

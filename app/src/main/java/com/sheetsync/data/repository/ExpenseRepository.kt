@@ -1,6 +1,7 @@
 package com.sheetsync.data.repository
 
 import com.sheetsync.data.local.entity.ExpenseRecord
+import com.sheetsync.data.remote.ImportRecordDto
 import kotlinx.coroutines.flow.Flow
 
 interface ExpenseRepository {
@@ -15,4 +16,5 @@ interface ExpenseRepository {
     suspend fun delete(record: ExpenseRecord)
     suspend fun deleteAll()
     suspend fun isDuplicate(date: String, type: String, category: String, amount: Double): Boolean
+    suspend fun importRemoteRecords(records: List<ImportRecordDto>): Int
 }
