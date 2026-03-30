@@ -9,7 +9,6 @@ import com.sheetsync.data.local.dao.AccountDao
 import com.sheetsync.data.local.dao.BudgetDao
 import com.sheetsync.data.local.dao.DropdownOptionDao
 import com.sheetsync.data.local.dao.ExpenseDao
-import com.sheetsync.data.local.entity.DropdownOption
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -21,70 +20,104 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
 
-    @Provides
-    @Singleton
-    fun provideDatabase(@ApplicationContext context: Context): SheetSyncDatabase {
-        var database: SheetSyncDatabase? = null
+    private fun seedDropdownDefaultsIfEmpty(db: SupportSQLiteDatabase) {
+        val cursor = db.query("SELECT COUNT(*) FROM dropdown_options")
+        val hasRows = cursor.use {
+            it.moveToFirst() && it.getInt(0) > 0
+        }
+        if (hasRows) return
 
-        val callback = object : RoomDatabase.Callback() {
-            override fun onCreate(db: SupportSQLiteDatabase) {
-                super.onCreate(db)
-                val dropdownOptionDao = database?.dropdownOptionDao() ?: return
+        fun esc(value: String): String = value.replace("'", "''")
 
-                val expenseCategories = listOf(
-                    "Food",
-                    "Shopping",
-                    "Transport",
-                    "Bills",
-                    "Entertainment"
-                ).mapIndexed { index, name ->
-                    DropdownOption(
-                        optionType = "EXPENSE_CATEGORY",
-                        name = name,
-                        displayOrder = index
-                    )
-                }
-
-                val accountGroups = listOf(
-                    "Cash",
-                    "Accounts",
-                    "Card",
-                    "Debit Card",
-                    "Savings"
-                ).mapIndexed { index, name ->
-                    DropdownOption(
-                        optionType = "ACCOUNT_GROUP",
-                        name = name,
-                        displayOrder = index
-                    )
-                }
-
-                val paymentModes = listOf(
-                    "Cash",
-                    "UPI",
-                    "Credit Card",
-                    "Debit Card",
-                    "Net Banking"
-                ).mapIndexed { index, name ->
-                    DropdownOption(
-                        optionType = "PAYMENT_MODE",
-                        name = name,
-                        displayOrder = index
-                    )
-                }
-
-                kotlinx.coroutines.runBlocking {
-                    dropdownOptionDao.insertAll(expenseCategories + accountGroups + paymentModes)
-                }
+        fun insertType(optionType: String, names: List<String>) {
+            names.forEachIndexed { index, name ->
+                db.execSQL(
+                    """
+                    INSERT INTO dropdown_options(optionType, name, displayOrder)
+                    VALUES('${esc(optionType)}', '${esc(name)}', $index)
+                    """.trimIndent()
+                )
             }
         }
 
-        database = Room.databaseBuilder(context, SheetSyncDatabase::class.java, "sheetsync.db")
+        insertType(
+            optionType = "EXPENSE_CATEGORY",
+            names = listOf(
+                "Food & Snacks",
+                "Rent",
+                "Transportation",
+                "Utilties",
+                "Investments/Savings",
+                "Amenities/Personal Care",
+                "Books & Stationery",
+                "Clothing",
+                "Family Support",
+                "Gifts",
+                "Education & Courses, Events",
+                "Shopping",
+                "Recharge/Subscriptions",
+                "Medical"
+            )
+        )
+
+        insertType(
+            optionType = "INCOME_CATEGORY",
+            names = listOf(
+                "Salary",
+                "Investment Income",
+                "Family Support",
+                "Gift",
+                "Return"
+            )
+        )
+
+        insertType(
+            optionType = "ACCOUNT_GROUP",
+            names = listOf(
+                "Cash",
+                "Accounts",
+                "Card",
+                "Debit Card",
+                "Savings",
+                "Top-Up/Prepaid",
+                "Investments",
+                "Overdrafts",
+                "Loan",
+                "Insurance",
+                "Others"
+            )
+        )
+
+        insertType(
+            optionType = "PAYMENT_MODE",
+            names = listOf(
+                "UPI",
+                "Cash",
+                "Debit Card/Credit Card",
+                "Bank Transfer/Net Banking"
+            )
+        )
+    }
+
+    @Provides
+    @Singleton
+    fun provideDatabase(@ApplicationContext context: Context): SheetSyncDatabase {
+        val callback = object : RoomDatabase.Callback() {
+            override fun onCreate(db: SupportSQLiteDatabase) {
+                super.onCreate(db)
+                seedDropdownDefaultsIfEmpty(db)
+            }
+
+            override fun onOpen(db: SupportSQLiteDatabase) {
+                super.onOpen(db)
+                seedDropdownDefaultsIfEmpty(db)
+            }
+        }
+
+        return Room.databaseBuilder(context, SheetSyncDatabase::class.java, "sheetsync.db")
             .fallbackToDestructiveMigration()
             .addCallback(callback)
             .build()
-
-        return database
     }
 
     @Provides
