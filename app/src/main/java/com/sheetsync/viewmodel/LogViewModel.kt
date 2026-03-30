@@ -93,6 +93,11 @@ class LogViewModel @Inject constructor(
     fun resetSaveSuccess() { saveSuccess = false }
     fun clearError() { errorMessage = null }
 
+    fun retrySync() {
+        syncStatus = SyncStatusUi.Syncing
+        enqueueSyncWork()
+    }
+
     private fun resetForm() {
         selectedDate = LocalDate.now()
         selectedType = "Expense"

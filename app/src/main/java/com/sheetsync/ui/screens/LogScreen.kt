@@ -84,7 +84,7 @@ fun LogScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text("Log Transaction", style = MaterialTheme.typography.headlineMedium)
-            SyncStatusIndicator(status = vm.syncStatus)
+            SyncStatusIndicator(status = vm.syncStatus, onRetry = vm::retrySync)
 
             // Date picker field
             OutlinedTextField(
@@ -211,7 +211,7 @@ fun LogScreen(
 }
 
 @Composable
-private fun SyncStatusIndicator(status: SyncStatusUi) {
+private fun SyncStatusIndicator(status: SyncStatusUi, onRetry: () -> Unit) {
     val (text, containerColor, contentColor) = when (status) {
         SyncStatusUi.Idle -> Triple(
             "Sync idle",
@@ -229,15 +229,17 @@ private fun SyncStatusIndicator(status: SyncStatusUi) {
             MaterialTheme.colorScheme.onTertiaryContainer
         )
         SyncStatusUi.Failed -> Triple(
-            "Sync failed",
+            "Sync failed - tap to retry",
             MaterialTheme.colorScheme.errorContainer,
             MaterialTheme.colorScheme.onErrorContainer
         )
     }
 
+    val isRetryEnabled = status == SyncStatusUi.Failed
+
     SuggestionChip(
-        onClick = {},
-        enabled = false,
+        onClick = onRetry,
+        enabled = isRetryEnabled,
         label = { Text(text) },
         colors = SuggestionChipDefaults.suggestionChipColors(
             containerColor = containerColor,
