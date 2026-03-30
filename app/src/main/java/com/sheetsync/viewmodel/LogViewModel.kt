@@ -3,6 +3,7 @@ package com.sheetsync.viewmodel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.*
@@ -31,7 +32,8 @@ enum class SyncStatusUi {
 class LogViewModel @Inject constructor(
     private val repository: ExpenseRepository,
     accountRepository: AccountRepository,
-    private val workManager: WorkManager
+    private val workManager: WorkManager,
+    savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
     val accounts: StateFlow<List<AccountRecord>> = accountRepository
@@ -51,8 +53,33 @@ class LogViewModel @Inject constructor(
     var errorMessage by mutableStateOf<String?>(null)
     var syncStatus by mutableStateOf(SyncStatusUi.Idle)
 
+    private var editingRecordId: Long? = null
+    val isEditMode: Boolean get() = editingRecordId != null
+
     init {
+        val navId = savedStateHandle.get<Long>("transactionId")
+        editingRecordId = navId?.takeIf { it > 0L }
+
         observeSyncStatus()
+
+        if (editingRecordId != null) {
+            viewModelScope.launch {
+                val record = repository.getById(editingRecordId ?: return@launch)
+                if (record == null) {
+                    errorMessage = "Transaction not found"
+                    return@launch
+                }
+                selectedDate = runCatching { LocalDate.parse(record.date) }.getOrDefault(LocalDate.now())
+                selectedType = record.type
+                selectedCategory = record.category
+                selectedFromAccountId = record.fromAccountId
+                selectedToAccountId = record.toAccountId
+                description = record.description
+                amount = if (record.amount % 1.0 == 0.0) record.amount.toInt().toString() else record.amount.toString()
+                selectedPaymentMode = record.paymentMode
+                remarks = record.remarks
+            }
+        }
     }
 
     fun save() {
@@ -70,7 +97,10 @@ class LogViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            val baseRecord = editingRecordId?.let { repository.getById(it) }
+
             val record = ExpenseRecord(
+                id = baseRecord?.id ?: 0,
                 date = selectedDate.toString(),
                 type = selectedType,
                 category = if (selectedType == "Transfer") "Transfer" else selectedCategory,
@@ -80,13 +110,43 @@ class LogViewModel @Inject constructor(
                 remarks = remarks,
                 fromAccountId = selectedFromAccountId,
                 toAccountId = selectedToAccountId,
-                isSynced = false
+                isSynced = false,
+                remoteTimestamp = baseRecord?.remoteTimestamp,
+                syncAction = if (isEditMode) "UPDATE" else "INSERT"
             )
-            repository.save(record)
+
+            if (isEditMode) {
+                repository.update(record)
+            } else {
+                repository.save(record)
+            }
+
             syncStatus = SyncStatusUi.Syncing
             enqueueSyncWork()
             saveSuccess = true
-            resetForm()
+            if (!isEditMode) resetForm()
+        }
+    }
+
+    fun deleteCurrent() {
+        val id = editingRecordId ?: return
+        viewModelScope.launch {
+            val current = repository.getById(id)
+            if (current == null) {
+                errorMessage = "Transaction not found"
+                return@launch
+            }
+
+            repository.update(
+                current.copy(
+                    isSynced = false,
+                    syncAction = "DELETE"
+                )
+            )
+
+            syncStatus = SyncStatusUi.Syncing
+            enqueueSyncWork()
+            saveSuccess = true
         }
     }
 

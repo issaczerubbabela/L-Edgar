@@ -7,6 +7,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -41,11 +42,11 @@ fun LogScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var showDatePicker by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
     val accounts by vm.accounts.collectAsState()
 
     LaunchedEffect(vm.saveSuccess) {
         if (vm.saveSuccess) {
-            snackbarHostState.showSnackbar("Saved ✓")
             onSaved()
             vm.resetSaveSuccess()
         }
@@ -59,6 +60,18 @@ fun LogScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            TopAppBar(
+                title = { Text(if (vm.isEditMode) "Edit Transaction" else "Log Transaction") },
+                actions = {
+                    if (vm.isEditMode) {
+                        IconButton(onClick = { showDeleteConfirm = true }) {
+                            Icon(Icons.Filled.Delete, contentDescription = "Delete transaction")
+                        }
+                    }
+                }
+            )
+        },
         bottomBar = {
             Surface(color = MaterialTheme.colorScheme.surface) {
                 Column(modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding())) {
@@ -68,7 +81,7 @@ fun LogScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 12.dp)
                     ) {
-                        Text("Log Transaction")
+                        Text(if (vm.isEditMode) "Update" else "Save")
                     }
                 }
             }
@@ -187,6 +200,27 @@ fun LogScreen(
             )
             Spacer(Modifier.height(8.dp))
         }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Transaction?") },
+            text = { Text("This transaction will be removed locally now and deleted from Google Sheets on next sync.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    vm.deleteCurrent()
+                }) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     if (showDatePicker) {

@@ -13,7 +13,13 @@ interface ExpenseDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(records: List<ExpenseRecord>)
 
-    @Query("SELECT * FROM expense_records ORDER BY date DESC")
+    @Update
+    suspend fun update(record: ExpenseRecord)
+
+    @Query("SELECT * FROM expense_records WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): ExpenseRecord?
+
+    @Query("SELECT * FROM expense_records WHERE syncAction != 'DELETE' ORDER BY date DESC")
     fun getAllRecords(): Flow<List<ExpenseRecord>>
 
     @Query("SELECT * FROM expense_records")
@@ -22,17 +28,20 @@ interface ExpenseDao {
     @Query("SELECT remoteTimestamp FROM expense_records WHERE remoteTimestamp IS NOT NULL AND remoteTimestamp != ''")
     suspend fun getAllRemoteTimestamps(): List<String>
 
-    @Query("SELECT * FROM expense_records WHERE type = :type ORDER BY date DESC")
+    @Query("SELECT * FROM expense_records WHERE type = :type AND syncAction != 'DELETE' ORDER BY date DESC")
     fun getByType(type: String): Flow<List<ExpenseRecord>>
 
     @Query("SELECT * FROM expense_records WHERE isSynced = 0")
     suspend fun getUnsyncedRecords(): List<ExpenseRecord>
 
-    @Query("UPDATE expense_records SET isSynced = 1 WHERE id IN (:ids)")
+    @Query("UPDATE expense_records SET isSynced = 1, syncAction = 'NONE' WHERE id IN (:ids)")
     suspend fun markAsSynced(ids: List<Long>)
 
     @Delete
     suspend fun delete(record: ExpenseRecord)
+
+    @Query("DELETE FROM expense_records WHERE id = :id")
+    suspend fun hardDeleteById(id: Long)
 
     @Query("DELETE FROM expense_records")
     suspend fun deleteAll()
@@ -58,6 +67,7 @@ interface ExpenseDao {
     @Query("""
         SELECT * FROM expense_records
         WHERE date >= :startDate AND date <= :endDate
+          AND syncAction != 'DELETE'
         ORDER BY date DESC
     """)
     fun getRecordsByDateRange(startDate: String, endDate: String): Flow<List<ExpenseRecord>>
@@ -65,7 +75,8 @@ interface ExpenseDao {
     @Query(
         """
         SELECT * FROM expense_records
-        WHERE fromAccountId = :accountId OR toAccountId = :accountId
+                WHERE (fromAccountId = :accountId OR toAccountId = :accountId)
+                    AND syncAction != 'DELETE'
         ORDER BY date DESC, id DESC
         """
     )
@@ -84,7 +95,8 @@ interface ExpenseDao {
         ), 0)
         FROM account_records a
         LEFT JOIN expense_records e
-            ON e.fromAccountId = a.id OR e.toAccountId = a.id
+            ON (e.fromAccountId = a.id OR e.toAccountId = a.id)
+           AND e.syncAction != 'DELETE'
         WHERE a.id = :accountId
         """
     )

@@ -35,5 +35,6 @@ data class ExpenseRecord(
     val fromAccountId: Long? = null,
     val toAccountId: Long? = null,
     val isSynced: Boolean = false,
-    val remoteTimestamp: String? = null
+    val remoteTimestamp: String? = null,
+    val syncAction: String = "INSERT"
 )

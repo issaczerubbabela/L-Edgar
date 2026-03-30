@@ -13,10 +13,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.Color
 import com.sheetsync.ui.screens.HistoryScreen
@@ -31,7 +33,7 @@ import com.sheetsync.ui.theme.FabRed
 import com.sheetsync.viewmodel.ACCOUNT_ROUTE_ADD
 
 sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
-    object Log : Screen("log", "Log", Icons.Filled.AddCircle)
+    object Log : Screen("log?transactionId={transactionId}", "Log", Icons.Filled.AddCircle)
     object Trans : Screen("trans", "Trans.", Icons.Filled.MenuBook)
     object Stats : Screen("stats", "Stats", Icons.Filled.BarChart)
     object Accounts : Screen("accounts", "Accounts", Icons.Filled.Paid)
@@ -40,6 +42,11 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object More : Screen("more", "More", Icons.Filled.MoreHoriz)
     object BudgetSetting : Screen("budget_setting", "BudgetSetting", Icons.Filled.Settings)
 }
+
+private const val LOG_BASE_ROUTE = "log"
+
+private fun logRoute(transactionId: Long? = null): String =
+    transactionId?.let { "$LOG_BASE_ROUTE?transactionId=$it" } ?: LOG_BASE_ROUTE
 
 val bottomNavItems = listOf(Screen.Trans, Screen.Stats, Screen.Accounts, Screen.More)
 
@@ -81,7 +88,15 @@ fun AppNavigation() {
         }
     ) { innerPadding ->
         NavHost(navController, startDestination = Screen.Trans.route) {
-            composable(Screen.Log.route) {
+            composable(
+                route = Screen.Log.route,
+                arguments = listOf(
+                    navArgument("transactionId") {
+                        type = NavType.LongType
+                        defaultValue = -1L
+                    }
+                )
+            ) {
                 LogScreen(
                     innerPadding = innerPadding,
                     onSaved = { navController.popBackStack() }
@@ -91,9 +106,14 @@ fun AppNavigation() {
                 HistoryScreen(
                     navInsets = innerPadding,
                     onNavigateToLog = {
-                        navController.navigate(Screen.Log.route) {
+                        navController.navigate(logRoute()) {
                             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                             launchSingleTop = true; restoreState = true
+                        }
+                    },
+                    onNavigateToEditTransaction = { transactionId ->
+                        navController.navigate(logRoute(transactionId)) {
+                            launchSingleTop = true
                         }
                     },
                     onNavigateToBudgetSetting = {

@@ -9,6 +9,8 @@ package com.sheetsync.data.remote
  */
 data class SyncRecordDto(
     val id: Long,
+    val remoteTimestamp: String? = null,
+    val timestamp: String = "",
     val date: String,        // YYYY-MM-DD — Google Sheets parses this natively
     val type: String,        // "Expense" | "Income"
     val expCategory: String, // Expense Category column (empty when Income)

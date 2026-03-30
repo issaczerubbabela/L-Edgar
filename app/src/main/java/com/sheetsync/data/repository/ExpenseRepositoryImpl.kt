@@ -12,6 +12,12 @@ class ExpenseRepositoryImpl @Inject constructor(
 
     override suspend fun save(record: ExpenseRecord): Long = dao.insert(record)
 
+    override suspend fun getById(id: Long): ExpenseRecord? = dao.getById(id)
+
+    override suspend fun update(record: ExpenseRecord) = dao.update(record)
+
+    override suspend fun hardDeleteById(id: Long) = dao.hardDeleteById(id)
+
     override fun getAllRecords(): Flow<List<ExpenseRecord>> = dao.getAllRecords()
 
     override fun getByType(type: String): Flow<List<ExpenseRecord>> = dao.getByType(type)
@@ -79,7 +85,8 @@ class ExpenseRepositoryImpl @Inject constructor(
                     paymentMode = dto.paymentMode,
                     remarks = dto.remarks,
                     isSynced = true,
-                    remoteTimestamp = timestamp
+                    remoteTimestamp = timestamp,
+                    syncAction = "NONE"
                 )
                 localComparable += remoteComparable
             }
@@ -110,7 +117,8 @@ class ExpenseRepositoryImpl @Inject constructor(
         val normalized = snapshot.map { record ->
             record.copy(
                 date = normalizeDate(record.date, null),
-                type = canonicalType(record.type)
+                type = canonicalType(record.type),
+                syncAction = if (record.isSynced && record.syncAction != "DELETE") "NONE" else record.syncAction
             )
         }
         if (normalized != snapshot) {

@@ -50,6 +50,7 @@ private fun formatCompact(amount: Double) = "%,.2f".format(kotlin.math.abs(amoun
 fun HistoryScreen(
     navInsets: PaddingValues,
     onNavigateToLog: () -> Unit,
+    onNavigateToEditTransaction: (Long) -> Unit,
     onNavigateToBudgetSetting: () -> Unit,
     vm: HistoryViewModel = hiltViewModel(),
     monthlyVm: MonthlyViewModel = hiltViewModel(),
@@ -136,7 +137,11 @@ fun HistoryScreen(
                         onExportUriPicked = totalVm::exportDataToUri,
                         modifier = Modifier.fillMaxSize()
                     )
-                    else -> DailyContent(state.groups, Modifier.fillMaxSize())
+                    else -> DailyContent(
+                        groups = state.groups,
+                        onTransactionClick = onNavigateToEditTransaction,
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
 
                 // Dual FABs
@@ -384,7 +389,11 @@ private fun CalendarCellView(
 // ── Daily List Content ────────────────────────────────────────────────────────
 
 @Composable
-private fun DailyContent(groups: List<DayGroup>, modifier: Modifier = Modifier) {
+private fun DailyContent(
+    groups: List<DayGroup>,
+    onTransactionClick: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
     if (groups.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("No transactions this month",
@@ -396,7 +405,7 @@ private fun DailyContent(groups: List<DayGroup>, modifier: Modifier = Modifier) 
             groups.forEach { group ->
                 item(key = group.date.toString()) { DayGroupHeader(group) }
                 items(group.records, key = { it.id }) { record ->
-                    TransactionRow(record)
+                    TransactionRow(record = record, onClick = { onTransactionClick(record.id) })
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outline,
                         thickness = 0.5.dp,
@@ -554,13 +563,14 @@ private fun DayGroupHeader(group: DayGroup) {
 // ── Transaction Row ───────────────────────────────────────────────────────────
 
 @Composable
-private fun TransactionRow(record: ExpenseRecord) {
+private fun TransactionRow(record: ExpenseRecord, onClick: () -> Unit) {
     val isIncome  = record.type == "Income"
     val isExpense = record.type == "Expense"
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
+            .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

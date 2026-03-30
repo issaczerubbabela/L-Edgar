@@ -6,6 +6,9 @@ import kotlinx.coroutines.flow.Flow
 
 interface ExpenseRepository {
     suspend fun save(record: ExpenseRecord): Long
+    suspend fun getById(id: Long): ExpenseRecord?
+    suspend fun update(record: ExpenseRecord)
+    suspend fun hardDeleteById(id: Long)
     fun getAllRecords(): Flow<List<ExpenseRecord>>
     fun getByType(type: String): Flow<List<ExpenseRecord>>
     fun getRecordsForAccount(accountId: Long): Flow<List<ExpenseRecord>>
