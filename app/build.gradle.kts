@@ -12,6 +12,10 @@ val localProperties = Properties().apply {
     if (file.exists()) load(file.inputStream())
 }
 
+val appsScriptUrl = localProperties.getProperty("APPS_SCRIPT_URL")
+    ?: localProperties.getProperty("APP_SCRIPT_URL")
+    ?: "https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec"
+
 android {
     namespace = "com.sheetsync"
     compileSdk = 35
@@ -26,7 +30,7 @@ android {
         vectorDrawables { useSupportLibrary = true }
         buildConfigField(
             "String", "APPS_SCRIPT_URL",
-            "\"${localProperties.getProperty("APPS_SCRIPT_URL", "https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec")}\""
+            "\"$appsScriptUrl\""
         )
     }
 
