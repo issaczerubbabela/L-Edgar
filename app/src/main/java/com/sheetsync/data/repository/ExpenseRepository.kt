@@ -4,6 +4,12 @@ import com.sheetsync.data.local.entity.ExpenseRecord
 import com.sheetsync.data.remote.ImportRecordDto
 import kotlinx.coroutines.flow.Flow
 
+data class GoogleSheetsImportResult(
+    val imported: Int,
+    val skipped: Int,
+    val restoredDropdowns: Int
+)
+
 interface ExpenseRepository {
     suspend fun save(record: ExpenseRecord): Long
     suspend fun getById(id: Long): ExpenseRecord?
@@ -20,4 +26,5 @@ interface ExpenseRepository {
     suspend fun deleteAll()
     suspend fun isDuplicate(date: String, type: String, category: String, amount: Double): Boolean
     suspend fun importRemoteRecords(records: List<ImportRecordDto>): Int
+    suspend fun importFromGoogleSheets(): GoogleSheetsImportResult
 }

@@ -7,10 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.sheetsync.BuildConfig
 import com.sheetsync.data.local.entity.ExpenseRecord
 import com.sheetsync.data.preferences.ThemePreferenceRepository
-import com.sheetsync.data.remote.ApiService
 import com.sheetsync.data.repository.ExpenseRepository
 import com.sheetsync.util.CsvParser
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -44,7 +42,6 @@ sealed class SettingsUiEvent {
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val repository: ExpenseRepository,
-    private val apiService: ApiService,
     private val themeRepository: ThemePreferenceRepository
 ) : ViewModel() {
 
@@ -81,26 +78,13 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _sheetsState.value = ImportState.Loading
             try {
-                val response = apiService.importRecords(BuildConfig.APPS_SCRIPT_URL)
-                if (response.isSuccessful) {
-                    val body = response.body()
-                    if (!body?.status.equals("ok", ignoreCase = true)) {
-                        _sheetsState.value = ImportState.Error(body?.message ?: "Import failed")
-                        return@launch
-                    }
-
-                    val dtos = body?.data.orEmpty()
-                    val imported = repository.importRemoteRecords(dtos)
-                    val skipped = (dtos.size - imported).coerceAtLeast(0)
-                    _sheetsState.value = ImportState.Success(imported, skipped)
-                    _uiEvents.emit(
-                        SettingsUiEvent.ShowMessage(
-                            "Sync complete. $imported new records imported."
-                        )
+                val result = repository.importFromGoogleSheets()
+                _sheetsState.value = ImportState.Success(result.imported, result.skipped)
+                _uiEvents.emit(
+                    SettingsUiEvent.ShowMessage(
+                        "Sync complete. ${result.imported} new transactions imported and ${result.restoredDropdowns} dropdown options restored."
                     )
-                } else {
-                    _sheetsState.value = ImportState.Error("Server error: HTTP ${response.code()}")
-                }
+                )
             } catch (e: Exception) {
                 _sheetsState.value = ImportState.Error(e.message ?: "Unknown error")
             }

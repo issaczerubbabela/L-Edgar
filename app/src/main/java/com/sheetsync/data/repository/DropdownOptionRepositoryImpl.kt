@@ -12,6 +12,8 @@ class DropdownOptionRepositoryImpl @Inject constructor(
     override fun getOptionsByType(optionType: String): Flow<List<DropdownOption>> =
         dao.getOptionsByType(optionType)
 
+    override suspend fun getAllOptionsSnapshot(): List<DropdownOption> = dao.getAllOptionsSnapshot()
+
     override suspend fun insert(option: DropdownOption): Long = dao.insert(option)
 
     override suspend fun update(option: DropdownOption) = dao.update(option)
@@ -19,4 +21,6 @@ class DropdownOptionRepositoryImpl @Inject constructor(
     override suspend fun delete(option: DropdownOption) = dao.delete(option)
 
     override suspend fun updateOptions(options: List<DropdownOption>) = dao.updateOptions(options)
+
+    override suspend fun overwriteAllOptions(options: List<DropdownOption>) = dao.overwriteAllOptions(options)
 }

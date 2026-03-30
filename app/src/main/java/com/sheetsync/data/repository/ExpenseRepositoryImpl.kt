@@ -1,13 +1,18 @@
 package com.sheetsync.data.repository
 
+import com.sheetsync.BuildConfig
 import com.sheetsync.data.local.dao.ExpenseDao
+import com.sheetsync.data.local.entity.DropdownOption
 import com.sheetsync.data.local.entity.ExpenseRecord
+import com.sheetsync.data.remote.ApiService
 import com.sheetsync.data.remote.ImportRecordDto
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 
 class ExpenseRepositoryImpl @Inject constructor(
-    private val dao: ExpenseDao
+    private val dao: ExpenseDao,
+    private val apiService: ApiService,
+    private val dropdownOptionRepository: DropdownOptionRepository
 ) : ExpenseRepository {
 
     override suspend fun save(record: ExpenseRecord): Long = dao.insert(record)
@@ -94,6 +99,61 @@ class ExpenseRepositoryImpl @Inject constructor(
 
         if (toInsert.isNotEmpty()) dao.insertAll(toInsert)
         return toInsert.size
+    }
+
+    override suspend fun importFromGoogleSheets(): GoogleSheetsImportResult {
+        val dropdownResponse = apiService.importDropdownOptions(
+            url = BuildConfig.APPS_SCRIPT_URL,
+            target = "dropdowns"
+        )
+        if (!dropdownResponse.isSuccessful) {
+            throw IllegalStateException("Dropdown import failed: HTTP ${dropdownResponse.code()}")
+        }
+
+        val dropdownBody = dropdownResponse.body()
+        if (!dropdownBody?.status.equals("ok", ignoreCase = true)) {
+            throw IllegalStateException(dropdownBody?.message ?: "Dropdown import failed")
+        }
+
+        val restoredDropdowns = dropdownBody?.data.orEmpty().let { remoteDropdowns ->
+            if (remoteDropdowns.isEmpty()) {
+                0
+            } else {
+                val mapped = remoteDropdowns.map { dto ->
+                    DropdownOption(
+                        id = 0,
+                        optionType = dto.optionType,
+                        name = dto.name,
+                        displayOrder = dto.displayOrder
+                    )
+                }
+                dropdownOptionRepository.overwriteAllOptions(mapped)
+                mapped.size
+            }
+        }
+
+        val txResponse = apiService.importRecords(
+            url = BuildConfig.APPS_SCRIPT_URL,
+            target = "transactions"
+        )
+        if (!txResponse.isSuccessful) {
+            throw IllegalStateException("Transaction import failed: HTTP ${txResponse.code()}")
+        }
+
+        val txBody = txResponse.body()
+        if (!txBody?.status.equals("ok", ignoreCase = true)) {
+            throw IllegalStateException(txBody?.message ?: "Transaction import failed")
+        }
+
+        val dtos = txBody?.data.orEmpty()
+        val imported = importRemoteRecords(dtos)
+        val skipped = (dtos.size - imported).coerceAtLeast(0)
+
+        return GoogleSheetsImportResult(
+            imported = imported,
+            skipped = skipped,
+            restoredDropdowns = restoredDropdowns
+        )
     }
 
     private data class ComparableTx(

@@ -48,6 +48,12 @@ fun LogScreen(
             vm.clearError()
         }
     }
+    LaunchedEffect(vm.syncInfoMessage) {
+        vm.syncInfoMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            vm.clearSyncInfoMessage()
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },

@@ -4,9 +4,12 @@ import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import com.sheetsync.BuildConfig
 import com.sheetsync.data.remote.ApiService
+import com.sheetsync.data.remote.DropdownSyncDto
 import com.sheetsync.data.remote.SyncRequest
+import com.sheetsync.data.repository.DropdownOptionRepository
 import com.sheetsync.data.repository.ExpenseRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -19,6 +22,7 @@ class SyncWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted workerParams: WorkerParameters,
     private val repository: ExpenseRepository,
+    private val dropdownOptionRepository: DropdownOptionRepository,
     private val apiService: ApiService
 ) : CoroutineWorker(context, workerParams) {
 
@@ -26,30 +30,38 @@ class SyncWorker @AssistedInject constructor(
         return try {
             val unsynced = repository.getUnsynced()
             if (unsynced.isEmpty()) {
-                Log.i(TAG, "Nothing to sync.")
-                return Result.success()
+                Log.i(TAG, "No transaction changes to sync.")
+            } else {
+                Log.i(TAG, "Syncing ${unsynced.size} records to ${BuildConfig.APPS_SCRIPT_URL}")
+
+                val byAction = unsynced.groupBy { it.syncAction.uppercase() }
+
+                val inserts = byAction["INSERT"].orEmpty()
+                if (inserts.isNotEmpty() && !syncRecords("insert", inserts)) {
+                    return Result.retry()
+                }
+
+                val updates = byAction["UPDATE"].orEmpty()
+                if (updates.isNotEmpty() && !syncRecords("update", updates)) {
+                    return Result.retry()
+                }
+
+                val deletes = byAction["DELETE"].orEmpty()
+                if (deletes.isNotEmpty() && !syncDeletes(deletes)) {
+                    return Result.retry()
+                }
             }
-            Log.i(TAG, "Syncing ${unsynced.size} records to ${BuildConfig.APPS_SCRIPT_URL}")
 
-            val byAction = unsynced.groupBy { it.syncAction.uppercase() }
-
-            val inserts = byAction["INSERT"].orEmpty()
-            if (inserts.isNotEmpty() && !syncRecords("insert", inserts)) {
-                return Result.retry()
-            }
-
-            val updates = byAction["UPDATE"].orEmpty()
-            if (updates.isNotEmpty() && !syncRecords("update", updates)) {
-                return Result.retry()
-            }
-
-            val deletes = byAction["DELETE"].orEmpty()
-            if (deletes.isNotEmpty() && !syncDeletes(deletes)) {
+            val dropdownBackupCount = backupDropdownOptions() ?: run {
                 return Result.retry()
             }
 
             Log.i(TAG, "Sync successful. processed=${unsynced.size}")
-            Result.success()
+            Result.success(
+                workDataOf(
+                    KEY_DROPDOWN_BACKUP_COUNT to dropdownBackupCount
+                )
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Sync exception", e)
             Result.retry()
@@ -75,7 +87,7 @@ class SyncWorker @AssistedInject constructor(
 
         val response = apiService.syncRecords(
             BuildConfig.APPS_SCRIPT_URL,
-            SyncRequest(action = action, records = dtos)
+            SyncRequest(action = action, target = "transactions", records = dtos)
         )
         val body = response.body()
 
@@ -99,7 +111,7 @@ class SyncWorker @AssistedInject constructor(
 
             val response = apiService.syncRecords(
                 BuildConfig.APPS_SCRIPT_URL,
-                SyncRequest(action = "delete", targetTimestamp = ts)
+                SyncRequest(action = "delete", target = "transactions", targetTimestamp = ts)
             )
             val body = response.body()
 
@@ -119,7 +131,33 @@ class SyncWorker @AssistedInject constructor(
         return true
     }
 
+    private suspend fun backupDropdownOptions(): Int? {
+        val options = dropdownOptionRepository.getAllOptionsSnapshot()
+        val payload = options.map { option ->
+            DropdownSyncDto(
+                id = option.id,
+                optionType = option.optionType,
+                name = option.name,
+                displayOrder = option.displayOrder
+            )
+        }
+
+        val response = apiService.syncRecords(
+            BuildConfig.APPS_SCRIPT_URL,
+            SyncRequest(action = "backup", target = "dropdowns", records = payload)
+        )
+        val body = response.body()
+        if (response.isSuccessful && body?.status.equals("ok", ignoreCase = true)) {
+            Log.i(TAG, "Dropdown backup successful. count=${payload.size}")
+            return payload.size
+        }
+
+        Log.w(TAG, "Dropdown backup failed: HTTP ${response.code()}, status=${body?.status}, message=${body?.message}")
+        return null
+    }
+
     companion object {
         const val TAG = "SyncWorker"
+        const val KEY_DROPDOWN_BACKUP_COUNT = "dropdownBackupCount"
     }
 }

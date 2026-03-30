@@ -16,6 +16,9 @@ interface DropdownOptionDao {
     @Query("SELECT * FROM dropdown_options WHERE optionType = :optionType ORDER BY displayOrder ASC")
     fun getOptionsByType(optionType: String): Flow<List<DropdownOption>>
 
+    @Query("SELECT * FROM dropdown_options ORDER BY optionType ASC, displayOrder ASC")
+    suspend fun getAllOptionsSnapshot(): List<DropdownOption>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(option: DropdownOption): Long
 
@@ -28,11 +31,20 @@ interface DropdownOptionDao {
     @Delete
     suspend fun delete(option: DropdownOption)
 
+    @Query("DELETE FROM dropdown_options")
+    suspend fun deleteAllOptions()
+
     @Update
     suspend fun updateAll(options: List<DropdownOption>)
 
     @Transaction
     suspend fun updateOptions(options: List<DropdownOption>) {
         updateAll(options)
+    }
+
+    @Transaction
+    suspend fun overwriteAllOptions(options: List<DropdownOption>) {
+        deleteAllOptions()
+        insertAll(options)
     }
 }
