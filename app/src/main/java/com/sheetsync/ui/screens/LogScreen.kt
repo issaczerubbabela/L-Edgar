@@ -21,18 +21,6 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-private val expenseCategories = listOf(
-    "Food & Dining", "Transport", "Shopping", "Entertainment",
-    "Health", "Education", "Utilities", "Rent", "Personal Care", "Other"
-)
-private val incomeCategories = listOf(
-    "Salary", "Freelance", "Business", "Investment", "Rental", "Gift", "Other"
-)
-private val transferCategories = listOf("Transfer")
-private val paymentModes = listOf(
-    "UPI", "Cash", "Credit Card", "Debit Card", "Net Banking", "Wallet", "Other"
-)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LogScreen(
@@ -44,6 +32,9 @@ fun LogScreen(
     var showDatePicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     val accounts by vm.accounts.collectAsState()
+    val expenseCategories by vm.expenseCategories.collectAsState()
+    val incomeCategories by vm.incomeCategories.collectAsState()
+    val paymentModes by vm.paymentModes.collectAsState()
 
     LaunchedEffect(vm.saveSuccess) {
         if (vm.saveSuccess) {
@@ -151,7 +142,7 @@ fun LogScreen(
                 val categories = when (vm.selectedType) {
                     "Expense" -> expenseCategories
                     "Income" -> incomeCategories
-                    else -> transferCategories
+                    else -> emptyList()
                 }
                 DropdownField(
                     label = "Category",
@@ -159,6 +150,13 @@ fun LogScreen(
                     selected = vm.selectedCategory,
                     onSelect = { vm.selectedCategory = it }
                 )
+                if (categories.isEmpty()) {
+                    Text(
+                        text = "No categories found. Add from More > Manage Categories & Dropdowns.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             // Description
@@ -188,6 +186,13 @@ fun LogScreen(
                     selected = vm.selectedPaymentMode,
                     onSelect = { vm.selectedPaymentMode = it }
                 )
+                if (paymentModes.isEmpty()) {
+                    Text(
+                        text = "No payment modes found. Add from More > Manage Categories & Dropdowns.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             // Remarks
@@ -288,12 +293,21 @@ private fun SyncStatusIndicator(status: SyncStatusUi, onRetry: () -> Unit) {
 @Composable
 fun DropdownField(label: String, options: List<String>, selected: String, onSelect: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = options.isNotEmpty() && it }
+    ) {
         OutlinedTextField(
             value = selected,
             onValueChange = {},
             label = { Text(label) },
             readOnly = true,
+            enabled = options.isNotEmpty(),
+            placeholder = {
+                if (options.isEmpty()) {
+                    Text("No options")
+                }
+            },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier.menuAnchor().fillMaxWidth()
         )
@@ -318,12 +332,21 @@ private fun AccountDropdownField(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val selected = options.firstOrNull { it.id == selectedId }?.accountName.orEmpty()
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = options.isNotEmpty() && it }
+    ) {
         OutlinedTextField(
             value = selected,
             onValueChange = {},
             label = { Text(label) },
             readOnly = true,
+            enabled = options.isNotEmpty(),
+            placeholder = {
+                if (options.isEmpty()) {
+                    Text("No accounts")
+                }
+            },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier.menuAnchor().fillMaxWidth()
         )

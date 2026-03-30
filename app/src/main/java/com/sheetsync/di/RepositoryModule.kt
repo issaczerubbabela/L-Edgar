@@ -4,6 +4,8 @@ import com.sheetsync.data.repository.AccountRepository
 import com.sheetsync.data.repository.AccountRepositoryImpl
 import com.sheetsync.data.repository.BudgetRepository
 import com.sheetsync.data.repository.BudgetRepositoryImpl
+import com.sheetsync.data.repository.DropdownOptionRepository
+import com.sheetsync.data.repository.DropdownOptionRepositoryImpl
 import com.sheetsync.data.repository.ExpenseRepository
 import com.sheetsync.data.repository.ExpenseRepositoryImpl
 import dagger.Binds
@@ -27,4 +29,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindExpenseRepository(impl: ExpenseRepositoryImpl): ExpenseRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindDropdownOptionRepository(impl: DropdownOptionRepositoryImpl): DropdownOptionRepository
 }

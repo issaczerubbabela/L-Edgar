@@ -11,9 +11,11 @@ import androidx.work.WorkInfo
 import com.sheetsync.data.local.entity.AccountRecord
 import com.sheetsync.data.local.entity.ExpenseRecord
 import com.sheetsync.data.repository.AccountRepository
+import com.sheetsync.data.repository.DropdownOptionRepository
 import com.sheetsync.data.repository.ExpenseRepository
 import com.sheetsync.sync.SyncWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -32,12 +34,28 @@ enum class SyncStatusUi {
 class LogViewModel @Inject constructor(
     private val repository: ExpenseRepository,
     accountRepository: AccountRepository,
+    dropdownOptionRepository: DropdownOptionRepository,
     private val workManager: WorkManager,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
     val accounts: StateFlow<List<AccountRecord>> = accountRepository
         .getAllAccounts()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val expenseCategories: StateFlow<List<String>> = dropdownOptionRepository
+        .getOptionsByType("EXPENSE_CATEGORY")
+        .map { options -> options.map { it.name } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val incomeCategories: StateFlow<List<String>> = dropdownOptionRepository
+        .getOptionsByType("INCOME_CATEGORY")
+        .map { options -> options.map { it.name } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val paymentModes: StateFlow<List<String>> = dropdownOptionRepository
+        .getOptionsByType("PAYMENT_MODE")
+        .map { options -> options.map { it.name } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     var selectedDate by mutableStateOf(LocalDate.now())

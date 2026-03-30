@@ -28,6 +28,7 @@ import com.sheetsync.ui.screens.AccountDetailScreen
 import com.sheetsync.ui.screens.AccountsScreen
 import com.sheetsync.ui.screens.AddAccountScreen
 import com.sheetsync.ui.screens.BudgetSettingScreen
+import com.sheetsync.ui.screens.DropdownManagementScreen
 import com.sheetsync.ui.screens.SettingsScreen
 import com.sheetsync.ui.theme.FabRed
 import com.sheetsync.viewmodel.ACCOUNT_ROUTE_ADD
@@ -41,6 +42,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object AddAccount : Screen(ACCOUNT_ROUTE_ADD, "AddAccount", Icons.Filled.Paid)
     object More : Screen("more", "More", Icons.Filled.MoreHoriz)
     object BudgetSetting : Screen("budget_setting", "BudgetSetting", Icons.Filled.Settings)
+    object DropdownManagement : Screen("dropdown_management", "DropdownManagement", Icons.Filled.Settings)
 }
 
 private const val LOG_BASE_ROUTE = "log"
@@ -144,9 +146,24 @@ fun AppNavigation() {
                     onSaved = { navController.popBackStack() }
                 )
             }
-            composable(Screen.More.route) { SettingsScreen(innerPadding) }
+            composable(Screen.More.route) {
+                SettingsScreen(
+                    innerPadding = innerPadding,
+                    onNavigateToDropdownManagement = {
+                        navController.navigate(Screen.DropdownManagement.route) {
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
             composable(Screen.BudgetSetting.route) {
                 BudgetSettingScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(Screen.DropdownManagement.route) {
+                DropdownManagementScreen(
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() }
                 )

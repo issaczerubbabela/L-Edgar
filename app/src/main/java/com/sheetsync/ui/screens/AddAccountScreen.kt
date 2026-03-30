@@ -37,7 +37,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.sheetsync.viewmodel.ACCOUNT_GROUP_OPTIONS
 import com.sheetsync.viewmodel.AddAccountViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,6 +48,7 @@ fun AddAccountScreen(
     vm: AddAccountViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsState()
+    val accountGroups by vm.accountGroups.collectAsState()
     var showGroupSheet by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -118,6 +118,14 @@ fun AddAccountScreen(
                 )
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
+            if (accountGroups.isEmpty()) {
+                Text(
+                    text = "No account groups found. Add from More > Manage Categories & Dropdowns.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
 
             OutlinedTextField(
                 value = state.accountName,
@@ -154,7 +162,15 @@ fun AddAccountScreen(
                     color = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
                 )
-                ACCOUNT_GROUP_OPTIONS.forEach { group ->
+                if (accountGroups.isEmpty()) {
+                    Text(
+                        text = "No account groups configured yet. Use Manage Categories & Dropdowns to add one.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+                accountGroups.forEach { group ->
                     Text(
                         text = group,
                         style = MaterialTheme.typography.bodyLarge,

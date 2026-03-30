@@ -2,6 +2,7 @@ package com.sheetsync.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,7 +24,11 @@ import com.sheetsync.viewmodel.SettingsUiEvent
 import com.sheetsync.viewmodel.SettingsViewModel
 
 @Composable
-fun SettingsScreen(innerPadding: PaddingValues, vm: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(
+    innerPadding: PaddingValues,
+    onNavigateToDropdownManagement: () -> Unit,
+    vm: SettingsViewModel = hiltViewModel()
+) {
     val sheetsState  by vm.sheetsImportState.collectAsState()
     val csvState     by vm.csvImportState.collectAsState()
     val isDark       by vm.isDarkTheme.collectAsState()
@@ -128,6 +133,39 @@ fun SettingsScreen(innerPadding: PaddingValues, vm: SettingsViewModel = hiltView
                     }
                     Spacer(Modifier.width(12.dp))
                     Switch(checked = vm.skipDuplicates, onCheckedChange = { vm.skipDuplicates = it })
+                }
+            }
+
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onNavigateToDropdownManagement)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Tune,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Manage Categories & Dropdowns", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Add, delete, and reorder dropdown options.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Filled.ChevronRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
