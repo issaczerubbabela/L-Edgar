@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.sheetsync.data.local.entity.AccountRecord
 import com.sheetsync.viewmodel.LogViewModel
+import com.sheetsync.viewmodel.SyncStatusUi
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -83,6 +84,7 @@ fun LogScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text("Log Transaction", style = MaterialTheme.typography.headlineMedium)
+            SyncStatusIndicator(status = vm.syncStatus)
 
             // Date picker field
             OutlinedTextField(
@@ -206,6 +208,44 @@ fun LogScreen(
             dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } }
         ) { DatePicker(state = datePickerState) }
     }
+}
+
+@Composable
+private fun SyncStatusIndicator(status: SyncStatusUi) {
+    val (text, containerColor, contentColor) = when (status) {
+        SyncStatusUi.Idle -> Triple(
+            "Sync idle",
+            MaterialTheme.colorScheme.surfaceVariant,
+            MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        SyncStatusUi.Syncing -> Triple(
+            "Syncing...",
+            MaterialTheme.colorScheme.secondaryContainer,
+            MaterialTheme.colorScheme.onSecondaryContainer
+        )
+        SyncStatusUi.Synced -> Triple(
+            "Synced",
+            MaterialTheme.colorScheme.tertiaryContainer,
+            MaterialTheme.colorScheme.onTertiaryContainer
+        )
+        SyncStatusUi.Failed -> Triple(
+            "Sync failed",
+            MaterialTheme.colorScheme.errorContainer,
+            MaterialTheme.colorScheme.onErrorContainer
+        )
+    }
+
+    SuggestionChip(
+        onClick = {},
+        enabled = false,
+        label = { Text(text) },
+        colors = SuggestionChipDefaults.suggestionChipColors(
+            containerColor = containerColor,
+            disabledContainerColor = containerColor,
+            labelColor = contentColor,
+            disabledLabelColor = contentColor
+        )
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

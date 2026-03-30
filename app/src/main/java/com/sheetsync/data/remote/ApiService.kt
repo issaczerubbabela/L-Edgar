@@ -9,7 +9,7 @@ import retrofit2.http.Url
 interface ApiService {
     /** POST unsynced records to the Apps Script Web App. */
     @POST
-    suspend fun syncRecords(@Url url: String, @Body request: SyncRequest): Response<Unit>
+    suspend fun syncRecords(@Url url: String, @Body request: SyncRequest): Response<SyncResponse>
 
     /** GET all historical records from the Apps Script Web App for initial import. */
     @GET

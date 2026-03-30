@@ -26,10 +26,10 @@ class SyncWorker @AssistedInject constructor(
         return try {
             val unsynced = repository.getUnsynced()
             if (unsynced.isEmpty()) {
-                Log.d(TAG, "Nothing to sync.")
+                Log.i(TAG, "Nothing to sync.")
                 return Result.success()
             }
-            Log.d(TAG, "Syncing ${unsynced.size} records…")
+            Log.i(TAG, "Syncing ${unsynced.size} records to ${BuildConfig.APPS_SCRIPT_URL}")
 
             // Map to DTO — split category into expCategory / incCategory
             // date is already YYYY-MM-DD (LocalDate.toString()), Sheets parses this natively
@@ -48,17 +48,21 @@ class SyncWorker @AssistedInject constructor(
             }
 
             val response = apiService.syncRecords(BuildConfig.APPS_SCRIPT_URL, SyncRequest(dtos))
+            val body = response.body()
 
-            if (response.isSuccessful) {
+            if (response.isSuccessful && body?.status.equals("ok", ignoreCase = true)) {
                 repository.markSynced(unsynced.map { it.id })
-                Log.d(TAG, "Sync successful.")
+                Log.i(TAG, "Sync successful. count=${body?.count ?: unsynced.size}")
                 Result.success()
             } else {
-                Log.w(TAG, "Sync failed: HTTP ${response.code()}")
+                Log.w(
+                    TAG,
+                    "Sync failed: HTTP ${response.code()}, status=${body?.status}, message=${body?.message}"
+                )
                 Result.retry()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Sync exception: ${e.message}")
+            Log.e(TAG, "Sync exception", e)
             Result.retry()
         }
     }

@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.*
+import androidx.work.WorkInfo
 import com.sheetsync.data.local.entity.AccountRecord
 import com.sheetsync.data.local.entity.ExpenseRecord
 import com.sheetsync.data.repository.AccountRepository
@@ -18,6 +19,13 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
+
+enum class SyncStatusUi {
+    Idle,
+    Syncing,
+    Synced,
+    Failed
+}
 
 @HiltViewModel
 class LogViewModel @Inject constructor(
@@ -41,6 +49,11 @@ class LogViewModel @Inject constructor(
     var remarks by mutableStateOf("")
     var saveSuccess by mutableStateOf(false)
     var errorMessage by mutableStateOf<String?>(null)
+    var syncStatus by mutableStateOf(SyncStatusUi.Idle)
+
+    init {
+        observeSyncStatus()
+    }
 
     fun save() {
         val parsedAmount = amount.toDoubleOrNull()
@@ -70,6 +83,7 @@ class LogViewModel @Inject constructor(
                 isSynced = false
             )
             repository.save(record)
+            syncStatus = SyncStatusUi.Syncing
             enqueueSyncWork()
             saveSuccess = true
             resetForm()
@@ -98,6 +112,27 @@ class LogViewModel @Inject constructor(
                 .build())
             .addTag(SyncWorker.TAG)
             .build()
-        workManager.enqueueUniqueWork(SyncWorker.TAG, ExistingWorkPolicy.KEEP, request)
+        workManager.enqueueUniqueWork(SyncWorker.TAG, ExistingWorkPolicy.REPLACE, request)
+    }
+
+    private fun observeSyncStatus() {
+        viewModelScope.launch {
+            workManager.getWorkInfosForUniqueWorkFlow(SyncWorker.TAG).collect { infos ->
+                val latest = infos.firstOrNull() ?: run {
+                    if (syncStatus != SyncStatusUi.Synced) syncStatus = SyncStatusUi.Idle
+                    return@collect
+                }
+
+                syncStatus = when (latest.state) {
+                    WorkInfo.State.ENQUEUED,
+                    WorkInfo.State.RUNNING,
+                    WorkInfo.State.BLOCKED -> SyncStatusUi.Syncing
+
+                    WorkInfo.State.SUCCEEDED -> SyncStatusUi.Synced
+                    WorkInfo.State.FAILED,
+                    WorkInfo.State.CANCELLED -> SyncStatusUi.Failed
+                }
+            }
+        }
     }
 }
