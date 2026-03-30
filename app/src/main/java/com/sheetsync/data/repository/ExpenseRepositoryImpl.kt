@@ -38,10 +38,14 @@ class ExpenseRepositoryImpl @Inject constructor(
         repairLegacyRecords()
         if (records.isEmpty()) return 0
 
-        val existingTimestampSet = dao.getAllRemoteTimestamps().toMutableSet()
-        val existingFallbackSet = dao.getAllRecordsSnapshot()
-            .map { fallbackKey(it.date, it.type, it.description, it.amount) }
-            .toMutableSet()
+        val localComparable = dao.getAllRecordsSnapshot().map { local ->
+            ComparableTx(
+                date = normalizeDate(local.date, local.remoteTimestamp),
+                amount = local.amount,
+                type = canonicalType(local.type),
+                description = local.description
+            )
+        }.toMutableList()
 
         val toInsert = mutableListOf<ExpenseRecord>()
 
@@ -55,11 +59,15 @@ class ExpenseRepositoryImpl @Inject constructor(
             }.orEmpty()
 
             val timestamp = dto.timestamp?.trim().takeUnless { it.isNullOrBlank() }
-            val fallback = fallbackKey(resolvedDate, resolvedType, dto.description, dto.amount)
 
-            val isDuplicate =
-                (timestamp != null && existingTimestampSet.contains(timestamp)) ||
-                    existingFallbackSet.contains(fallback)
+            val remoteComparable = ComparableTx(
+                date = resolvedDate,
+                amount = dto.amount,
+                type = resolvedType,
+                description = dto.description
+            )
+
+            val isDuplicate = localComparable.any { local -> isCompositeDuplicate(local, remoteComparable) }
 
             if (!isDuplicate) {
                 toInsert += ExpenseRecord(
@@ -73,9 +81,7 @@ class ExpenseRepositoryImpl @Inject constructor(
                     isSynced = true,
                     remoteTimestamp = timestamp
                 )
-
-                if (timestamp != null) existingTimestampSet += timestamp
-                existingFallbackSet += fallback
+                localComparable += remoteComparable
             }
         }
 
@@ -83,8 +89,21 @@ class ExpenseRepositoryImpl @Inject constructor(
         return toInsert.size
     }
 
-    private fun fallbackKey(date: String, type: String, description: String, amount: Double): String =
-        listOf(date, type, description.trim(), amount.toString()).joinToString("|")
+    private data class ComparableTx(
+        val date: String,
+        val amount: Double,
+        val type: String,
+        val description: String
+    )
+
+    private fun isCompositeDuplicate(local: ComparableTx, remote: ComparableTx): Boolean {
+        return local.date == remote.date &&
+            amountsEqual(local.amount, remote.amount) &&
+            local.type == remote.type &&
+            local.description.trim().equals(remote.description.trim(), ignoreCase = true)
+    }
+
+    private fun amountsEqual(a: Double, b: Double): Boolean = kotlin.math.abs(a - b) < 0.000001
 
     private suspend fun repairLegacyRecords() {
         val snapshot = dao.getAllRecordsSnapshot()
