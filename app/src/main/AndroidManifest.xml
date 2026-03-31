@@ -30,6 +30,21 @@
             android:theme="@style/Theme.SheetSync.TransparentQuickLog"
             android:windowSoftInputMode="adjustResize" />
 
+        <service
+            android:name=".QuickLogTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_qs_log_expense"
+            android:label="@string/qs_tile_log_expense"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.service.quicksettings.ACTIVE_TILE"
+                android:value="true" />
+        </service>
+
         <!-- Disable default WorkManager initializer (Hilt provides its own) -->
         <provider
             android:name="androidx.startup.InitializationProvider"
