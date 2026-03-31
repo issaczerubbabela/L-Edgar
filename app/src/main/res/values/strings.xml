@@ -3,4 +3,5 @@
     <string name="app_name">SheetSync</string>
     <string name="qs_tile_log_expense">Log Expense</string>
     <string name="quick_log">Quick Log</string>
+    <string name="quick_log_widget_label">Quick Add</string>
 </resources>
