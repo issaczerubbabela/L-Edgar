@@ -24,6 +24,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".QuickLogActivity"
+            android:exported="false"
+            android:theme="@style/Theme.SheetSync.TransparentQuickLog"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- Disable default WorkManager initializer (Hilt provides its own) -->
         <provider
             android:name="androidx.startup.InitializationProvider"
