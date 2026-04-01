@@ -7,8 +7,10 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.sheetsync.BuildConfig
 import com.sheetsync.data.remote.ApiService
+import com.sheetsync.data.remote.BudgetSyncDto
 import com.sheetsync.data.remote.DropdownSyncDto
 import com.sheetsync.data.remote.SyncRequest
+import com.sheetsync.data.repository.BudgetRepository
 import com.sheetsync.data.repository.DropdownOptionRepository
 import com.sheetsync.data.repository.ExpenseRepository
 import dagger.assisted.Assisted
@@ -23,6 +25,7 @@ class SyncWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
     private val repository: ExpenseRepository,
     private val dropdownOptionRepository: DropdownOptionRepository,
+    private val budgetRepository: BudgetRepository,
     private val apiService: ApiService
 ) : CoroutineWorker(context, workerParams) {
 
@@ -56,10 +59,15 @@ class SyncWorker @AssistedInject constructor(
                 return Result.retry()
             }
 
+            val budgetBackupCount = backupBudgets() ?: run {
+                return Result.retry()
+            }
+
             Log.i(TAG, "Sync successful. processed=${unsynced.size}")
             Result.success(
                 workDataOf(
-                    KEY_DROPDOWN_BACKUP_COUNT to dropdownBackupCount
+                    KEY_DROPDOWN_BACKUP_COUNT to dropdownBackupCount,
+                    KEY_BUDGET_BACKUP_COUNT to budgetBackupCount
                 )
             )
         } catch (e: Exception) {
@@ -156,8 +164,34 @@ class SyncWorker @AssistedInject constructor(
         return null
     }
 
+    private suspend fun backupBudgets(): Int? {
+        val budgets = budgetRepository.getAllBudgetsSnapshot()
+        val payload = budgets.map { budget ->
+            BudgetSyncDto(
+                id = budget.id,
+                monthYear = budget.monthYear,
+                category = budget.category,
+                amount = budget.amount
+            )
+        }
+
+        val response = apiService.syncRecords(
+            BuildConfig.APPS_SCRIPT_URL,
+            SyncRequest(action = "backup", target = "budgets", records = payload)
+        )
+        val body = response.body()
+        if (response.isSuccessful && body?.status.equals("ok", ignoreCase = true)) {
+            Log.i(TAG, "Budget backup successful. count=${payload.size}")
+            return payload.size
+        }
+
+        Log.w(TAG, "Budget backup failed: HTTP ${response.code()}, status=${body?.status}, message=${body?.message}")
+        return null
+    }
+
     companion object {
         const val TAG = "SyncWorker"
         const val KEY_DROPDOWN_BACKUP_COUNT = "dropdownBackupCount"
+        const val KEY_BUDGET_BACKUP_COUNT = "budgetBackupCount"
     }
 }

@@ -2,7 +2,7 @@ package com.sheetsync.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.sheetsync.data.local.entity.BudgetRecord
+import com.sheetsync.data.local.entity.Budget
 import com.sheetsync.data.repository.BudgetRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,12 +12,16 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.YearMonth
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 @HiltViewModel
 class BudgetSettingViewModel @Inject constructor(
     private val budgetRepository: BudgetRepository
 ) : ViewModel() {
+
+    private val activeMonthYear = YearMonth.now().format(MONTH_YEAR_FORMATTER)
 
     private val _showEditorDialog = MutableStateFlow(false)
     private val _editingId = MutableStateFlow<Long?>(null)
@@ -27,7 +31,7 @@ class BudgetSettingViewModel @Inject constructor(
     val categories = listOf("Food", "Social Life", "Transport", "Shopping", "Utilities", "Health", "Education")
 
     val uiState: StateFlow<BudgetSettingUiState> = combine(
-        budgetRepository.observeBudgets(),
+        budgetRepository.observeBudgets(activeMonthYear),
         _showEditorDialog,
         _editingId,
         _selectedCategory,
@@ -79,10 +83,10 @@ class BudgetSettingViewModel @Inject constructor(
         val amount = _amountInput.value.toDoubleOrNull() ?: return
         viewModelScope.launch {
             budgetRepository.upsert(
-                BudgetRecord(
+                Budget(
                     id = _editingId.value ?: 0L,
+                    monthYear = activeMonthYear,
                     category = _selectedCategory.value,
-                    iconEmoji = iconForCategory(_selectedCategory.value),
                     amount = amount
                 )
             )
@@ -93,10 +97,10 @@ class BudgetSettingViewModel @Inject constructor(
     fun deleteBudget(item: BudgetSettingItemUi) {
         viewModelScope.launch {
             budgetRepository.delete(
-                BudgetRecord(
+                Budget(
                     id = item.id,
+                    monthYear = activeMonthYear,
                     category = item.category,
-                    iconEmoji = item.icon,
                     amount = item.amount
                 )
             )
@@ -112,5 +116,9 @@ class BudgetSettingViewModel @Inject constructor(
         "Health" -> "🏥"
         "Education" -> "📘"
         else -> "📒"
+    }
+
+    companion object {
+        private val MONTH_YEAR_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM")
     }
 }

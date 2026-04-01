@@ -25,4 +25,11 @@ interface ApiService {
         @Url url: String,
         @Query("target") target: String = "dropdowns"
     ): Response<DropdownImportResponse>
+
+    /** GET monthly budgets from Apps Script. */
+    @GET
+    suspend fun importBudgets(
+        @Url url: String,
+        @Query("target") target: String = "budgets"
+    ): Response<BudgetImportResponse>
 }

@@ -1,7 +1,9 @@
 package com.sheetsync.data.repository
 
 import com.sheetsync.BuildConfig
+import com.sheetsync.data.local.dao.BudgetDao
 import com.sheetsync.data.local.dao.ExpenseDao
+import com.sheetsync.data.local.entity.Budget
 import com.sheetsync.data.local.entity.DropdownOption
 import com.sheetsync.data.local.entity.ExpenseRecord
 import com.sheetsync.data.remote.ApiService
@@ -12,7 +14,8 @@ import javax.inject.Inject
 class ExpenseRepositoryImpl @Inject constructor(
     private val dao: ExpenseDao,
     private val apiService: ApiService,
-    private val dropdownOptionRepository: DropdownOptionRepository
+    private val dropdownOptionRepository: DropdownOptionRepository,
+    private val budgetDao: BudgetDao
 ) : ExpenseRepository {
 
     override suspend fun save(record: ExpenseRecord): Long = dao.insert(record)
@@ -132,6 +135,37 @@ class ExpenseRepositoryImpl @Inject constructor(
             }
         }
 
+        val budgetResponse = apiService.importBudgets(
+            url = BuildConfig.APPS_SCRIPT_URL,
+            target = "budgets"
+        )
+        if (!budgetResponse.isSuccessful) {
+            throw IllegalStateException("Budget import failed: HTTP ${budgetResponse.code()}")
+        }
+
+        val budgetBody = budgetResponse.body()
+        if (!budgetBody?.status.equals("ok", ignoreCase = true)) {
+            throw IllegalStateException(budgetBody?.message ?: "Budget import failed")
+        }
+
+        val restoredBudgets = budgetBody?.data.orEmpty().let { remoteBudgets ->
+            if (remoteBudgets.isEmpty()) {
+                0
+            } else {
+                val mapped = remoteBudgets.map { dto ->
+                    Budget(
+                        id = 0,
+                        monthYear = dto.monthYear,
+                        category = dto.category,
+                        amount = dto.amount
+                    )
+                }
+                budgetDao.clearAll()
+                budgetDao.insertAll(mapped)
+                mapped.size
+            }
+        }
+
         val txResponse = apiService.importRecords(
             url = BuildConfig.APPS_SCRIPT_URL,
             target = "transactions"
@@ -152,7 +186,8 @@ class ExpenseRepositoryImpl @Inject constructor(
         return GoogleSheetsImportResult(
             imported = imported,
             skipped = skipped,
-            restoredDropdowns = restoredDropdowns
+            restoredDropdowns = restoredDropdowns,
+            restoredBudgets = restoredBudgets
         )
     }
 

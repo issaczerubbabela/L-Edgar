@@ -7,7 +7,8 @@ import kotlinx.coroutines.flow.Flow
 data class GoogleSheetsImportResult(
     val imported: Int,
     val skipped: Int,
-    val restoredDropdowns: Int
+    val restoredDropdowns: Int,
+    val restoredBudgets: Int = 0
 )
 
 interface ExpenseRepository {

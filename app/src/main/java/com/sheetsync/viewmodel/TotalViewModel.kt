@@ -5,7 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sheetsync.data.local.entity.AccountRecord
-import com.sheetsync.data.local.entity.BudgetRecord
+import com.sheetsync.data.local.entity.Budget
 import com.sheetsync.data.local.entity.ExpenseRecord
 import com.sheetsync.data.repository.AccountRepository
 import com.sheetsync.data.repository.BudgetRepository
@@ -14,11 +14,13 @@ import com.sheetsync.util.parseFlexibleDate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
@@ -32,6 +34,7 @@ import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
+@OptIn(ExperimentalCoroutinesApi::class)
 class TotalViewModel @Inject constructor(
     private val expenseRepository: ExpenseRepository,
     private val accountRepository: AccountRepository,
@@ -48,10 +51,13 @@ class TotalViewModel @Inject constructor(
     private val _customEndDateInput = MutableStateFlow("")
     private val _pendingExportFileName = MutableStateFlow<String?>(null)
     private val _exportStatusMessage = MutableStateFlow<String?>(null)
+    private val budgetsForSelectedMonth = _selectedYearMonth.flatMapLatest { ym ->
+        budgetRepository.observeBudgets(ym.format(MONTH_YEAR_FORMATTER))
+    }
 
     val uiState: StateFlow<TotalTabUiState> = combine(
         expenseRepository.getAllRecords(),
-        budgetRepository.observeBudgets(),
+        budgetsForSelectedMonth,
         _selectedYearMonth,
         _isBudgetExpanded,
         _isAccountsExpanded,
@@ -63,7 +69,7 @@ class TotalViewModel @Inject constructor(
         _exportStatusMessage
     ) { values ->
         val records = values[0] as List<ExpenseRecord>
-        val budgets = values[1] as List<BudgetRecord>
+        val budgets = values[1] as List<Budget>
         val selectedYm = values[2] as YearMonth
         val isBudgetExpanded = values[3] as Boolean
         val isAccountsExpanded = values[4] as Boolean
@@ -198,10 +204,11 @@ class TotalViewModel @Inject constructor(
     private fun buildBudgetItems(
         selectedYm: YearMonth,
         monthRecords: List<ExpenseRecord>,
-        budgets: List<BudgetRecord>
+        budgets: List<Budget>
     ): List<BudgetProgressUi> {
         val monthExpense = monthRecords.filter { it.type == "Expense" }.sumOf { it.amount }
-        val totalBudgetAmount = budgets.sumOf { it.amount }
+        val totalBudgetAmount = budgets.firstOrNull { it.category == TOTAL_BUDGET_CATEGORY }?.amount
+            ?: budgets.filterNot { it.category == TOTAL_BUDGET_CATEGORY }.sumOf { it.amount }
 
         val todayFraction = if (selectedYm == YearMonth.now()) {
             LocalDate.now().dayOfMonth.toFloat() / selectedYm.lengthOfMonth().coerceAtLeast(1)
@@ -218,14 +225,16 @@ class TotalViewModel @Inject constructor(
             todayMarkerFraction = todayFraction
         )
 
-        val categoryItems = budgets.map { budget ->
+        val categoryItems = budgets
+            .filterNot { it.category == TOTAL_BUDGET_CATEGORY }
+            .map { budget ->
             val categorySpend = monthRecords
                 .filter { it.type == "Expense" && it.category.equals(budget.category, ignoreCase = true) }
                 .sumOf { it.amount }
 
             BudgetProgressUi(
                 title = budget.category,
-                icon = budget.iconEmoji,
+                icon = iconForCategory(budget.category),
                 budgetAmount = budget.amount,
                 spentAmount = categorySpend,
                 remainingAmount = (budget.amount - categorySpend).coerceAtLeast(0.0),
@@ -234,6 +243,17 @@ class TotalViewModel @Inject constructor(
         }
 
         return listOf(totalItem) + categoryItems
+    }
+
+    private fun iconForCategory(category: String): String = when (category) {
+        "Food" -> "🍜"
+        "Social Life" -> "🧑‍🤝‍🧑"
+        "Transport" -> "🚌"
+        "Shopping" -> "🛍️"
+        "Utilities" -> "💡"
+        "Health" -> "🏥"
+        "Education" -> "📘"
+        else -> "📒"
     }
 
     private fun buildAccountsSummary(selectedYm: YearMonth, allRecords: List<ExpenseRecord>): AccountsSummaryUi {
@@ -313,4 +333,9 @@ class TotalViewModel @Inject constructor(
     }
 
     private fun csvEscape(value: String): String = "\"${value.replace("\"", "\"\"")}\""
+
+    companion object {
+        private const val TOTAL_BUDGET_CATEGORY = "__TOTAL__"
+        private val MONTH_YEAR_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM")
+    }
 }

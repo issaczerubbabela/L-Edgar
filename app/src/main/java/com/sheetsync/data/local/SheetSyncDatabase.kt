@@ -7,13 +7,13 @@ import com.sheetsync.data.local.dao.BudgetDao
 import com.sheetsync.data.local.dao.DropdownOptionDao
 import com.sheetsync.data.local.dao.ExpenseDao
 import com.sheetsync.data.local.entity.AccountRecord
-import com.sheetsync.data.local.entity.BudgetRecord
+import com.sheetsync.data.local.entity.Budget
 import com.sheetsync.data.local.entity.DropdownOption
 import com.sheetsync.data.local.entity.ExpenseRecord
 
 @Database(
-    entities = [ExpenseRecord::class, BudgetRecord::class, AccountRecord::class, DropdownOption::class],
-    version = 8,
+    entities = [ExpenseRecord::class, Budget::class, AccountRecord::class, DropdownOption::class],
+    version = 9,
     exportSchema = false
 )
 abstract class SheetSyncDatabase : RoomDatabase() {

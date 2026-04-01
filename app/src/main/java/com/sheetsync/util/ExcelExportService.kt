@@ -1,7 +1,7 @@
 package com.sheetsync.util
 
 import android.content.Context
-import com.sheetsync.data.local.entity.BudgetRecord
+import com.sheetsync.data.local.entity.Budget
 import com.sheetsync.data.local.entity.ExpenseRecord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -18,7 +18,7 @@ object ExcelExportService {
     suspend fun exportToCsv(
         context: Context,
         records: List<ExpenseRecord>,
-        budgets: List<BudgetRecord>,
+        budgets: List<Budget>,
         title: String
     ): File = withContext(Dispatchers.IO) {
         val exportsDir = File(context.getExternalFilesDir(null), "exports")

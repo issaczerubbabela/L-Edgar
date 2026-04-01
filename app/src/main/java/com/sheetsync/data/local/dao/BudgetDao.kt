@@ -6,24 +6,30 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
-import com.sheetsync.data.local.entity.BudgetRecord
+import com.sheetsync.data.local.entity.Budget
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface BudgetDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(record: BudgetRecord): Long
+    suspend fun upsert(record: Budget): Long
 
     @Update
-    suspend fun update(record: BudgetRecord)
+    suspend fun update(record: Budget)
 
     @Delete
-    suspend fun delete(record: BudgetRecord)
+    suspend fun delete(record: Budget)
 
-    @Query("SELECT * FROM budget_records ORDER BY category ASC")
-    fun getAllBudgets(): Flow<List<BudgetRecord>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(records: List<Budget>)
 
-    @Query("SELECT * FROM budget_records WHERE id = :id LIMIT 1")
-    suspend fun getById(id: Long): BudgetRecord?
+    @Query("DELETE FROM budgets")
+    suspend fun clearAll()
+
+    @Query("SELECT * FROM budgets WHERE monthYear = :monthYear ORDER BY category ASC")
+    fun getBudgetsByMonth(monthYear: String): Flow<List<Budget>>
+
+    @Query("SELECT * FROM budgets ORDER BY monthYear ASC, category ASC")
+    suspend fun getAllBudgetsSnapshot(): List<Budget>
 }

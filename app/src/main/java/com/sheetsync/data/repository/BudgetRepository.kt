@@ -1,10 +1,12 @@
 package com.sheetsync.data.repository
 
-import com.sheetsync.data.local.entity.BudgetRecord
+import com.sheetsync.data.local.entity.Budget
 import kotlinx.coroutines.flow.Flow
 
 interface BudgetRepository {
-    fun observeBudgets(): Flow<List<BudgetRecord>>
-    suspend fun upsert(record: BudgetRecord): Long
-    suspend fun delete(record: BudgetRecord)
+    fun observeBudgets(monthYear: String): Flow<List<Budget>>
+    suspend fun upsert(record: Budget): Long
+    suspend fun delete(record: Budget)
+    suspend fun getAllBudgetsSnapshot(): List<Budget>
+    suspend fun overwriteAllBudgets(budgets: List<Budget>)
 }

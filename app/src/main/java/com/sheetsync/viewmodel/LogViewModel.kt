@@ -236,7 +236,10 @@ class LogViewModel @Inject constructor(
 
                 if (workerJustCompleted) {
                     val dropdownCount = latest.outputData.getInt(SyncWorker.KEY_DROPDOWN_BACKUP_COUNT, -1)
-                    if (dropdownCount >= 0) {
+                    val budgetCount = latest.outputData.getInt(SyncWorker.KEY_BUDGET_BACKUP_COUNT, -1)
+                    if (dropdownCount >= 0 && budgetCount >= 0) {
+                        syncInfoMessage = "Sync complete. Dropdown backup: $dropdownCount option${if (dropdownCount == 1) "" else "s"}. Budget backup: $budgetCount row${if (budgetCount == 1) "" else "s"}."
+                    } else if (dropdownCount >= 0) {
                         syncInfoMessage = "Sync complete. Dropdown backup: $dropdownCount option${if (dropdownCount == 1) "" else "s"}."
                     }
                 }
