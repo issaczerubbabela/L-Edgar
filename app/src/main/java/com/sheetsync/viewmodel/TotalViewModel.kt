@@ -49,30 +49,6 @@ class TotalViewModel @Inject constructor(
     private val _pendingExportFileName = MutableStateFlow<String?>(null)
     private val _exportStatusMessage = MutableStateFlow<String?>(null)
 
-    private var userAdjustedMonth = false
-
-    init {
-        viewModelScope.launch {
-            expenseRepository.getAllRecords().collect { all ->
-                if (userAdjustedMonth || all.isEmpty()) return@collect
-
-                val selectedHasData = all.any { record ->
-                    parseRecordDate(record)?.let { d ->
-                        d.year == _selectedYearMonth.value.year &&
-                            d.monthValue == _selectedYearMonth.value.monthValue
-                    } == true
-                }
-
-                if (!selectedHasData) {
-                    val latest = all.mapNotNull { parseRecordDate(it) }.maxOrNull()
-                    if (latest != null) {
-                        _selectedYearMonth.value = YearMonth.of(latest.year, latest.monthValue)
-                    }
-                }
-            }
-        }
-    }
-
     val uiState: StateFlow<TotalTabUiState> = combine(
         expenseRepository.getAllRecords(),
         budgetRepository.observeBudgets(),
@@ -129,12 +105,10 @@ class TotalViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TotalTabUiState())
 
     fun nextMonth() = _selectedYearMonth.update {
-        userAdjustedMonth = true
         it.plusMonths(1)
     }
 
     fun prevMonth() = _selectedYearMonth.update {
-        userAdjustedMonth = true
         it.minusMonths(1)
     }
 

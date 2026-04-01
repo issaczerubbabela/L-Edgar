@@ -67,32 +67,8 @@ class HistoryViewModel @Inject constructor(
     var selectedDate: LocalDate? by mutableStateOf(null)
         private set
 
-    private var userAdjustedPeriod = false
-
     fun selectDate(date: LocalDate) {
         selectedDate = if (selectedDate == date) null else date
-    }
-
-    init {
-        viewModelScope.launch {
-            repository.getAllRecords().collect { all ->
-                if (userAdjustedPeriod || all.isEmpty()) return@collect
-
-                val selectedMonthHasData = all.any { record ->
-                    parseRecordDate(record)?.let { d ->
-                        d.year == _year.value && d.monthValue == _month.value
-                    } == true
-                }
-
-                if (!selectedMonthHasData) {
-                    val latest = all.mapNotNull { parseRecordDate(it) }.maxOrNull()
-                    if (latest != null) {
-                        _month.value = latest.monthValue
-                        _year.value = latest.year
-                    }
-                }
-            }
-        }
     }
 
     val uiState: StateFlow<HistoryUiState> =
@@ -147,7 +123,6 @@ class HistoryViewModel @Inject constructor(
     fun prevMonth() = shiftMonth(-1)
 
     private fun shiftMonth(delta: Long) {
-        userAdjustedPeriod = true
         val next = LocalDate.of(_year.value, _month.value, 1).plusMonths(delta)
         _month.value = next.monthValue
         _year.value  = next.year

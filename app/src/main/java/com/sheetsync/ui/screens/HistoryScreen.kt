@@ -59,7 +59,7 @@ fun HistoryScreen(
     val state      by vm.uiState.collectAsState()
     val monthlyState by monthlyVm.uiState.collectAsState()
     val totalState by totalVm.uiState.collectAsState()
-    var selectedTab by remember { mutableIntStateOf(3) }
+    var selectedTab by remember { mutableIntStateOf(0) }
 
     // ── Theme detection ────────────────────────────────────────────────────────
     // luminance() > 0.5 → light theme (white background)
@@ -424,9 +424,6 @@ private fun DailyContent(
 private fun MoneyManagerAppBar(bg: Color, contentColor: Color) {
     CenterAlignedTopAppBar(
         title = { Text("SheetSync", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = contentColor) },
-        navigationIcon = {
-            IconButton(onClick = {}) { Icon(Icons.Filled.ArrowBack, null, tint = contentColor) }
-        },
         actions = {
             IconButton(onClick = {}) { Icon(Icons.Filled.StarBorder, null, tint = contentColor) }
             IconButton(onClick = {}) { Icon(Icons.Filled.Search, null, tint = contentColor) }
