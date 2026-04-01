@@ -55,30 +55,51 @@ class TotalViewModel @Inject constructor(
         budgetRepository.observeBudgets(ym.format(MONTH_YEAR_FORMATTER))
     }
 
-    val uiState: StateFlow<TotalTabUiState> = combine(
-        expenseRepository.getAllRecords(),
-        budgetsForSelectedMonth,
+    private val uiChromeState = combine(
         _selectedYearMonth,
         _isBudgetExpanded,
-        _isAccountsExpanded,
+        _isAccountsExpanded
+    ) { selectedYearMonth, isBudgetExpanded, isAccountsExpanded ->
+        UiChromeState(
+            selectedYearMonth = selectedYearMonth,
+            isBudgetExpanded = isBudgetExpanded,
+            isAccountsExpanded = isAccountsExpanded
+        )
+    }
+
+    private val exportDialogState = combine(
         _showExportDialog,
         _selectedExportInterval,
         _customStartDateInput,
-        _customEndDateInput,
+        _customEndDateInput
+    ) { showExportDialog, selectedExportInterval, customStartDateInput, customEndDateInput ->
+        ExportDialogState(
+            showExportDialog = showExportDialog,
+            selectedExportInterval = selectedExportInterval,
+            customStartDateInput = customStartDateInput,
+            customEndDateInput = customEndDateInput
+        )
+    }
+
+    private val exportUiState = combine(
+        exportDialogState,
         _pendingExportFileName,
         _exportStatusMessage
-    ) { values ->
-        val records = values[0] as List<ExpenseRecord>
-        val budgets = values[1] as List<Budget>
-        val selectedYm = values[2] as YearMonth
-        val isBudgetExpanded = values[3] as Boolean
-        val isAccountsExpanded = values[4] as Boolean
-        val showExportDialog = values[5] as Boolean
-        val selectedExportInterval = values[6] as ExportInterval
-        val customStart = values[7] as String
-        val customEnd = values[8] as String
-        val pendingExportFileName = values[9] as String?
-        val exportMessage = values[10] as String?
+    ) { exportDialog, pendingExportFileName, exportStatusMessage ->
+        ExportUiState(
+            dialogState = exportDialog,
+            pendingExportFileName = pendingExportFileName,
+            exportStatusMessage = exportStatusMessage
+        )
+    }
+
+    val uiState: StateFlow<TotalTabUiState> = combine(
+        expenseRepository.getAllRecords(),
+        budgetsForSelectedMonth,
+        uiChromeState,
+        exportUiState
+    ) { records, budgets, chrome, export ->
+        val selectedYm = chrome.selectedYearMonth
 
         val monthRecords = records.filterByYearMonth(selectedYm)
         val monthIncome = monthRecords.filter { it.type == "Income" }.sumOf { it.amount }
@@ -95,16 +116,16 @@ class TotalViewModel @Inject constructor(
                 expense = monthExpense,
                 total = monthIncome - monthExpense
             ),
-            isBudgetExpanded = isBudgetExpanded,
-            isAccountsExpanded = isAccountsExpanded,
+            isBudgetExpanded = chrome.isBudgetExpanded,
+            isAccountsExpanded = chrome.isAccountsExpanded,
             budgetItems = budgetItems,
             accountsSummary = accountsSummary,
-            showExportDialog = showExportDialog,
-            selectedExportInterval = selectedExportInterval,
-            customStartDateInput = customStart,
-            customEndDateInput = customEnd,
-            pendingExportFileName = pendingExportFileName,
-            exportStatusMessage = exportMessage
+            showExportDialog = export.dialogState.showExportDialog,
+            selectedExportInterval = export.dialogState.selectedExportInterval,
+            customStartDateInput = export.dialogState.customStartDateInput,
+            customEndDateInput = export.dialogState.customEndDateInput,
+            pendingExportFileName = export.pendingExportFileName,
+            exportStatusMessage = export.exportStatusMessage
         )
     }
         .flowOn(Dispatchers.Default)
@@ -206,29 +227,28 @@ class TotalViewModel @Inject constructor(
         monthRecords: List<ExpenseRecord>,
         budgets: List<Budget>
     ): List<BudgetProgressUi> {
-        val monthExpense = monthRecords.filter { it.type == "Expense" }.sumOf { it.amount }
+        val expenseRecords = monthRecords.filter { it.type == "Expense" }
+        val monthExpense = expenseRecords.sumOf { it.amount }
+        val configuredBudgets = budgets.filterNot { it.category == TOTAL_BUDGET_CATEGORY }
+        val allocatedBudgetAmount = configuredBudgets.sumOf { it.amount }
         val totalBudgetAmount = budgets.firstOrNull { it.category == TOTAL_BUDGET_CATEGORY }?.amount
-            ?: budgets.filterNot { it.category == TOTAL_BUDGET_CATEGORY }.sumOf { it.amount }
-
-        val todayFraction = if (selectedYm == YearMonth.now()) {
-            LocalDate.now().dayOfMonth.toFloat() / selectedYm.lengthOfMonth().coerceAtLeast(1)
-        } else 1f
+            ?: allocatedBudgetAmount
+        val idealFraction = calculateIdealFraction(selectedYm)
 
         val totalItem = BudgetProgressUi(
             title = "Total Budget",
             icon = "",
             budgetAmount = totalBudgetAmount,
             spentAmount = monthExpense,
-            remainingAmount = (totalBudgetAmount - monthExpense).coerceAtLeast(0.0),
+            remainingAmount = totalBudgetAmount - monthExpense,
             progressPercent = percent(monthExpense, totalBudgetAmount),
             showTodayMarker = true,
-            todayMarkerFraction = todayFraction
+            todayMarkerFraction = idealFraction
         )
 
-        val categoryItems = budgets
-            .filterNot { it.category == TOTAL_BUDGET_CATEGORY }
+        val categoryItems = configuredBudgets
             .map { budget ->
-            val categorySpend = monthRecords
+            val categorySpend = expenseRecords
                 .filter { it.type == "Expense" && it.category.equals(budget.category, ignoreCase = true) }
                 .sumOf { it.amount }
 
@@ -237,12 +257,39 @@ class TotalViewModel @Inject constructor(
                 icon = iconForCategory(budget.category),
                 budgetAmount = budget.amount,
                 spentAmount = categorySpend,
-                remainingAmount = (budget.amount - categorySpend).coerceAtLeast(0.0),
-                progressPercent = percent(categorySpend, budget.amount)
+                remainingAmount = budget.amount - categorySpend,
+                progressPercent = percent(categorySpend, budget.amount),
+                showTodayMarker = true,
+                todayMarkerFraction = idealFraction
             )
         }
 
-        return listOf(totalItem) + categoryItems
+        val matchedCategoryExpense = categoryItems.sumOf { it.spentAmount }
+        val otherSpentAmount = (monthExpense - matchedCategoryExpense).coerceAtLeast(0.0)
+        val otherBudgetAmount = totalBudgetAmount - allocatedBudgetAmount
+
+        val otherItem = BudgetProgressUi(
+            title = "Other",
+            icon = "",
+            budgetAmount = otherBudgetAmount,
+            spentAmount = otherSpentAmount,
+            remainingAmount = otherBudgetAmount - otherSpentAmount,
+            progressPercent = percent(otherSpentAmount, otherBudgetAmount),
+            showTodayMarker = true,
+            todayMarkerFraction = idealFraction
+        )
+
+        return listOf(totalItem) + categoryItems + otherItem
+    }
+
+    private fun calculateIdealFraction(selectedYm: YearMonth): Float {
+        val now = LocalDate.now()
+        val currentMonth = YearMonth.from(now)
+        return when {
+            selectedYm.isBefore(currentMonth) -> 1f
+            selectedYm.isAfter(currentMonth) -> 0f
+            else -> (now.dayOfMonth.toFloat() / selectedYm.lengthOfMonth().coerceAtLeast(1).toFloat())
+        }
     }
 
     private fun iconForCategory(category: String): String = when (category) {
@@ -338,4 +385,23 @@ class TotalViewModel @Inject constructor(
         private const val TOTAL_BUDGET_CATEGORY = "__TOTAL__"
         private val MONTH_YEAR_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM")
     }
+
+    private data class UiChromeState(
+        val selectedYearMonth: YearMonth,
+        val isBudgetExpanded: Boolean,
+        val isAccountsExpanded: Boolean
+    )
+
+    private data class ExportDialogState(
+        val showExportDialog: Boolean,
+        val selectedExportInterval: ExportInterval,
+        val customStartDateInput: String,
+        val customEndDateInput: String
+    )
+
+    private data class ExportUiState(
+        val dialogState: ExportDialogState,
+        val pendingExportFileName: String?,
+        val exportStatusMessage: String?
+    )
 }

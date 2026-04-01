@@ -54,8 +54,13 @@ data class BudgetSettingItemUi(
 
 data class BudgetSettingUiState(
     val items: List<BudgetSettingItemUi> = emptyList(),
+    val categoryOptions: List<String> = emptyList(),
+    val totalBudgetInput: String = "",
+    val totalBudgetAmount: Double = 0.0,
+    val allocatedAmount: Double = 0.0,
+    val otherAmount: Double = 0.0,
     val showEditorDialog: Boolean = false,
     val editingId: Long? = null,
-    val selectedCategory: String = "Food",
+    val selectedCategory: String = "",
     val amountInput: String = ""
 )

@@ -3,6 +3,7 @@ package com.sheetsync.ui.screens
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,10 +19,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material3.AlertDialog
@@ -35,7 +36,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -85,7 +89,7 @@ fun TotalTabScreen(
         ) {
             item {
                 SectionHeader(
-                    icon = Icons.Filled.MenuBook,
+                    icon = Icons.AutoMirrored.Filled.MenuBook,
                     title = "Budget",
                     trailingText = "Budget Setting >",
                     onTrailingClick = onNavigateBudgetSetting,
@@ -96,7 +100,7 @@ fun TotalTabScreen(
 
             if (state.isBudgetExpanded) {
                 items(state.budgetItems.size) { index ->
-                    BudgetProgressRow(item = state.budgetItems[index], isFirst = index == 0)
+                    BudgetProgressRow(item = state.budgetItems[index])
                 }
             }
 
@@ -196,7 +200,7 @@ private fun SectionHeader(
 }
 
 @Composable
-private fun BudgetProgressRow(item: BudgetProgressUi, isFirst: Boolean) {
+private fun BudgetProgressRow(item: BudgetProgressUi) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -214,46 +218,14 @@ private fun BudgetProgressRow(item: BudgetProgressUi, isFirst: Boolean) {
 
         Spacer(Modifier.height(8.dp))
 
-        Box(
+        IdealBudgetProgressBar(
+            spentAmount = item.spentAmount,
+            budgetAmount = item.budgetAmount,
+            idealFraction = item.todayMarkerFraction,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(30.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(30.dp)
-                    .background(Color(0xFF1B1F28), shape = MaterialTheme.shapes.small)
-            )
-            val progress = (item.progressPercent / 100f).coerceIn(0f, 1f)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(progress)
-                    .height(30.dp)
-                    .background(Color(0xFF2B3240), shape = MaterialTheme.shapes.small)
-            )
-
-            if (isFirst && item.showTodayMarker) {
-                val marker = item.todayMarkerFraction.coerceIn(0f, 1f)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(marker)
-                        .height(30.dp),
-                    contentAlignment = Alignment.TopEnd
-                ) {
-                    Box(modifier = Modifier.width(1.dp).height(30.dp).background(Color(0xFF676C76)))
-                    Text(
-                        "Today",
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier
-                            .padding(end = 2.dp)
-                            .background(Color(0xFF6E6E73), shape = MaterialTheme.shapes.small)
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
-                        fontSize = 12.sp
-                    )
-                }
-            }
-        }
+        )
 
         Spacer(Modifier.height(8.dp))
 
@@ -264,6 +236,51 @@ private fun BudgetProgressRow(item: BudgetProgressUi, isFirst: Boolean) {
         }
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
+}
+
+@Composable
+private fun IdealBudgetProgressBar(
+    spentAmount: Double,
+    budgetAmount: Double,
+    idealFraction: Float,
+    modifier: Modifier = Modifier
+) {
+    val spentFraction = if (budgetAmount <= 0.0) 0f else (spentAmount / budgetAmount).toFloat()
+    val fillFraction = spentFraction.coerceIn(0f, 1f)
+    val isOverBudget = spentFraction > 1f
+
+    Canvas(modifier = modifier) {
+        val trackColor = Color(0xFF2D323C)
+        val fillColor = if (isOverBudget) FabRed else IncomeBlue
+        val barHeight = size.height * 0.72f
+        val barTop = (size.height - barHeight) / 2f
+        val corner = CornerRadius(x = barHeight / 2f, y = barHeight / 2f)
+
+        drawRoundRect(
+            color = trackColor,
+            topLeft = Offset(0f, barTop),
+            size = androidx.compose.ui.geometry.Size(width = size.width, height = barHeight),
+            cornerRadius = corner
+        )
+
+        if (fillFraction > 0f) {
+            drawRoundRect(
+                color = fillColor,
+                topLeft = Offset(0f, barTop),
+                size = androidx.compose.ui.geometry.Size(width = size.width * fillFraction, height = barHeight),
+                cornerRadius = corner
+            )
+        }
+
+        val markerX = idealFraction.coerceIn(0f, 1f) * size.width
+        drawLine(
+            color = Color.White,
+            start = Offset(markerX, barTop - 3.dp.toPx()),
+            end = Offset(markerX, barTop + barHeight + 3.dp.toPx()),
+            strokeWidth = 2.dp.toPx(),
+            cap = StrokeCap.Round
+        )
+    }
 }
 
 @Composable
