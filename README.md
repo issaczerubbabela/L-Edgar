@@ -1,42 +1,162 @@
-# SheetSync: Lightweight Android Expense Tracker
+# SheetSync: Offline-First Android Expense Tracker
 
-An agent-built, offline-first Android application that syncs seamlessly with Google Sheets.
+SheetSync is a Kotlin + Jetpack Compose money manager built around an offline-first flow.
+All writes are committed locally first (Room), then synchronized to Google Sheets in the background.
 
-## 🚀 Features
-- **Instant Logging:** Save expenses/income to local Room DB in <100ms.
-- **Background Sync:** WorkManager automatically pushes data to Google Sheets when internet is available.
-- **Three-Space Navigation:**
-  - **Entry:** Fast form with auto-suggestions.
-  - **Records:** Filterable list of all transactions.
-  - **Visualization:** Real-time budget vs. spend charts using Vico.
-- **Planned "Speed" Features:**
-  - Home screen Widget (Glance API).
-  - Post-payment trigger (Notification Listener for GPay/BHIM).
+## Features Implemented
 
-## 🛠️ Tech Stack
-- **Language:** Kotlin
-- **UI Framework:** Jetpack Compose
-- **Architecture:** MVVM + Clean Architecture
-- **Local Database:** Room SQLite
-- **Dependency Injection:** Hilt
-- **Networking:** Retrofit (to Google Apps Script)
-- **Visuals:** Vico Charts
+### Transaction Logging
 
-## 🔗 Connection & Live Preview
-Since this is a native Android app (not Expo/React Native), use the following steps to see your app in progress:
+- Add, edit, and delete transactions.
+- Supports `Expense`, `Income`, and `Transfer` transaction types.
+- Date picker, category selection, payment mode selection, remarks, and description fields.
+- Transfer flow supports `From Account` and `To Account` selection.
+- Sync status chip in the log screen with manual retry on failure.
 
-### Option A: Physical Device (Recommended for speed)
-1. **Enable Developer Options:** On your phone, go to Settings > About Phone > Tap "Build Number" 7 times.
-2. **USB Debugging:** Enable "USB Debugging" in Developer Options.
-3. **Connect:** Plug your phone into your PC/Mac via USB.
-4. **Run:** In **Android Studio**, select your phone in the top toolbar and press the **Green Play button**.
+### History and Analysis
 
-### Option B: Wireless Debugging (The "Expo-like" experience)
-1. Ensure your phone and PC are on the same Wi-Fi.
-2. In Android Studio, go to **Device Manager** > **Physical Tab** > **Pair using Wi-Fi**.
-3. Scan the QR code with your phone. You can now deploy the app wirelessly.
+- Multi-tab history experience:
+  - `Daily` grouped records.
+  - `Calendar` view with per-day income/expense and category dot markers.
+  - `Monthly` rollups with expandable weekly breakdowns.
+  - `Total` dashboard with budget and account summaries.
+- Insights screen with:
+  - Current month income/expense/balance cards.
+  - Category-wise spend chart.
+  - 6-month expense trend chart.
 
-### Option C: Antigravity Phone Connect (For Agent Monitoring)
-If you want to monitor what the Antigravity Agent is doing from your phone while away from your desk:
-1. Run Antigravity with: `antigravity . --remote-debugging-port=9000`.
-2. Use the **Antigravity Phone Connect** utility to view the agent's "thinking" and "artifacts" on your mobile browser.
+### Budgets
+
+- Set and edit a monthly `Total Budget`.
+- Set per-category budgets.
+- Automatic `Other` budget calculation.
+- Budget progress rows in the Total tab with ideal-progress marker.
+- Budget data is included in sync backup/import flows.
+
+### Accounts
+
+- Dedicated Accounts tab.
+- Add accounts with configurable account groups.
+- Account list grouped by account group.
+- Account detail screen with monthly period navigation and running balance statement.
+
+### Dropdown and App Configuration Data
+
+- Manage dropdown options in-app for:
+  - Expense Categories
+  - Income Categories
+  - Account Groups
+  - Payment Modes
+- Add, delete, and reorder options.
+
+### Import, Export, and Data Utilities
+
+- Import transactions from Google Sheets.
+- Import transactions from CSV with header-based parsing.
+- Duplicate-control toggle for imports (skip or allow duplicates).
+- Google Sheets import also restores dropdown options and budget rows.
+- Export records by interval from Total tab to CSV (Excel-compatible).
+- Reset local data option in settings.
+
+### Sync Engine
+
+- Offline-first local persistence via Room.
+- WorkManager + Hilt worker for background sync.
+- Sync supports insert/update/delete actions.
+- Idempotent delete handling for already-removed remote rows.
+- Sync also backs up dropdown options and budgets to Google Sheets endpoint.
+
+### Quick Entry Surfaces
+
+- Home screen quick-log widget.
+- Quick Settings tile for instant quick-log launch.
+- App shortcut for quick-log action.
+- Quick Log bottom-sheet activity for fast amount + category entry.
+
+### UI and App Experience
+
+- Compose + Material 3 navigation with bottom tabs.
+- Light/Dark theme toggle persisted via DataStore.
+
+## Tech Stack
+
+- Kotlin
+- Jetpack Compose (Material 3)
+- MVVM + repository-based data layer
+- Room (SQLite)
+- Hilt (DI)
+- WorkManager
+- Retrofit + Gson
+- Vico charts
+- DataStore Preferences
+
+## First-Time Setup (After Cloning)
+
+### 1. Prerequisites
+
+- Android Studio (latest stable recommended)
+- Android SDK installed
+- JDK 17 available locally (project uses Java/Kotlin target 17)
+
+### 2. Clone and open
+
+1. Clone this repository.
+2. Open the project root in Android Studio.
+3. Let Gradle sync complete.
+
+### 3. Configure local properties
+
+1. Copy `local.properties.example` to `local.properties`.
+2. Ensure `sdk.dir` is set (Android Studio usually sets this automatically).
+3. Set your Apps Script endpoint:
+
+```properties
+APPS_SCRIPT_URL=https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec
+```
+
+### 4. Deploy Google Apps Script web app
+
+1. Open your Google Sheet.
+2. Go to `Extensions -> Apps Script`.
+3. Paste the script from `scripts/AppsScript.gs`.
+4. Click `Deploy -> New deployment`.
+5. Type: `Web app`.
+6. Execute as: `Me`.
+7. Who has access: `Anyone`.
+8. Copy the deployment URL and paste it into `local.properties` as `APPS_SCRIPT_URL`.
+
+Note: the deployment URL changes on each new deployment. Update `local.properties` whenever you redeploy.
+
+### 5. Run the app
+
+1. Connect a physical device (USB or wireless debugging) or start an emulator.
+2. Run the `app` configuration from Android Studio.
+
+## Extending the App
+
+### Architecture guide
+
+- UI is Compose screens + ViewModels.
+- Data access goes through repositories.
+- Local source of truth is Room.
+- Remote sync/import is handled via Retrofit + WorkManager.
+
+### Typical extension flow
+
+1. Add/update Room entities + DAO queries for new data.
+2. Expose operations in repository interfaces and implementations.
+3. Add ViewModel state + actions using StateFlow.
+4. Build/update Compose screens and wire navigation.
+5. If needed remotely, update `scripts/AppsScript.gs` contract and Retrofit DTO/API methods.
+6. Validate sync behavior for insert/update/delete and import paths.
+
+### Common extension points already present
+
+- New dropdown-driven configuration can be added using the dropdown management pattern.
+- New account-level analytics can hook into existing account repositories and detail screen model.
+- New backup/import datasets can follow the existing `target`-based sync payload approach.
+
+## Notes
+
+- `local.properties` is intentionally untracked; keep secrets and machine-specific values there only.
+- If the app runs but sync/import fails, verify `APPS_SCRIPT_URL` first.

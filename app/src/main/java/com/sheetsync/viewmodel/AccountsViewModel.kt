@@ -35,8 +35,7 @@ data class AccountsScreenUiState(
 
 @HiltViewModel
 class AccountsViewModel @Inject constructor(
-    accountRepository: AccountRepository,
-    expenseRepository: ExpenseRepository
+    accountRepository: AccountRepository
 ) : ViewModel() {
 
     val groupedAccounts: StateFlow<Map<String, List<AccountRecord>>> = accountRepository
@@ -48,20 +47,19 @@ class AccountsViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
-    private val accountItems: StateFlow<List<AccountListItemUi>> = combine(
-        accountRepository.getAllAccounts(),
-        expenseRepository.getAllRecords()
-    ) { accounts, records ->
-        val balances = calculateBalances(accounts, records)
-        accounts.map { account ->
+    private val accountItems: StateFlow<List<AccountListItemUi>> = accountRepository
+        .getAccountsWithBalances()
+        .map { accountsWithBalances ->
+            accountsWithBalances.map { (account, balance) ->
             AccountListItemUi(
                 id = account.id,
                 accountGroup = account.accountGroup,
                 accountName = account.accountName,
-                balance = balances[account.id] ?: account.initialBalance
+                balance = balance
             )
         }.sortedWith(compareBy({ it.accountGroup.lowercase(Locale.getDefault()) }, { it.accountName.lowercase(Locale.getDefault()) }))
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val groupedAccountItems: StateFlow<Map<String, List<AccountListItemUi>>> = accountItems
         .map { items ->
@@ -79,41 +77,6 @@ class AccountsViewModel @Inject constructor(
         AccountsScreenUiState(assets = assets, liabilities = liabilities, total = assets - liabilities, groupedAccounts = groups)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AccountsScreenUiState())
 
-    private fun calculateBalances(
-        accounts: List<AccountRecord>,
-        records: List<ExpenseRecord>
-    ): Map<Long, Double> {
-        val balances = accounts.associate { it.id to it.initialBalance }.toMutableMap()
-
-        records.forEach { record ->
-            when (record.type) {
-                "Income" -> {
-                    val to = record.toAccountId
-                    if (to != null && balances.containsKey(to)) {
-                        balances[to] = (balances[to] ?: 0.0) + record.amount
-                    }
-                }
-                "Expense" -> {
-                    val from = record.fromAccountId
-                    if (from != null && balances.containsKey(from)) {
-                        balances[from] = (balances[from] ?: 0.0) - record.amount
-                    }
-                }
-                "Transfer" -> {
-                    val from = record.fromAccountId
-                    val to = record.toAccountId
-                    if (from != null && balances.containsKey(from)) {
-                        balances[from] = (balances[from] ?: 0.0) - record.amount
-                    }
-                    if (to != null && balances.containsKey(to)) {
-                        balances[to] = (balances[to] ?: 0.0) + record.amount
-                    }
-                }
-            }
-        }
-
-        return balances
-    }
 }
 
 
