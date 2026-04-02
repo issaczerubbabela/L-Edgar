@@ -24,6 +24,9 @@ interface AccountDao {
     @Query("SELECT * FROM account_records ORDER BY accountName ASC")
     fun getAllAccounts(): Flow<List<AccountRecord>>
 
+    @Query("SELECT * FROM account_records ORDER BY accountName ASC")
+    suspend fun getAllAccountsSnapshot(): List<AccountRecord>
+
     @Query("SELECT * FROM account_records WHERE isHidden = 0 ORDER BY accountName ASC")
     fun getVisibleAccounts(): Flow<List<AccountRecord>>
 

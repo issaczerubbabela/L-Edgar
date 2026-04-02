@@ -55,6 +55,8 @@ class AccountRepositoryImpl @Inject constructor(
             balances.firstOrNull { it.accountId == accountId }?.balance ?: 0.0
         }
 
+    override suspend fun getAllAccountsSnapshot(): List<AccountRecord> = dao.getAllAccountsSnapshot()
+
     override suspend fun getAccountById(accountId: Long): AccountRecord? = dao.getAccountById(accountId)
 
     override suspend fun save(record: AccountRecord): Long = dao.insert(record)

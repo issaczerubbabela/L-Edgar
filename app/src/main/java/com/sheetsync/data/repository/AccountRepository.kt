@@ -19,6 +19,7 @@ interface AccountRepository {
     fun getAccountBalances(): Flow<List<AccountBalance>>
     fun getAccountsWithBalances(): Flow<List<AccountWithBalance>>
     fun getBalanceForAccount(accountId: Long): Flow<Double>
+    suspend fun getAllAccountsSnapshot(): List<AccountRecord>
     suspend fun getAccountById(accountId: Long): AccountRecord?
     suspend fun save(record: AccountRecord): Long
     suspend fun delete(record: AccountRecord)

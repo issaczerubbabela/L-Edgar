@@ -65,7 +65,7 @@ object CsvParser {
                     category    = category.ifBlank { "Other" },
                     description = cols.getOrEmpty(idx.description),
                     amount      = amount,
-                    paymentMode = cols.getOrEmpty(idx.paymentMode).ifBlank { "Other" },
+                    accountId   = null,
                     remarks     = cols.getOrEmpty(idx.remarks),
                     isSynced    = true, // came from Sheets — don't push back
                     syncAction  = "NONE"

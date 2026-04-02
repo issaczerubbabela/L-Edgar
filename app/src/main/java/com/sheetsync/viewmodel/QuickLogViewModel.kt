@@ -30,11 +30,6 @@ class QuickLogViewModel @Inject constructor(
         .map { options -> options.map { it.name } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val paymentModes = dropdownOptionRepository
-        .getOptionsByType("PAYMENT_MODE")
-        .map { options -> options.map { it.name } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
     var amount by mutableStateOf("")
     var selectedCategory by mutableStateOf("")
     var errorMessage by mutableStateOf<String?>(null)
@@ -55,7 +50,6 @@ class QuickLogViewModel @Inject constructor(
 
         viewModelScope.launch {
             runCatching {
-                val paymentMode = paymentModes.value.firstOrNull().orEmpty()
                 expenseRepository.save(
                     ExpenseRecord(
                         date = LocalDate.now().toString(),
@@ -63,7 +57,7 @@ class QuickLogViewModel @Inject constructor(
                         category = selectedCategory,
                         description = "",
                         amount = parsedAmount,
-                        paymentMode = paymentMode,
+                        accountId = null,
                         remarks = "",
                         isSynced = false,
                         syncAction = "INSERT"

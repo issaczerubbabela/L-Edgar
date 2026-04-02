@@ -17,6 +17,6 @@ data class SyncRecordDto(
     val incCategory: String, // Income Category column (empty when Expense)
     val description: String,
     val amount: Double,
-    val paymentMode: String,
+    val accountName: String,
     val remarks: String
 )

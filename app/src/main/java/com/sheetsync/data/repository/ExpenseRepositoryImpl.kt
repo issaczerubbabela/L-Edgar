@@ -1,6 +1,7 @@
 package com.sheetsync.data.repository
 
 import com.sheetsync.BuildConfig
+import com.sheetsync.data.local.dao.AccountDao
 import com.sheetsync.data.local.dao.BudgetDao
 import com.sheetsync.data.local.dao.ExpenseDao
 import com.sheetsync.data.local.entity.Budget
@@ -8,11 +9,13 @@ import com.sheetsync.data.local.entity.DropdownOption
 import com.sheetsync.data.local.entity.ExpenseRecord
 import com.sheetsync.data.remote.ApiService
 import com.sheetsync.data.remote.ImportRecordDto
+import com.sheetsync.util.parseFlexibleDate
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 
 class ExpenseRepositoryImpl @Inject constructor(
     private val dao: ExpenseDao,
+    private val accountDao: AccountDao,
     private val apiService: ApiService,
     private val dropdownOptionRepository: DropdownOptionRepository,
     private val budgetDao: BudgetDao
@@ -52,12 +55,20 @@ class ExpenseRepositoryImpl @Inject constructor(
         repairLegacyRecords()
         if (records.isEmpty()) return 0
 
+        val accounts = accountDao.getAllAccountsSnapshot()
+        val accountsByName = accounts.associateBy { normalizeAccountKey(it.accountName) }
+        val fallbackAccountId = accounts
+            .firstOrNull { it.accountName.equals("Cash", ignoreCase = true) || it.groupName.equals("Cash", ignoreCase = true) }
+            ?.id
+            ?: accounts.firstOrNull()?.id
+
         val localComparable = dao.getAllRecordsSnapshot().map { local ->
             ComparableTx(
                 date = normalizeDate(local.date, local.remoteTimestamp),
                 amount = local.amount,
                 type = canonicalType(local.type),
-                description = local.description
+                description = local.description,
+                accountId = local.accountId
             )
         }.toMutableList()
 
@@ -73,12 +84,23 @@ class ExpenseRepositoryImpl @Inject constructor(
             }.orEmpty()
 
             val timestamp = dto.timestamp?.trim().takeUnless { it.isNullOrBlank() }
+            val remoteAccountName = dto.accountName?.trim().takeUnless { it.isNullOrBlank() }
+                ?: dto.paymentMode?.trim().takeUnless { it.isNullOrBlank() }
+            val mappedAccountId = remoteAccountName
+                ?.let { accountsByName[normalizeAccountKey(it)]?.id }
+                ?: fallbackAccountId
+
+            // For non-transfer rows, drop records that cannot be mapped safely.
+            if (!resolvedType.equals("Transfer", ignoreCase = true) && mappedAccountId == null) {
+                return@forEach
+            }
 
             val remoteComparable = ComparableTx(
                 date = resolvedDate,
                 amount = dto.amount,
                 type = resolvedType,
-                description = dto.description
+                description = dto.description,
+                accountId = mappedAccountId
             )
 
             val isDuplicate = localComparable.any { local -> isCompositeDuplicate(local, remoteComparable) }
@@ -90,8 +112,10 @@ class ExpenseRepositoryImpl @Inject constructor(
                     category = mappedCategory,
                     description = dto.description,
                     amount = dto.amount,
-                    paymentMode = dto.paymentMode,
+                    accountId = mappedAccountId,
                     remarks = dto.remarks,
+                    fromAccountId = if (resolvedType.equals("Expense", ignoreCase = true)) mappedAccountId else null,
+                    toAccountId = if (resolvedType.equals("Income", ignoreCase = true)) mappedAccountId else null,
                     isSynced = true,
                     remoteTimestamp = timestamp,
                     syncAction = "NONE"
@@ -195,23 +219,27 @@ class ExpenseRepositoryImpl @Inject constructor(
         val date: String,
         val amount: Double,
         val type: String,
-        val description: String
+        val description: String,
+        val accountId: Long?
     )
 
     private fun isCompositeDuplicate(local: ComparableTx, remote: ComparableTx): Boolean {
         return local.date == remote.date &&
             amountsEqual(local.amount, remote.amount) &&
             local.type == remote.type &&
-            local.description.trim().equals(remote.description.trim(), ignoreCase = true)
+            local.description.trim().equals(remote.description.trim(), ignoreCase = true) &&
+            local.accountId == remote.accountId
     }
 
     private fun amountsEqual(a: Double, b: Double): Boolean = kotlin.math.abs(a - b) < 0.000001
+
+    private fun normalizeAccountKey(raw: String): String = raw.trim().lowercase()
 
     private suspend fun repairLegacyRecords() {
         val snapshot = dao.getAllRecordsSnapshot()
         val normalized = snapshot.map { record ->
             record.copy(
-                date = normalizeDate(record.date, null),
+                date = normalizeDate(record.date, record.remoteTimestamp),
                 type = canonicalType(record.type),
                 syncAction = if (record.isSynced && record.syncAction != "DELETE") "NONE" else record.syncAction
             )
@@ -232,31 +260,10 @@ class ExpenseRepositoryImpl @Inject constructor(
     }
 
     private fun normalizeDate(rawDate: String, rawTimestamp: String?): String {
-        val date = rawDate.trim()
-        if (date.matches(Regex("""\\d{4}-\\d{2}-\\d{2}"""))) return date
-
-        // Accept common ISO timestamp/date-time and keep date portion.
-        if (date.matches(Regex("""\\d{4}-\\d{2}-\\d{2}T.*"""))) return date.substring(0, 10)
-
-        // Handle M/D/YYYY and D/M/YYYY style values.
-        val slash = date.split("/")
-        if (slash.size == 3) {
-            val p0 = slash[0].trim().toIntOrNull()
-            val p1 = slash[1].trim().toIntOrNull()
-            val year = slash[2].trim().toIntOrNull()
-            if (p0 != null && p1 != null && year != null) {
-                val (month, day) = if (p0 > 12) p1 to p0 else p0 to p1
-                if (month in 1..12 && day in 1..31) {
-                    return "${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}"
-                }
-            }
+        parseFlexibleDate(rawDate)?.let { return it.toString() }
+        rawTimestamp?.let { ts ->
+            parseFlexibleDate(ts)?.let { return it.toString() }
         }
-
-        // Last fallback: derive date from timestamp if present.
-        val ts = rawTimestamp?.trim().orEmpty()
-        if (ts.matches(Regex("""\\d{4}-\\d{2}-\\d{2}T.*"""))) return ts.substring(0, 10)
-        if (ts.matches(Regex("""\\d{4}-\\d{2}-\\d{2}"""))) return ts
-
-        return date
+        return rawDate.trim()
     }
 }

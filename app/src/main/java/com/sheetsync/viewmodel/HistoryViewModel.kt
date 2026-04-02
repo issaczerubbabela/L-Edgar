@@ -62,6 +62,7 @@ class HistoryViewModel @Inject constructor(
 
     private val _month = MutableStateFlow(LocalDate.now().monthValue)
     private val _year  = MutableStateFlow(LocalDate.now().year)
+    private var shouldAutoFocusLatestMonth = true
 
     /** The date the user has tapped in the Calendar grid. */
     var selectedDate: LocalDate? by mutableStateOf(null)
@@ -69,6 +70,27 @@ class HistoryViewModel @Inject constructor(
 
     fun selectDate(date: LocalDate) {
         selectedDate = if (selectedDate == date) null else date
+    }
+
+    init {
+        viewModelScope.launch {
+            repository.getAllRecords().collect { records ->
+                if (!shouldAutoFocusLatestMonth) return@collect
+
+                val latest = records
+                    .mapNotNull { parseRecordDate(it) }
+                    .maxOrNull() ?: return@collect
+
+                // Default the tab to the most recent available month so imported
+                // historical records are visible immediately after import.
+                if (_month.value != latest.monthValue || _year.value != latest.year) {
+                    _month.value = latest.monthValue
+                    _year.value = latest.year
+                    selectedDate = null
+                }
+                shouldAutoFocusLatestMonth = false
+            }
+        }
     }
 
     val uiState: StateFlow<HistoryUiState> =
@@ -123,6 +145,7 @@ class HistoryViewModel @Inject constructor(
     fun prevMonth() = shiftMonth(-1)
 
     private fun shiftMonth(delta: Long) {
+        shouldAutoFocusLatestMonth = false
         val next = LocalDate.of(_year.value, _month.value, 1).plusMonths(delta)
         _month.value = next.monthValue
         _year.value  = next.year

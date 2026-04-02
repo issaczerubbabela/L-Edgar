@@ -7,9 +7,11 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.sheetsync.BuildConfig
 import com.sheetsync.data.remote.ApiService
+import com.sheetsync.data.remote.AccountSyncDto
 import com.sheetsync.data.remote.BudgetSyncDto
 import com.sheetsync.data.remote.DropdownSyncDto
 import com.sheetsync.data.remote.SyncRequest
+import com.sheetsync.data.repository.AccountRepository
 import com.sheetsync.data.repository.BudgetRepository
 import com.sheetsync.data.repository.DropdownOptionRepository
 import com.sheetsync.data.repository.ExpenseRepository
@@ -24,6 +26,7 @@ class SyncWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted workerParams: WorkerParameters,
     private val repository: ExpenseRepository,
+    private val accountRepository: AccountRepository,
     private val dropdownOptionRepository: DropdownOptionRepository,
     private val budgetRepository: BudgetRepository,
     private val apiService: ApiService
@@ -31,6 +34,10 @@ class SyncWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         return try {
+            val shouldBackupAccounts = inputData.getBoolean(KEY_BACKUP_ACCOUNTS, false)
+            val accounts = accountRepository.getAllAccountsSnapshot()
+            val accountNameById = accounts.associate { it.id to it.accountName }
+
             val unsynced = repository.getUnsynced()
             if (unsynced.isEmpty()) {
                 Log.i(TAG, "No transaction changes to sync.")
@@ -40,12 +47,12 @@ class SyncWorker @AssistedInject constructor(
                 val byAction = unsynced.groupBy { it.syncAction.uppercase() }
 
                 val inserts = byAction["INSERT"].orEmpty()
-                if (inserts.isNotEmpty() && !syncRecords("insert", inserts)) {
+                if (inserts.isNotEmpty() && !syncRecords("insert", inserts, accountNameById)) {
                     return Result.retry()
                 }
 
                 val updates = byAction["UPDATE"].orEmpty()
-                if (updates.isNotEmpty() && !syncRecords("update", updates)) {
+                if (updates.isNotEmpty() && !syncRecords("update", updates, accountNameById)) {
                     return Result.retry()
                 }
 
@@ -63,11 +70,18 @@ class SyncWorker @AssistedInject constructor(
                 return Result.retry()
             }
 
+            val accountsBackupCount = if (shouldBackupAccounts) {
+                backupAccounts(accounts) ?: return Result.retry()
+            } else {
+                -1
+            }
+
             Log.i(TAG, "Sync successful. processed=${unsynced.size}")
             Result.success(
                 workDataOf(
                     KEY_DROPDOWN_BACKUP_COUNT to dropdownBackupCount,
-                    KEY_BUDGET_BACKUP_COUNT to budgetBackupCount
+                    KEY_BUDGET_BACKUP_COUNT to budgetBackupCount,
+                    KEY_ACCOUNTS_BACKUP_COUNT to accountsBackupCount
                 )
             )
         } catch (e: Exception) {
@@ -76,8 +90,22 @@ class SyncWorker @AssistedInject constructor(
         }
     }
 
-    private suspend fun syncRecords(action: String, records: List<com.sheetsync.data.local.entity.ExpenseRecord>): Boolean {
+    private suspend fun syncRecords(
+        action: String,
+        records: List<com.sheetsync.data.local.entity.ExpenseRecord>,
+        accountNameById: Map<Long, String>
+    ): Boolean {
         val dtos = records.map { r ->
+            val resolvedAccountName = when (r.type) {
+                "Expense", "Income" -> r.accountId?.let { accountNameById[it] }.orEmpty()
+                "Transfer" -> {
+                    val from = r.fromAccountId?.let { accountNameById[it] }.orEmpty()
+                    val to = r.toAccountId?.let { accountNameById[it] }.orEmpty()
+                    listOf(from, to).filter { it.isNotBlank() }.joinToString(" -> ")
+                }
+                else -> ""
+            }
+
             SyncRecordDto(
                 id = r.id,
                 remoteTimestamp = r.remoteTimestamp,
@@ -88,7 +116,7 @@ class SyncWorker @AssistedInject constructor(
                 incCategory = if (r.type == "Income") r.category else "",
                 description = r.description,
                 amount = r.amount,
-                paymentMode = r.paymentMode,
+                accountName = resolvedAccountName,
                 remarks = r.remarks
             )
         }
@@ -189,9 +217,36 @@ class SyncWorker @AssistedInject constructor(
         return null
     }
 
+    private suspend fun backupAccounts(accounts: List<com.sheetsync.data.local.entity.AccountRecord>): Int? {
+        val payload = accounts.map { account ->
+            AccountSyncDto(
+                id = account.id,
+                groupName = account.groupName,
+                accountName = account.accountName,
+                initialBalance = account.initialBalance,
+                isHidden = account.isHidden
+            )
+        }
+
+        val response = apiService.syncRecords(
+            BuildConfig.APPS_SCRIPT_URL,
+            SyncRequest(action = "backup", target = "accounts", records = payload)
+        )
+        val body = response.body()
+        if (response.isSuccessful && body?.status.equals("ok", ignoreCase = true)) {
+            Log.i(TAG, "Account backup successful. count=${payload.size}")
+            return payload.size
+        }
+
+        Log.w(TAG, "Account backup failed: HTTP ${response.code()}, status=${body?.status}, message=${body?.message}")
+        return null
+    }
+
     companion object {
         const val TAG = "SyncWorker"
+        const val KEY_BACKUP_ACCOUNTS = "backupAccounts"
         const val KEY_DROPDOWN_BACKUP_COUNT = "dropdownBackupCount"
         const val KEY_BUDGET_BACKUP_COUNT = "budgetBackupCount"
+        const val KEY_ACCOUNTS_BACKUP_COUNT = "accountsBackupCount"
     }
 }

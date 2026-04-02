@@ -1,7 +1,6 @@
 package com.sheetsync.data.local.entity
 
 import androidx.room.Entity
-import androidx.room.Ignore
 import androidx.room.PrimaryKey
 
 @Entity(tableName = "account_records")
@@ -15,19 +14,4 @@ data class AccountRecord(
     // Backward-compatible alias for older call sites still using accountGroup.
     val accountGroup: String
         get() = groupName
-
-    @Ignore
-    constructor(
-        id: Long = 0,
-        accountGroup: String,
-        accountName: String,
-        initialBalance: Double,
-        isHidden: Boolean = false
-    ) : this(
-        id = id,
-        groupName = accountGroup,
-        accountName = accountName,
-        initialBalance = initialBalance,
-        isHidden = isHidden
-    )
 }
