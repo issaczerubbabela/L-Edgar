@@ -2,12 +2,19 @@ package com.sheetsync.data.local.entity
 
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Ignore
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(
     tableName = "expense_records",
     foreignKeys = [
+        ForeignKey(
+            entity = AccountRecord::class,
+            parentColumns = ["id"],
+            childColumns = ["accountId"],
+            onDelete = ForeignKey.SET_NULL
+        ),
         ForeignKey(
             entity = AccountRecord::class,
             parentColumns = ["id"],
@@ -21,7 +28,7 @@ import androidx.room.PrimaryKey
             onDelete = ForeignKey.SET_NULL
         )
     ],
-    indices = [Index("fromAccountId"), Index("toAccountId")]
+    indices = [Index("accountId"), Index("fromAccountId"), Index("toAccountId")]
 )
 data class ExpenseRecord(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -30,11 +37,12 @@ data class ExpenseRecord(
     val category: String,
     val description: String,
     val amount: Double,
-    val paymentMode: String,
+    val accountId: Long? = null,
     val remarks: String,
     val fromAccountId: Long? = null,
     val toAccountId: Long? = null,
     val isSynced: Boolean = false,
     val remoteTimestamp: String? = null,
-    val syncAction: String = "INSERT"
+    val syncAction: String = "INSERT",
+    @Ignore val paymentMode: String = ""
 )
