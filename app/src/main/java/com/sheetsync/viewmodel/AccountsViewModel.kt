@@ -30,7 +30,8 @@ data class AccountsScreenUiState(
     val assets: Double = 0.0,
     val liabilities: Double = 0.0,
     val total: Double = 0.0,
-    val groupedAccounts: Map<String, List<AccountListItemUi>> = emptyMap()
+    val assetGroups: Map<String, List<AccountListItemUi>> = emptyMap(),
+    val liabilityGroups: Map<String, List<AccountListItemUi>> = emptyMap()
 )
 
 @HiltViewModel
@@ -71,11 +72,34 @@ class AccountsViewModel @Inject constructor(
         groupedAccountItems,
         accountItems
     ) { groups, items ->
-        val assets = items.filter { it.balance >= 0 }.sumOf { it.balance }
-        val liabilities = items.filter { it.balance < 0 }.sumOf { kotlin.math.abs(it.balance) }
+        val assetGroups = groups.filterKeys { isAssetGroup(it) }
+        val liabilityGroups = groups.filterKeys { isLiabilityGroup(it) }
 
-        AccountsScreenUiState(assets = assets, liabilities = liabilities, total = assets - liabilities, groupedAccounts = groups)
+        val assets = assetGroups.values.flatten().sumOf { it.balance }
+        val liabilities = liabilityGroups.values.flatten().sumOf { kotlin.math.abs(it.balance) }
+
+        AccountsScreenUiState(
+            assets = assets,
+            liabilities = liabilities,
+            total = assets - liabilities,
+            assetGroups = assetGroups,
+            liabilityGroups = liabilityGroups
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AccountsScreenUiState())
+
+    private fun isAssetGroup(groupName: String): Boolean {
+        val normalized = groupName.trim().lowercase(Locale.getDefault())
+        return !isLiabilityGroup(groupName) ||
+            normalized.contains("cash") ||
+            normalized.contains("bank") ||
+            normalized.contains("investment")
+    }
+
+    private fun isLiabilityGroup(groupName: String): Boolean {
+        val normalized = groupName.trim().lowercase(Locale.getDefault())
+        return normalized.contains("loan") ||
+            normalized.contains("credit card")
+    }
 
 }
 

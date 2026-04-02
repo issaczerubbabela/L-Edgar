@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -19,9 +20,14 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -37,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.sheetsync.ui.theme.ExpenseRed
 import com.sheetsync.ui.theme.IncomeBlue
+import com.sheetsync.viewmodel.AddAccountViewModel
 import com.sheetsync.viewmodel.AccountListItemUi
 import com.sheetsync.viewmodel.AccountsViewModel
 
@@ -44,14 +51,29 @@ import com.sheetsync.viewmodel.AccountsViewModel
 @Composable
 fun AccountsScreen(
     innerPadding: PaddingValues,
-    onAddAccount: () -> Unit,
     onOpenAccountDetail: (Long) -> Unit,
-    vm: AccountsViewModel = hiltViewModel()
+    vm: AccountsViewModel = hiltViewModel(),
+    addVm: AddAccountViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsState()
+    val addState by addVm.uiState.collectAsState()
+    val accountGroups by addVm.accountGroups.collectAsState()
     var showMenu by remember { mutableStateOf(false) }
+    var showAddSheet by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(Unit) {
+        addVm.saved.collect {
+            showAddSheet = false
+        }
+    }
+
+    LaunchedEffect(addState.errorMessage) {
+        addState.errorMessage?.let { snackbarHostState.showSnackbar(it) }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("Accounts", color = MaterialTheme.colorScheme.onBackground) },
@@ -64,7 +86,7 @@ fun AccountsScreen(
                             text = { Text("Add") },
                             onClick = {
                                 showMenu = false
-                                onAddAccount()
+                                showAddSheet = true
                             }
                         )
                         DropdownMenuItem(text = { Text("Show/Hide") }, onClick = { showMenu = false })
@@ -89,15 +111,98 @@ fun AccountsScreen(
                 total = state.total
             )
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                state.groupedAccounts.forEach { (groupName, accounts) ->
-                    item { GroupHeader(groupName) }
-                    items(accounts.size) { index ->
-                        AccountRow(accounts[index], onOpenAccountDetail)
+                if (state.assetGroups.isNotEmpty()) {
+                    item { SectionHeader("Assets") }
+                    state.assetGroups.forEach { (groupName, accounts) ->
+                        item { GroupHeader(groupName) }
+                        items(accounts.size) { index ->
+                            AccountRow(accounts[index], onOpenAccountDetail)
+                        }
+                    }
+                }
+
+                if (state.liabilityGroups.isNotEmpty()) {
+                    item { SectionHeader("Liabilities") }
+                    state.liabilityGroups.forEach { (groupName, accounts) ->
+                        item { GroupHeader(groupName) }
+                        items(accounts.size) { index ->
+                            AccountRow(accounts[index], onOpenAccountDetail)
+                        }
                     }
                 }
             }
         }
     }
+
+    if (showAddSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showAddSheet = false },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(bottom = 24.dp)
+            ) {
+                Text(
+                    text = "Add Account",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+
+                DropdownField(
+                    label = "Group",
+                    options = accountGroups,
+                    selected = addState.selectedGroup,
+                    onSelect = addVm::updateGroup
+                )
+
+                OutlinedTextField(
+                    value = addState.accountName,
+                    onValueChange = addVm::updateName,
+                    label = { Text("Name") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp)
+                )
+
+                OutlinedTextField(
+                    value = addState.amountInput,
+                    onValueChange = addVm::updateAmount,
+                    label = { Text("Initial Balance") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp)
+                )
+
+                Button(
+                    onClick = addVm::save,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 14.dp)
+                ) {
+                    Text("Save")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String) {
+    Text(
+        text = title,
+        color = MaterialTheme.colorScheme.onBackground,
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+    )
 }
 
 @Composable

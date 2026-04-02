@@ -41,7 +41,7 @@ class LogViewModel @Inject constructor(
 ) : ViewModel() {
 
     val accounts: StateFlow<List<AccountRecord>> = accountRepository
-        .getAllAccounts()
+        .getAllVisibleAccounts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val expenseCategories: StateFlow<List<String>> = dropdownOptionRepository
@@ -54,19 +54,14 @@ class LogViewModel @Inject constructor(
         .map { options -> options.map { it.name } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val paymentModes: StateFlow<List<String>> = dropdownOptionRepository
-        .getOptionsByType("PAYMENT_MODE")
-        .map { options -> options.map { it.name } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
     var selectedDate by mutableStateOf(LocalDate.now())
     var selectedType by mutableStateOf("Expense")
     var selectedCategory by mutableStateOf("")
+    var selectedAccountId by mutableStateOf<Long?>(null)
     var selectedFromAccountId by mutableStateOf<Long?>(null)
     var selectedToAccountId by mutableStateOf<Long?>(null)
     var description by mutableStateOf("")
     var amount by mutableStateOf("")
-    var selectedPaymentMode by mutableStateOf("")
     var remarks by mutableStateOf("")
     var saveSuccess by mutableStateOf(false)
     var errorMessage by mutableStateOf<String?>(null)
@@ -95,11 +90,14 @@ class LogViewModel @Inject constructor(
                 selectedDate = runCatching { LocalDate.parse(record.date) }.getOrDefault(LocalDate.now())
                 selectedType = record.type
                 selectedCategory = record.category
+                selectedAccountId = when (record.type) {
+                    "Expense", "Income" -> record.accountId
+                    else -> null
+                }
                 selectedFromAccountId = record.fromAccountId
                 selectedToAccountId = record.toAccountId
                 description = record.description
                 amount = if (record.amount % 1.0 == 0.0) record.amount.toInt().toString() else record.amount.toString()
-                selectedPaymentMode = record.paymentMode
                 remarks = record.remarks
             }
         }
@@ -116,7 +114,7 @@ class LogViewModel @Inject constructor(
             if (selectedFromAccountId == selectedToAccountId) { errorMessage = "From and To accounts must differ"; return }
         } else {
             if (selectedCategory.isBlank()) { errorMessage = "Select a category"; return }
-            if (selectedPaymentMode.isBlank()) { errorMessage = "Select a payment mode"; return }
+            if (selectedAccountId == null) { errorMessage = "Select an account"; return }
         }
 
         viewModelScope.launch {
@@ -129,10 +127,18 @@ class LogViewModel @Inject constructor(
                 category = if (selectedType == "Transfer") "Transfer" else selectedCategory,
                 description = description,
                 amount = parsedAmount,
-                paymentMode = if (selectedType == "Transfer") "Transfer" else selectedPaymentMode,
+                accountId = if (selectedType == "Transfer") null else selectedAccountId,
                 remarks = remarks,
-                fromAccountId = selectedFromAccountId,
-                toAccountId = selectedToAccountId,
+                fromAccountId = when (selectedType) {
+                    "Expense" -> selectedAccountId
+                    "Transfer" -> selectedFromAccountId
+                    else -> null
+                },
+                toAccountId = when (selectedType) {
+                    "Income" -> selectedAccountId
+                    "Transfer" -> selectedToAccountId
+                    else -> null
+                },
                 isSynced = false,
                 remoteTimestamp = baseRecord?.remoteTimestamp,
                 syncAction = if (isEditMode) "UPDATE" else "INSERT"
@@ -186,11 +192,11 @@ class LogViewModel @Inject constructor(
         selectedDate = LocalDate.now()
         selectedType = "Expense"
         selectedCategory = ""
+        selectedAccountId = null
         selectedFromAccountId = null
         selectedToAccountId = null
         description = ""
         amount = ""
-        selectedPaymentMode = ""
         remarks = ""
     }
 

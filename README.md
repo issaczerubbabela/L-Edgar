@@ -132,6 +132,42 @@ Note: the deployment URL changes on each new deployment. Update `local.propertie
 1. Connect a physical device (USB or wireless debugging) or start an emulator.
 2. Run the `app` configuration from Android Studio.
 
+## Troubleshooting
+
+### Gradle/JDK issues on Windows
+
+- Symptom: Gradle fails with toolchain provisioning errors (for example, no toolchain download URL for Windows).
+- Fix:
+  1. Ensure a local JDK 17 is installed.
+  2. Keep `gradle/gradle-daemon-jvm.properties` aligned to vendor/version 17.
+  3. Keep `gradle.properties` with local detection enabled and auto-download disabled.
+
+### Sync or import fails
+
+- Verify `APPS_SCRIPT_URL` in `local.properties` is the latest deployed Apps Script Web App URL.
+- If you updated Apps Script code, always redeploy with `Deploy -> New deployment` and paste the new URL.
+- Ensure deployment access is `Anyone` and type is `Web app`.
+
+### Google Sheets import returns empty
+
+- Confirm the script is attached to the correct spreadsheet.
+- Confirm the expected sheet tab exists and the script points to the correct tab name.
+- Confirm your sheet has header row + transaction rows.
+
+### Quick log tile/widget not visible
+
+- Tile: add it manually from Android Quick Settings tile edit panel.
+- Widget: long-press home screen and add the SheetSync quick-log widget.
+
+### Build succeeds but app behavior seems stale
+
+- Run `Build -> Clean Project` and `Build -> Rebuild Project`.
+- Uninstall and reinstall the app if Room schema/data migrations from older local installs are interfering.
+
+## Architecture Documentation
+
+- Full architecture, data flow, sync flow, navigation map, and database model diagrams are in `docs/ARCHITECTURE.md`.
+
 ## Extending the App
 
 ### Architecture guide

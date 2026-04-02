@@ -34,7 +34,6 @@ fun LogScreen(
     val accounts by vm.accounts.collectAsState()
     val expenseCategories by vm.expenseCategories.collectAsState()
     val incomeCategories by vm.incomeCategories.collectAsState()
-    val paymentModes by vm.paymentModes.collectAsState()
 
     LaunchedEffect(vm.saveSuccess) {
         if (vm.saveSuccess) {
@@ -121,9 +120,9 @@ fun LogScreen(
                         onClick = {
                             vm.selectedType = label
                             vm.selectedCategory = if (label == "Transfer") "Transfer" else ""
+                            vm.selectedAccountId = null
                             vm.selectedFromAccountId = null
                             vm.selectedToAccountId = null
-                            vm.selectedPaymentMode = if (label == "Transfer") "Transfer" else ""
                         },
                         label = { Text(label) }
                     )
@@ -163,6 +162,20 @@ fun LogScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+
+                AccountDropdownField(
+                    label = "Account",
+                    options = accounts,
+                    selectedId = vm.selectedAccountId,
+                    onSelect = { vm.selectedAccountId = it }
+                )
+                if (accounts.isEmpty()) {
+                    Text(
+                        text = "No accounts found. Add one from Accounts tab.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             // Description
@@ -183,23 +196,6 @@ fun LogScreen(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
-
-            // Payment Mode
-            if (vm.selectedType != "Transfer") {
-                DropdownField(
-                    label = "Payment Mode",
-                    options = paymentModes,
-                    selected = vm.selectedPaymentMode,
-                    onSelect = { vm.selectedPaymentMode = it }
-                )
-                if (paymentModes.isEmpty()) {
-                    Text(
-                        text = "No payment modes found. Add from More > Manage Categories & Dropdowns.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
 
             // Remarks
             OutlinedTextField(

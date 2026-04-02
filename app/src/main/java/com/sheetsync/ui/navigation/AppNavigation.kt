@@ -129,11 +129,6 @@ fun AppNavigation() {
             composable(Screen.Accounts.route) {
                 AccountsScreen(
                     innerPadding = innerPadding,
-                    onAddAccount = {
-                        navController.navigate(Screen.AddAccount.route) {
-                            launchSingleTop = true
-                        }
-                    },
                     onOpenAccountDetail = { accountId ->
                         navController.navigate("account_detail/$accountId")
                     }
