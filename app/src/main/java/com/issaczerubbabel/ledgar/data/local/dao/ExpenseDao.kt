@@ -79,8 +79,27 @@ interface ExpenseDao {
     @Query("UPDATE expense_records SET isBookmarked = :isBookmarked WHERE id = :id")
     suspend fun updateBookmarkStatus(id: Long, isBookmarked: Boolean)
 
-    @Query("DELETE FROM expense_records WHERE id IN (:ids)")
-    suspend fun deleteTransactionsByIds(ids: List<Long>)
+    @Query(
+        """
+        UPDATE expense_records
+        SET isSynced = 0,
+            syncAction = 'DELETE'
+        WHERE id IN (:ids)
+          AND syncAction != 'DELETE'
+        """
+    )
+    suspend fun markTransactionsDeletedByIds(ids: List<Long>)
+
+    @Query(
+        """
+        UPDATE expense_records
+        SET isSynced = 0,
+            syncAction = 'DELETE'
+        WHERE id = :id
+          AND syncAction != 'DELETE'
+        """
+    )
+    suspend fun markTransactionDeletedById(id: Long)
 
     @Query(
         """

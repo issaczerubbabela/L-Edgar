@@ -13,6 +13,7 @@ import com.issaczerubbabel.ledgar.data.remote.ApiService
 import com.issaczerubbabel.ledgar.data.remote.ImportRecordDto
 import com.issaczerubbabel.ledgar.sync.SyncUrlNotConfiguredException
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
+import com.issaczerubbabel.ledgar.util.normalizeTimestampKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
@@ -86,7 +87,7 @@ class ExpenseRepositoryImpl @Inject constructor(
     override suspend fun setBookmarked(id: Long, isBookmarked: Boolean) =
         dao.updateBookmarkStatus(id = id, isBookmarked = isBookmarked)
 
-    override suspend fun deleteTransactionsByIds(ids: List<Long>) = dao.deleteTransactionsByIds(ids)
+    override suspend fun deleteTransactionsByIds(ids: List<Long>) = dao.markTransactionsDeletedByIds(ids)
 
     override suspend fun updateTransactionsDateByIds(ids: List<Long>, newDate: String) =
         dao.updateTransactionsDateByIds(ids = ids, newDate = newDate)
@@ -100,7 +101,7 @@ class ExpenseRepositoryImpl @Inject constructor(
     override suspend fun updateTransactionsDescriptionByIds(ids: List<Long>, newDescription: String) =
         dao.updateTransactionsDescriptionByIds(ids = ids, newDescription = newDescription)
 
-    override suspend fun delete(record: ExpenseRecord) = dao.delete(record)
+    override suspend fun delete(record: ExpenseRecord) = dao.markTransactionDeletedById(record.id)
 
     override suspend fun deleteAll() = dao.deleteAll()
 
@@ -148,6 +149,9 @@ class ExpenseRepositoryImpl @Inject constructor(
                 accountId = local.accountId
             )
         }.toMutableList()
+        val localRemoteTimestamps = dao.getAllRemoteTimestamps()
+            .mapNotNull(::normalizeTimestampKey)
+            .toMutableSet()
 
         val toInsert = mutableListOf<ExpenseRecord>()
 
@@ -168,7 +172,10 @@ class ExpenseRepositoryImpl @Inject constructor(
                 else -> dto.expCategory ?: dto.incCategory
             }.orEmpty()
 
-            val timestamp = dto.timestamp?.trim().takeUnless { it.isNullOrBlank() }
+            val timestamp = normalizeTimestampKey(dto.timestamp)
+            if (timestamp != null && localRemoteTimestamps.contains(timestamp)) {
+                return@forEach
+            }
             val remoteAccountName = dto.accountName?.trim().takeUnless { it.isNullOrBlank() }
                 ?: dto.paymentMode?.trim().takeUnless { it.isNullOrBlank() }
             val transferParts = remoteAccountName
@@ -237,6 +244,7 @@ class ExpenseRepositoryImpl @Inject constructor(
                     syncAction = "NONE"
                 )
                 localComparable += remoteComparable
+                timestamp?.let { localRemoteTimestamps += it }
             }
         }
 
@@ -386,6 +394,7 @@ class ExpenseRepositoryImpl @Inject constructor(
             record.copy(
                 date = normalizeDate(record.date, record.remoteTimestamp),
                 type = canonicalType(record.type),
+                remoteTimestamp = normalizeTimestampKey(record.remoteTimestamp),
                 syncAction = if (record.isSynced && record.syncAction != "DELETE") "NONE" else record.syncAction
             )
         }

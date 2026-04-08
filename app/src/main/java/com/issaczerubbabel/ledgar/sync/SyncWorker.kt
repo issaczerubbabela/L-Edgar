@@ -20,6 +20,9 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import com.issaczerubbabel.ledgar.data.remote.SyncRecordDto
 import kotlinx.coroutines.flow.first
+import com.issaczerubbabel.ledgar.util.generateTimestampKey
+import com.issaczerubbabel.ledgar.util.normalizeTimestampKey
+import java.time.LocalDateTime
 
 @HiltWorker
 class SyncWorker @AssistedInject constructor(
@@ -106,7 +109,17 @@ class SyncWorker @AssistedInject constructor(
         accountNameById: Map<Long, String>,
         scriptUrl: String
     ): Boolean {
-        val dtos = records.map { r ->
+        val now = LocalDateTime.now()
+        val timestampedRecords = records.mapIndexed { index, record ->
+            val resolvedTimestamp = when {
+                action == "insert" && record.remoteTimestamp.isNullOrBlank() ->
+                    generateTimestampKey(now.plusSeconds(index.toLong()))
+                else -> normalizeTimestampKey(record.remoteTimestamp).orEmpty()
+            }
+            record to resolvedTimestamp
+        }
+
+        val dtos = timestampedRecords.map { (r, resolvedTimestamp) ->
             val resolvedAccountName = when (r.type) {
                 "Expense", "Income" -> r.accountId?.let { accountNameById[it] }.orEmpty()
                 "Transfer" -> {
@@ -119,8 +132,8 @@ class SyncWorker @AssistedInject constructor(
 
             SyncRecordDto(
                 id = r.id,
-                remoteTimestamp = r.remoteTimestamp,
-                timestamp = r.remoteTimestamp.orEmpty(),
+                remoteTimestamp = resolvedTimestamp,
+                timestamp = resolvedTimestamp,
                 date = r.date,
                 type = r.type,
                 expCategory = if (r.type == "Expense") r.category else "",
@@ -140,7 +153,19 @@ class SyncWorker @AssistedInject constructor(
         val body = response.body()
 
         if (response.isSuccessful && body?.status.equals("ok", ignoreCase = true)) {
-            repository.markSynced(records.map { it.id })
+            if (action == "insert") {
+                timestampedRecords.forEach { (record, resolvedTimestamp) ->
+                    repository.update(
+                        record.copy(
+                            isSynced = true,
+                            syncAction = "NONE",
+                            remoteTimestamp = resolvedTimestamp
+                        )
+                    )
+                }
+            } else {
+                repository.markSynced(records.map { it.id })
+            }
             return true
         }
 
@@ -154,7 +179,7 @@ class SyncWorker @AssistedInject constructor(
         scriptUrl: String
     ): Boolean {
         records.forEach { record ->
-            val ts = record.remoteTimestamp
+            val ts = normalizeTimestampKey(record.remoteTimestamp)
             if (ts.isNullOrBlank()) {
                 // Local-only transaction that was never created remotely.
                 repository.hardDeleteById(record.id)
@@ -168,7 +193,15 @@ class SyncWorker @AssistedInject constructor(
             val body = response.body()
 
             if (response.isSuccessful && body?.status.equals("ok", ignoreCase = true)) {
-                repository.hardDeleteById(record.id)
+                val deleteCount = body?.count ?: 0
+                if (deleteCount > 0) {
+                    repository.hardDeleteById(record.id)
+                    return@forEach
+                }
+
+                lastSyncError = "DELETE transaction sync failed: remote row not found for timestamp '$ts'"
+                Log.w(TAG, "DELETE sync returned 0 deletions: id=${record.id}, ts=$ts")
+                return false
             } else {
                 val message = body?.message.orEmpty()
                 if (message.contains("not found", ignoreCase = true)) {

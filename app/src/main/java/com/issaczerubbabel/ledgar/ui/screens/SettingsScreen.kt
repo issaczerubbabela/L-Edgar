@@ -78,7 +78,14 @@ fun SettingsScreen(
         )
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { scaffoldPadding ->
+    Scaffold(
+        snackbarHost = {
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding())
+            )
+        }
+    ) { scaffoldPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()

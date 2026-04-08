@@ -82,6 +82,24 @@ function parsePayload(e) {
   return JSON.parse(raw);
 }
 
+function normalizeTimestampKey(value, timeZone) {
+  if (value === null || value === undefined) return "";
+  var text = String(value).trim();
+  if (!text) return "";
+
+  if (/^\\d{1,2}\\/\\d{1,2}\\/\\d{4}\\s\\d{2}:\\d{2}:\\d{2}$/.test(text)) {
+    return text;
+  }
+
+  var cleaned = text.replace(/\\s+\\([^)]*\\)$/, "");
+  var parsed = new Date(cleaned);
+  if (!isNaN(parsed.getTime())) {
+    return Utilities.formatDate(parsed, timeZone, "M/d/yyyy HH:mm:ss");
+  }
+
+  return text;
+}
+
 function doPost(e) {
   try {
     var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
@@ -232,9 +250,17 @@ function doPost(e) {
           message: "targetTimestamp is required for delete",
         });
 
+      var normalizedTargetTimestamp = normalizeTimestampKey(
+        targetTimestamp,
+        timeZone,
+      );
+
       var displayData = txSheet.getDataRange().getDisplayValues();
       for (var i = displayData.length - 1; i >= 1; i--) {
-        if (displayData[i][0] === targetTimestamp) {
+        if (
+          normalizeTimestampKey(displayData[i][0], timeZone) ===
+          normalizedTargetTimestamp
+        ) {
           txSheet.deleteRow(i + 1);
           return jsonOut({ status: "ok", action: "deleted", count: 1 });
         }
@@ -255,9 +281,10 @@ function doPost(e) {
       var formattedTxDate = isNaN(txDateObj.getTime())
         ? String(r.date || "")
         : Utilities.formatDate(txDateObj, timeZone, "M/d/yyyy");
+      var normalizedRecordTimestamp = normalizeTimestampKey(r.timestamp, timeZone);
 
       var rowData = [
-        action === "update" && r.timestamp ? r.timestamp : generatedTimestamp,
+        normalizedRecordTimestamp || generatedTimestamp,
         formattedTxDate,
         r.type || "",
         r.expCategory || "",
@@ -274,7 +301,10 @@ function doPost(e) {
         var rows = txSheet.getDataRange().getDisplayValues();
         var found = false;
         for (var j = 1; j < rows.length; j++) {
-          if (rows[j][0] === String(r.timestamp || "")) {
+          if (
+            normalizeTimestampKey(rows[j][0], timeZone) ===
+            normalizedRecordTimestamp
+          ) {
             txSheet.getRange(j + 1, 1, 1, rowData.length).setValues([rowData]);
             found = true;
             break;
@@ -295,6 +325,7 @@ function doPost(e) {
 function doGet(e) {
   try {
     var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    var timeZone = Session.getScriptTimeZone();
     var target = String(
       (e && e.parameter && e.parameter.target) || "transactions",
     ).toLowerCase();
@@ -369,7 +400,7 @@ function doGet(e) {
       var row = txData[t];
       if (!row[2]) continue;
       txRecords.push({
-        timestamp: row[0] ? String(row[0]) : "",
+        timestamp: row[0] ? normalizeTimestampKey(row[0], timeZone) : "",
         date: formatDate(row[1]),
         type: String(row[2] || ""),
         expCategory: String(row[3] || ""),
