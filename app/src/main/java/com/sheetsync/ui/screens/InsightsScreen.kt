@@ -1,27 +1,43 @@
 package com.sheetsync.ui.screens
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.patrykandpatrick.vico.compose.axis.horizontal.rememberBottomAxis
-import com.patrykandpatrick.vico.compose.axis.vertical.rememberStartAxis
-import com.patrykandpatrick.vico.compose.chart.Chart
-import com.patrykandpatrick.vico.compose.chart.column.columnChart
-import com.patrykandpatrick.vico.core.entry.entryModelOf
-import com.sheetsync.ui.theme.ExpenseRed
-import com.sheetsync.ui.theme.IncomeGreen
-import com.sheetsync.viewmodel.InsightsViewModel
+import com.sheetsync.viewmodel.StatsTimeframe
+import com.sheetsync.viewmodel.StatsViewModel
 
 @Composable
-fun InsightsScreen(innerPadding: PaddingValues, vm: InsightsViewModel = hiltViewModel()) {
-    val summary by vm.summary.collectAsState()
+fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewModel()) {
+    val filterState by vm.filterState.collectAsState()
+    val accountGroupOptions by vm.accountGroupOptions.collectAsState()
+    val filteredTransactions by vm.filteredTransactions.collectAsState()
+    val expenseByCategory by vm.expenseByCategory.collectAsState()
+    val cashFlowOverTime by vm.cashFlowOverTime.collectAsState()
+    val isLoading by vm.isLoading.collectAsState()
 
     LazyColumn(
         modifier = Modifier
@@ -30,102 +46,148 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: InsightsViewModel = hiltView
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        item { Text("This Month", style = MaterialTheme.typography.headlineMedium) }
-
-        // Summary cards row
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                SummaryCard("Income", summary.totalIncome, IncomeGreen, Modifier.weight(1f))
-                SummaryCard("Expense", summary.totalExpense, ExpenseRed, Modifier.weight(1f))
+            Text(
+                text = "Stats",
+                style = MaterialTheme.typography.headlineMedium
+            )
+        }
+
+        item {
+            FilterRow(
+                selectedTimeframe = filterState.timeframe,
+                selectedAccountGroup = filterState.accountGroupId,
+                accountGroups = accountGroupOptions,
+                onTimeframeSelected = vm::updateTimeframe,
+                onAccountGroupSelected = vm::updateAccountGroup
+            )
+        }
+
+        if (isLoading) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
             }
-        }
-        item {
-            val balanceColor = if (summary.balance >= 0) IncomeGreen else ExpenseRed
-            SummaryCard("Balance", summary.balance, balanceColor, Modifier.fillMaxWidth())
-        }
-
-        // Category breakdown chart
-        if (summary.categoryTotals.isNotEmpty()) {
+        } else if (filteredTransactions.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No Data for this period",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            item { Spacer(Modifier.height(72.dp)) }
+        } else {
             item {
                 Card(
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text("By Category", style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(12.dp))
-                        val values = summary.categoryTotals.values.map { it.toFloat() }
-                        Chart(
-                            chart = columnChart(),
-                            model = entryModelOf(*values.toTypedArray()),
-                            startAxis = rememberStartAxis(),
-                            bottomAxis = rememberBottomAxis(),
-                            modifier = Modifier.fillMaxWidth().height(180.dp)
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text("Expense Breakdown", style = MaterialTheme.typography.titleMedium)
+                        ExpenseDonutChart(
+                            categoryTotals = expenseByCategory,
+                            modifier = Modifier.fillMaxWidth()
                         )
-                        Spacer(Modifier.height(8.dp))
-                        summary.categoryTotals.entries.forEach { (cat, amt) ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(cat, style = MaterialTheme.typography.bodySmall)
-                                Text(
-                                    "₹${"%.0f".format(amt)}",
-                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                                    color = ExpenseRed
-                                )
-                            }
-                        }
                     }
                 }
             }
-        }
 
-        // 6-month trend
-        if (summary.monthlyExpenses.isNotEmpty()) {
             item {
                 Card(
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text("6-Month Trend", style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(12.dp))
-                        val values = summary.monthlyExpenses.map { it.second.toFloat() }
-                        Chart(
-                            chart = columnChart(),
-                            model = entryModelOf(*values.toTypedArray()),
-                            startAxis = rememberStartAxis(),
-                            bottomAxis = rememberBottomAxis(),
-                            modifier = Modifier.fillMaxWidth().height(160.dp)
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text("Cash Flow", style = MaterialTheme.typography.titleMedium)
+                        CashFlowBarChart(
+                            cashFlowByPeriod = cashFlowOverTime,
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
             }
-        }
 
-        item { Spacer(Modifier.height(72.dp)) }
+            item { Spacer(Modifier.height(72.dp)) }
+        }
     }
 }
 
 @Composable
-fun SummaryCard(title: String, amount: Double, color: androidx.compose.ui.graphics.Color, modifier: Modifier) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.12f))
+private fun FilterRow(
+    selectedTimeframe: StatsTimeframe,
+    selectedAccountGroup: String?,
+    accountGroups: List<String>,
+    onTimeframeSelected: (StatsTimeframe) -> Unit,
+    onAccountGroupSelected: (String?) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            horizontalAlignment = Alignment.Start
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "₹${"%.0f".format(kotlin.math.abs(amount))}",
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                color = color
-            )
+            StatsTimeframe.entries.forEach { timeframe ->
+                FilterChip(
+                    selected = timeframe == selectedTimeframe,
+                    onClick = { onTimeframeSelected(timeframe) },
+                    label = { Text(timeframe.label()) }
+                )
+            }
         }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = selectedAccountGroup == null,
+                onClick = { onAccountGroupSelected(null) },
+                label = { Text("All Accounts") }
+            )
+
+            accountGroups.forEach { group ->
+                FilterChip(
+                    selected = selectedAccountGroup == group,
+                    onClick = { onAccountGroupSelected(group) },
+                    label = { Text(group) }
+                )
+            }
+        }
+    }
+}
+
+private fun StatsTimeframe.label(): String {
+    return when (this) {
+        StatsTimeframe.THIS_MONTH -> "This Month"
+        StatsTimeframe.LAST_MONTH -> "Last Month"
+        StatsTimeframe.LAST_3_MONTHS -> "Last 3 Months"
+        StatsTimeframe.YTD -> "YTD"
+        StatsTimeframe.ALL_TIME -> "All Time"
     }
 }
