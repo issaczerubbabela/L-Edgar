@@ -4,6 +4,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
+import com.patrykandpatrick.vico.core.cartesian.marker.CartesianMarker
+import com.patrykandpatrick.vico.core.cartesian.marker.CartesianMarkerValueFormatter
+import com.patrykandpatrick.vico.core.cartesian.marker.ColumnCartesianLayerMarkerTarget
+import com.patrykandpatrick.vico.core.cartesian.marker.LineCartesianLayerMarkerTarget
 import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
 import com.sheetsync.data.local.entity.AccountRecord
 import com.sheetsync.data.local.entity.ExpenseRecord
@@ -14,6 +18,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
+import java.text.NumberFormat
 import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +48,19 @@ class StatsViewModel @Inject constructor(
 
     private val _filterState = MutableStateFlow(StatsFilterState())
     val filterState: StateFlow<StatsFilterState> = _filterState.asStateFlow()
+
+    private val rupeeFormatter = NumberFormat.getCurrencyInstance(Locale("en", "IN")).apply {
+        maximumFractionDigits = 0
+    }
+
+    val cashFlowMarkerValueFormatter = CartesianMarkerValueFormatter { _, targets ->
+        val values = targets.extractMarkerValues()
+        if (values.isEmpty()) {
+            ""
+        } else {
+            values.joinToString(separator = " • ") { formatRupee(it) }
+        }
+    }
 
     val accountGroupOptions: StateFlow<List<String>> = accountRepository.getAllAccounts()
         .map { accounts ->
@@ -87,7 +105,14 @@ class StatsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
+        seedSampleCashFlowData()
         observeCashFlowChartData()
+    }
+
+    fun formatRupee(amount: Double): String {
+        return synchronized(rupeeFormatter) {
+            rupeeFormatter.format(amount)
+        }
     }
 
     fun updateTimeframe(timeframe: StatsTimeframe) {
@@ -121,6 +146,24 @@ class StatsViewModel @Inject constructor(
                             series(xValues, expenseValues)
                         }
                     }
+                }
+            }
+        }
+    }
+
+    private fun seedSampleCashFlowData() {
+        viewModelScope.launch(Dispatchers.Default) {
+            val sampleLabels = listOf("W1", "W2", "W3", "W4")
+            val xValues = sampleLabels.indices.map(Int::toDouble)
+            val sampleIncome = listOf(4200.0, 3900.0, 4600.0, 5100.0)
+            val sampleExpense = listOf(2800.0, 3200.0, 3000.0, 3600.0)
+
+            _cashFlowXAxisLabels.value = sampleLabels
+
+            cashFlowChartModelProducer.runTransaction {
+                columnSeries {
+                    series(xValues, sampleIncome)
+                    series(xValues, sampleExpense)
                 }
             }
         }
@@ -291,4 +334,20 @@ class StatsViewModel @Inject constructor(
             Color(0xFF651FFF)
         )
     }
+}
+
+private fun List<CartesianMarker.Target>.extractMarkerValues(): List<Double> {
+    val values = mutableListOf<Double>()
+    forEach { target ->
+        when (target) {
+            is ColumnCartesianLayerMarkerTarget -> {
+                values += target.columns.map { it.entry.y }
+            }
+
+            is LineCartesianLayerMarkerTarget -> {
+                values += target.points.map { it.entry.y }
+            }
+        }
+    }
+    return values
 }

@@ -122,6 +122,8 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
                         CashFlowBarChart(
                             modelProducer = vm.cashFlowChartModelProducer,
                             xAxisLabels = cashFlowXAxisLabels,
+                            markerValueFormatter = vm.cashFlowMarkerValueFormatter,
+                            formatRupee = vm::formatRupee,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
