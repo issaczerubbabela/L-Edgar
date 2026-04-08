@@ -155,6 +155,7 @@ fun AppNavigation() {
             ) {
                 LogScreen(
                     innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
                     onSaved = { navController.popBackStack() }
                 )
             }

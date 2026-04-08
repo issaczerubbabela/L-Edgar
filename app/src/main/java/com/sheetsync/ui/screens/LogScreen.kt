@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
@@ -25,6 +26,7 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun LogScreen(
     innerPadding: PaddingValues,
+    onBack: () -> Unit = {},
     onSaved: () -> Unit = {},
     vm: LogViewModel = hiltViewModel()
 ) {
@@ -37,7 +39,11 @@ fun LogScreen(
 
     LaunchedEffect(vm.saveSuccess) {
         if (vm.saveSuccess) {
-            onSaved()
+            if (vm.isEditMode) {
+                onSaved()
+            } else {
+                snackbarHostState.showSnackbar("Transaction saved")
+            }
             vm.resetSaveSuccess()
         }
     }
@@ -59,7 +65,16 @@ fun LogScreen(
         topBar = {
             TopAppBar(
                 title = { Text(if (vm.isEditMode) "Edit Transaction" else "Log Transaction") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
                 actions = {
+                    SyncStatusIndicator(status = vm.syncStatus, onRetry = vm::retrySync)
+                    TextButton(onClick = vm::save) {
+                        Text(if (vm.isEditMode) "Update" else "Save")
+                    }
                     if (vm.isEditMode) {
                         IconButton(onClick = { showDeleteConfirm = true }) {
                             Icon(Icons.Filled.Delete, contentDescription = "Delete transaction")
@@ -68,33 +83,17 @@ fun LogScreen(
                 }
             )
         },
-        bottomBar = {
-            Surface(color = MaterialTheme.colorScheme.surface) {
-                Column(modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding())) {
-                    Button(
-                        onClick = vm::save,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp)
-                    ) {
-                        Text(if (vm.isEditMode) "Update" else "Save")
-                    }
-                }
-            }
-        }
+        bottomBar = {}
     ) { scaffoldPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(scaffoldPadding)
-                .padding(innerPadding)
+                .padding(bottom = innerPadding.calculateBottomPadding())
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text("Log Transaction", style = MaterialTheme.typography.headlineMedium)
-            SyncStatusIndicator(status = vm.syncStatus, onRetry = vm::retrySync)
-
             // Date picker field
             OutlinedTextField(
                 value = vm.selectedDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),
@@ -203,9 +202,10 @@ fun LogScreen(
                 onValueChange = { vm.remarks = it },
                 label = { Text("Remarks (optional)") },
                 modifier = Modifier.fillMaxWidth(),
-                minLines = 2
+                singleLine = true
             )
-            Spacer(Modifier.height(8.dp))
+
+            Spacer(Modifier.height(2.dp))
         }
     }
 
@@ -270,7 +270,7 @@ private fun SyncStatusIndicator(status: SyncStatusUi, onRetry: () -> Unit) {
             MaterialTheme.colorScheme.onTertiaryContainer
         )
         SyncStatusUi.Failed -> Triple(
-            "Sync failed - tap to retry",
+            "Retry sync",
             MaterialTheme.colorScheme.errorContainer,
             MaterialTheme.colorScheme.onErrorContainer
         )
