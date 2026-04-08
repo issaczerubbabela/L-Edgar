@@ -41,6 +41,24 @@ class ExpenseRepositoryImpl @Inject constructor(
 
     override fun getRecordsForAccount(accountId: Long): Flow<List<ExpenseRecord>> = dao.getRecordsForAccount(accountId)
 
+    override fun searchTransactions(
+        query: String?,
+        startDate: String?,
+        endDate: String?,
+        accountId: Long?,
+        category: String?,
+        minAmount: Double?,
+        maxAmount: Double?
+    ): Flow<List<ExpenseRecord>> = dao.searchTransactions(
+        query = query,
+        startDate = startDate,
+        endDate = endDate,
+        accountId = accountId,
+        category = category,
+        minAmount = minAmount,
+        maxAmount = maxAmount
+    )
+
     override fun getRecordsForAccountInMonth(accountId: Long, startDate: String, endDate: String): Flow<List<ExpenseRecord>> =
         dao.getRecordsForAccountInMonth(accountId = accountId, startDate = startDate, endDate = endDate)
 

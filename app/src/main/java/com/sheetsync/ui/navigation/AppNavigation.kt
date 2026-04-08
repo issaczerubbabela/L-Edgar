@@ -30,6 +30,7 @@ import com.sheetsync.ui.screens.AddAccountScreen
 import com.sheetsync.ui.screens.BookmarksScreen
 import com.sheetsync.ui.screens.BudgetSettingScreen
 import com.sheetsync.ui.screens.DropdownManagementScreen
+import com.sheetsync.ui.screens.SearchScreen
 import com.sheetsync.ui.screens.SettingsScreen
 import com.sheetsync.viewmodel.ACCOUNT_ROUTE_ADD
 
@@ -40,6 +41,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
         Icons.Filled.AddCircle
     )
     object Trans : Screen("trans", "Trans.", Icons.Filled.MenuBook)
+    object Search : Screen("search", "Search", Icons.Filled.MoreHoriz)
     object Bookmarks : Screen("bookmarks", "Bookmarks", Icons.Filled.Star)
     object Stats : Screen("stats", "Stats", Icons.Filled.BarChart)
     object Accounts : Screen("accounts", "Accounts", Icons.Filled.Paid)
@@ -154,6 +156,11 @@ fun AppNavigation() {
                             launchSingleTop = true
                         }
                     },
+                    onNavigateToSearch = {
+                        navController.navigate(Screen.Search.route) {
+                            launchSingleTop = true
+                        }
+                    },
                     onNavigateToBudgetSetting = {
                         navController.navigate(Screen.BudgetSetting.route) {
                             launchSingleTop = true
@@ -201,6 +208,17 @@ fun AppNavigation() {
             }
             composable(Screen.Bookmarks.route) {
                 BookmarksScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
+                    onTransactionClick = { transactionId ->
+                        navController.navigate(logRoute(transactionId = transactionId)) {
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
+            composable(Screen.Search.route) {
+                SearchScreen(
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() },
                     onTransactionClick = { transactionId ->

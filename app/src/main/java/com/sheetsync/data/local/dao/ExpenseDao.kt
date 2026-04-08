@@ -34,6 +34,39 @@ interface ExpenseDao {
     @Query("SELECT * FROM expense_records WHERE type = :type AND syncAction != 'DELETE' ORDER BY date DESC")
     fun getByType(type: String): Flow<List<ExpenseRecord>>
 
+        @Query(
+                """
+                SELECT * FROM expense_records
+                WHERE syncAction != 'DELETE'
+                    AND (
+                                :query IS NULL OR :query = ''
+                                OR description LIKE '%' || :query || '%'
+                                OR remarks LIKE '%' || :query || '%'
+                            )
+                    AND (:startDate IS NULL OR date >= :startDate)
+                    AND (:endDate IS NULL OR date <= :endDate)
+                    AND (
+                                :accountId IS NULL
+                                OR accountId = :accountId
+                                OR fromAccountId = :accountId
+                                OR toAccountId = :accountId
+                            )
+                    AND (:category IS NULL OR category = :category)
+                    AND (:minAmount IS NULL OR amount >= :minAmount)
+                    AND (:maxAmount IS NULL OR amount <= :maxAmount)
+                ORDER BY date DESC, id DESC
+                """
+        )
+        fun searchTransactions(
+                query: String?,
+                startDate: String?,
+                endDate: String?,
+                accountId: Long?,
+                category: String?,
+                minAmount: Double?,
+                maxAmount: Double?
+        ): Flow<List<ExpenseRecord>>
+
     @Query("SELECT * FROM expense_records WHERE isSynced = 0")
     suspend fun getUnsyncedRecords(): List<ExpenseRecord>
 
