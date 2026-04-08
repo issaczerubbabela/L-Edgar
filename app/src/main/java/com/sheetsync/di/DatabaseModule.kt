@@ -3,6 +3,7 @@ package com.sheetsync.di
 import android.content.Context
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.sheetsync.data.local.SheetSyncDatabase
 import com.sheetsync.data.local.dao.AccountDao
@@ -19,6 +20,21 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
+
+    private val MIGRATION_10_11 = object : Migration(10, 11) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE account_records ADD COLUMN displayOrder INTEGER NOT NULL DEFAULT 0")
+            db.execSQL(
+                """
+                UPDATE account_records
+                SET displayOrder = (
+                    SELECT COUNT(*) FROM account_records a2
+                    WHERE a2.id < account_records.id
+                )
+                """.trimIndent()
+            )
+        }
+    }
 
     private fun seedDropdownDefaultsIfEmpty(db: SupportSQLiteDatabase) {
         val cursor = db.query("SELECT COUNT(*) FROM dropdown_options")
@@ -115,6 +131,7 @@ object DatabaseModule {
         }
 
         return Room.databaseBuilder(context, SheetSyncDatabase::class.java, "sheetsync.db")
+            .addMigrations(MIGRATION_10_11)
             .fallbackToDestructiveMigration()
             .addCallback(callback)
             .build()

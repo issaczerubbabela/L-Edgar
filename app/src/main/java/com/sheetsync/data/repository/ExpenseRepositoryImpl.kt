@@ -8,6 +8,7 @@ import com.sheetsync.data.local.dao.ExpenseDao
 import com.sheetsync.data.local.entity.Budget
 import com.sheetsync.data.local.entity.DropdownOption
 import com.sheetsync.data.local.entity.ExpenseRecord
+import com.sheetsync.data.local.entity.AccountRecord
 import com.sheetsync.data.remote.ApiService
 import com.sheetsync.data.remote.ImportRecordDto
 import com.sheetsync.util.parseFlexibleDate
@@ -203,20 +204,45 @@ class ExpenseRepositoryImpl @Inject constructor(
         }
 
         val restoredDropdowns = dropdownBody?.data.orEmpty().let { remoteDropdowns ->
-            if (remoteDropdowns.isEmpty()) {
-                0
-            } else {
-                val mapped = remoteDropdowns.map { dto ->
-                    DropdownOption(
-                        id = 0,
-                        optionType = dto.optionType,
-                        name = dto.name,
-                        displayOrder = dto.displayOrder
-                    )
-                }
-                dropdownOptionRepository.overwriteAllOptions(mapped)
-                mapped.size
+            val filteredDropdowns = remoteDropdowns.filterNot { it.optionType == "PAYMENT_MODE" }
+            val mapped = filteredDropdowns.map { dto ->
+                DropdownOption(
+                    id = 0,
+                    optionType = dto.optionType,
+                    name = dto.name,
+                    displayOrder = dto.displayOrder
+                )
             }
+            dropdownOptionRepository.overwriteAllOptions(mapped)
+            mapped.size
+        }
+
+        val accountsResponse = apiService.importAccounts(
+            url = BuildConfig.APPS_SCRIPT_URL,
+            target = "accounts"
+        )
+        if (!accountsResponse.isSuccessful) {
+            throw IllegalStateException("Account import failed: HTTP ${accountsResponse.code()}")
+        }
+
+        val accountsBody = accountsResponse.body()
+        if (!accountsBody?.status.equals("ok", ignoreCase = true)) {
+            throw IllegalStateException(accountsBody?.message ?: "Account import failed")
+        }
+
+        val restoredAccounts = accountsBody?.data.orEmpty().let { remoteAccounts ->
+            val mapped = remoteAccounts.mapIndexed { index, dto ->
+                AccountRecord(
+                    id = 0,
+                    groupName = dto.groupName,
+                    accountName = dto.accountName,
+                    initialBalance = dto.initialBalance,
+                    isHidden = dto.isHidden,
+                    displayOrder = dto.displayOrder ?: index
+                )
+            }
+            accountDao.overwriteAll(mapped)
+            mapped.size
         }
 
         val budgetResponse = apiService.importBudgets(
@@ -233,21 +259,19 @@ class ExpenseRepositoryImpl @Inject constructor(
         }
 
         val restoredBudgets = budgetBody?.data.orEmpty().let { remoteBudgets ->
-            if (remoteBudgets.isEmpty()) {
-                0
-            } else {
-                val mapped = remoteBudgets.map { dto ->
-                    Budget(
-                        id = 0,
-                        monthYear = dto.monthYear,
-                        category = dto.category,
-                        amount = dto.amount
-                    )
-                }
-                budgetDao.clearAll()
-                budgetDao.insertAll(mapped)
-                mapped.size
+            val mapped = remoteBudgets.map { dto ->
+                Budget(
+                    id = 0,
+                    monthYear = dto.monthYear,
+                    category = dto.category,
+                    amount = dto.amount
+                )
             }
+            budgetDao.clearAll()
+            if (mapped.isNotEmpty()) {
+                budgetDao.insertAll(mapped)
+            }
+            mapped.size
         }
 
         val txResponse = apiService.importRecords(
@@ -271,7 +295,8 @@ class ExpenseRepositoryImpl @Inject constructor(
             imported = imported,
             skipped = skipped,
             restoredDropdowns = restoredDropdowns,
-            restoredBudgets = restoredBudgets
+            restoredBudgets = restoredBudgets,
+            restoredAccounts = restoredAccounts
         )
     }
 
@@ -286,7 +311,6 @@ class ExpenseRepositoryImpl @Inject constructor(
     private fun isCompositeDuplicate(local: ComparableTx, remote: ComparableTx): Boolean {
         return local.date == remote.date &&
             amountsEqual(local.amount, remote.amount) &&
-            local.type == remote.type &&
             local.description.trim().equals(remote.description.trim(), ignoreCase = true) &&
             local.accountId == remote.accountId
     }

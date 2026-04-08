@@ -32,4 +32,11 @@ interface ApiService {
         @Url url: String,
         @Query("target") target: String = "budgets"
     ): Response<BudgetImportResponse>
+
+    /** GET accounts from Apps Script. */
+    @GET
+    suspend fun importAccounts(
+        @Url url: String,
+        @Query("target") target: String = "accounts"
+    ): Response<AccountImportResponse>
 }

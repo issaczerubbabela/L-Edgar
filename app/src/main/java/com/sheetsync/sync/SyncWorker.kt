@@ -34,11 +34,23 @@ class SyncWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         return try {
-            val shouldBackupAccounts = inputData.getBoolean(KEY_BACKUP_ACCOUNTS, false)
             val accounts = accountRepository.getAllAccountsSnapshot()
             val accountNameById = accounts.associate { it.id to it.accountName }
 
             val unsynced = repository.getUnsynced()
+
+            val accountsBackupCount = backupAccounts(accounts) ?: run {
+                return Result.retry()
+            }
+
+            val dropdownBackupCount = backupDropdownOptions() ?: run {
+                return Result.retry()
+            }
+
+            val budgetBackupCount = backupBudgets() ?: run {
+                return Result.retry()
+            }
+
             if (unsynced.isEmpty()) {
                 Log.i(TAG, "No transaction changes to sync.")
             } else {
@@ -60,22 +72,6 @@ class SyncWorker @AssistedInject constructor(
                 if (deletes.isNotEmpty() && !syncDeletes(deletes)) {
                     return Result.retry()
                 }
-            }
-
-            val shouldRunAccountBackup = shouldBackupAccounts || unsynced.isNotEmpty()
-
-            val dropdownBackupCount = backupDropdownOptions() ?: run {
-                return Result.retry()
-            }
-
-            val budgetBackupCount = backupBudgets() ?: run {
-                return Result.retry()
-            }
-
-            val accountsBackupCount = if (shouldRunAccountBackup) {
-                backupAccounts(accounts) ?: return Result.retry()
-            } else {
-                -1
             }
 
             Log.i(TAG, "Sync successful. processed=${unsynced.size}")
@@ -170,7 +166,9 @@ class SyncWorker @AssistedInject constructor(
     }
 
     private suspend fun backupDropdownOptions(): Int? {
-        val options = dropdownOptionRepository.getAllOptionsSnapshot()
+        val options = dropdownOptionRepository
+            .getAllOptionsSnapshot()
+            .filterNot { it.optionType == "PAYMENT_MODE" }
         val payload = options.map { option ->
             DropdownSyncDto(
                 id = option.id,
@@ -226,7 +224,8 @@ class SyncWorker @AssistedInject constructor(
                 groupName = account.groupName,
                 accountName = account.accountName,
                 initialBalance = account.initialBalance,
-                isHidden = account.isHidden
+                isHidden = account.isHidden,
+                displayOrder = account.displayOrder
             )
         }
 

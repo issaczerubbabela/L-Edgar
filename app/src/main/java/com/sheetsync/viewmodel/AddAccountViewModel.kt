@@ -99,11 +99,13 @@ class AddAccountViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            val nextDisplayOrder = (accountRepository.getAllAccountsSnapshot().maxOfOrNull { it.displayOrder } ?: -1) + 1
             accountRepository.save(
                 AccountRecord(
                     groupName = state.selectedGroup,
                     accountName = trimmedName,
-                    initialBalance = parsedAmount
+                    initialBalance = parsedAmount,
+                    displayOrder = nextDisplayOrder
                 )
             )
             enqueueAccountBackupSync()

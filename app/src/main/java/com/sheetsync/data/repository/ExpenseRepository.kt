@@ -8,7 +8,8 @@ data class GoogleSheetsImportResult(
     val imported: Int,
     val skipped: Int,
     val restoredDropdowns: Int,
-    val restoredBudgets: Int = 0
+    val restoredBudgets: Int = 0,
+    val restoredAccounts: Int = 0
 )
 
 interface ExpenseRepository {

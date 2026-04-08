@@ -46,6 +46,15 @@ interface ExpenseDao {
     @Query("DELETE FROM expense_records")
     suspend fun deleteAll()
 
+        @Query(
+                """
+                SELECT COUNT(*) FROM expense_records
+                WHERE syncAction != 'DELETE'
+                    AND (accountId = :accountId OR fromAccountId = :accountId OR toAccountId = :accountId)
+                """
+        )
+        suspend fun countRecordsForAccount(accountId: Long): Int
+
     /**
      * Duplicate detection: matches on date + type + category + amount.
      * Returns the first matching record, or null if it's a new entry.

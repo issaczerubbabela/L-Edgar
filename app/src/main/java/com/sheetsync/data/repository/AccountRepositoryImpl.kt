@@ -19,19 +19,23 @@ class AccountRepositoryImpl @Inject constructor(
 
     override fun getAccountBalances(): Flow<List<AccountBalance>> =
         combine(dao.getAllAccounts(), expenseDao.getAllRecords()) { accounts, records ->
-            val totalsByAccount = records
-                .asSequence()
-                .filter { it.accountId != null }
-                .groupBy { it.accountId!! }
-                .mapValues { (_, txns) ->
-                    txns.sumOf { txn ->
-                        when (txn.type) {
-                            "Income" -> txn.amount
-                            "Expense" -> -txn.amount
-                            else -> 0.0
-                        }
+            val totalsByAccount = mutableMapOf<Long, Double>()
+
+            fun addDelta(accountId: Long?, delta: Double) {
+                if (accountId == null) return
+                totalsByAccount[accountId] = (totalsByAccount[accountId] ?: 0.0) + delta
+            }
+
+            records.forEach { txn ->
+                when (txn.type) {
+                    "Income" -> addDelta(txn.toAccountId ?: txn.accountId, txn.amount)
+                    "Expense" -> addDelta(txn.fromAccountId ?: txn.accountId, -txn.amount)
+                    "Transfer" -> {
+                        addDelta(txn.fromAccountId, -txn.amount)
+                        addDelta(txn.toAccountId, txn.amount)
                     }
                 }
+            }
 
             accounts.map { account ->
                 val net = totalsByAccount[account.id] ?: 0.0
@@ -60,6 +64,18 @@ class AccountRepositoryImpl @Inject constructor(
     override suspend fun getAccountById(accountId: Long): AccountRecord? = dao.getAccountById(accountId)
 
     override suspend fun save(record: AccountRecord): Long = dao.insert(record)
+
+    override suspend fun toggleHidden(accountId: Long) {
+        val account = dao.getAccountById(accountId) ?: return
+        dao.updateHiddenStatus(accountId = accountId, isHidden = !account.isHidden)
+    }
+
+    override suspend fun swapDisplayOrder(firstAccountId: Long, secondAccountId: Long) {
+        dao.swapDisplayOrder(firstAccountId = firstAccountId, secondAccountId = secondAccountId)
+    }
+
+    override suspend fun hasTransactions(accountId: Long): Boolean =
+        expenseDao.countRecordsForAccount(accountId) > 0
 
     override suspend fun delete(record: AccountRecord) = dao.delete(record)
 }

@@ -82,7 +82,7 @@ class SettingsViewModel @Inject constructor(
                 _sheetsState.value = ImportState.Success(result.imported, result.skipped)
                 _uiEvents.emit(
                     SettingsUiEvent.ShowMessage(
-                        "Sync complete. ${result.imported} new transactions imported, ${result.restoredDropdowns} dropdown options restored, and ${result.restoredBudgets} budget rows restored."
+                        "Sync complete. ${result.restoredDropdowns} dropdown options restored, ${result.restoredAccounts} accounts restored, ${result.restoredBudgets} budget rows restored, and ${result.imported} new transactions imported (${result.skipped} duplicates skipped)."
                     )
                 )
             } catch (e: Exception) {

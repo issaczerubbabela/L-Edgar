@@ -22,5 +22,8 @@ interface AccountRepository {
     suspend fun getAllAccountsSnapshot(): List<AccountRecord>
     suspend fun getAccountById(accountId: Long): AccountRecord?
     suspend fun save(record: AccountRecord): Long
+    suspend fun toggleHidden(accountId: Long)
+    suspend fun swapDisplayOrder(firstAccountId: Long, secondAccountId: Long)
+    suspend fun hasTransactions(accountId: Long): Boolean
     suspend fun delete(record: AccountRecord)
 }
