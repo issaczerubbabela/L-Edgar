@@ -53,6 +53,28 @@ private val monthNames = listOf(
 )
 private fun formatMoney(amount: Double)   = "₹ %,.2f".format(amount)
 private fun formatCompact(amount: Double) = "%,.2f".format(kotlin.math.abs(amount))
+private fun accountLabelForTransaction(record: ExpenseRecord, accountsById: Map<Long, String>): String {
+    return when (record.type) {
+        "Income" -> {
+            val accountId = record.toAccountId ?: record.accountId
+            accountId?.let { accountsById[it] } ?: ""
+        }
+        "Expense" -> {
+            val accountId = record.fromAccountId ?: record.accountId
+            accountId?.let { accountsById[it] } ?: ""
+        }
+        "Transfer" -> {
+            val from = record.fromAccountId?.let { accountsById[it] }.orEmpty()
+            val to = record.toAccountId?.let { accountsById[it] }.orEmpty()
+            when {
+                from.isNotBlank() && to.isNotBlank() -> "$from -> $to"
+                from.isNotBlank() -> from
+                else -> to
+            }
+        }
+        else -> ""
+    }
+}
 private fun formatSignedMoney(amount: Double): String {
     val sign = if (amount > 0.0001) "+" else if (amount < -0.0001) "-" else ""
     return "$sign₹ %,.2f".format(kotlin.math.abs(amount))
@@ -102,6 +124,7 @@ fun HistoryScreen(
     var selectedCategory by remember { mutableStateOf("") }
     var selectedAssetId by remember { mutableStateOf<Long?>(null) }
     var updatedDescription by remember { mutableStateOf("") }
+    val accountsById = remember(accounts) { accounts.associate { it.id to it.accountName } }
 
     val allVisibleRecords = remember(state.groups) { state.groups.flatMap { it.records } }
     val selectedCount = vm.selectedTxIds.size
@@ -216,6 +239,7 @@ fun HistoryScreen(
                     )
                     else -> DailyContent(
                         groups = state.groups,
+                        accountsById = accountsById,
                         selectedIds = selectedIdSet,
                         onTransactionClick = { record ->
                             if (vm.isSelectionMode()) {
@@ -797,6 +821,7 @@ private fun CalendarCellView(
 @Composable
 private fun DailyContent(
     groups: List<DayGroup>,
+    accountsById: Map<Long, String>,
     selectedIds: Set<Long>,
     onTransactionClick: (ExpenseRecord) -> Unit,
     onTransactionLongClick: (ExpenseRecord) -> Unit,
@@ -815,6 +840,7 @@ private fun DailyContent(
                 itemsIndexed(group.records, key = { _, record -> record.id }) { index, record ->
                     TransactionRow(
                         record = record,
+                        accountLabel = accountLabelForTransaction(record, accountsById),
                         isSelected = selectedIds.contains(record.id),
                         onClick = { onTransactionClick(record) },
                         onLongClick = { onTransactionLongClick(record) }
@@ -1054,6 +1080,7 @@ private fun DayGroupHeader(group: DayGroup) {
 @OptIn(ExperimentalFoundationApi::class)
 private fun TransactionRow(
     record: ExpenseRecord,
+    accountLabel: String,
     isSelected: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit
@@ -1081,7 +1108,7 @@ private fun TransactionRow(
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(record.paymentMode,
+            Text(accountLabel,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
