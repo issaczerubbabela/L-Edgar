@@ -68,8 +68,10 @@ fun AccountDetailScreen(
     val state by vm.uiState.collectAsState()
     val formState by formVm.uiState.collectAsState()
     val accountGroups by formVm.accountGroups.collectAsState()
+    val allAccounts by formVm.allAccounts.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var showEditSheet by remember { mutableStateOf(false) }
+    var showPermanentDeleteDialog by remember { mutableStateOf(false) }
     var showMonthPicker by remember { mutableStateOf(false) }
     var showChart by remember { mutableStateOf(false) }
     var pickerMonth by remember(state.selectedMonth) { mutableStateOf(state.selectedMonth.monthValue) }
@@ -320,7 +322,22 @@ fun AccountDetailScreen(
             onIncludeInTotalsChange = formVm::updateIncludeInTotals,
             onHiddenChange = formVm::updateHidden,
             onSave = formVm::save,
-            onDelete = formVm::deleteIfAllowed
+            onDelete = formVm::deleteIfAllowed,
+            onDeletePermanently = { showPermanentDeleteDialog = true }
+        )
+    }
+
+    if (showPermanentDeleteDialog) {
+        AccountPermanentDeleteDialog(
+            accountName = state.accountName,
+            reassignOptions = allAccounts
+                .filter { it.id != state.accountId }
+                .map { ReassignAccountOption(id = it.id, label = "${it.accountName} (${it.groupName})") },
+            onDismiss = { showPermanentDeleteDialog = false },
+            onConfirm = { reassignToAccountId ->
+                showPermanentDeleteDialog = false
+                formVm.deletePermanently(reassignToAccountId)
+            }
         )
     }
 }

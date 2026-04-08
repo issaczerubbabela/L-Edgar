@@ -72,12 +72,14 @@ fun AccountsScreen(
     formVm: AddEditAccountViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsState()
+    val allAccounts by vm.allAccounts.collectAsState()
     val formState by formVm.uiState.collectAsState()
     val accountGroups by formVm.accountGroups.collectAsState()
     var showMenu by remember { mutableStateOf(false) }
     var showAddSheet by remember { mutableStateOf(false) }
     var actionMode by remember { mutableStateOf(AccountActionMode.None) }
     var showHidden by remember { mutableStateOf(false) }
+    var pendingPermanentDeleteAccountId by remember { mutableStateOf<Long?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     val visibleAssetGroups = remember(state.assetGroups) {
@@ -208,7 +210,7 @@ fun AccountsScreen(
                                 mode = actionMode,
                                 onOpen = onOpenAccountDetail,
                                 onToggleVisibility = vm::toggleAccountVisibility,
-                                onDelete = vm::deleteAccount,
+                                onDelete = { accountId -> pendingPermanentDeleteAccountId = accountId },
                                 onMoveUp = vm::moveAccountUp,
                                 onMoveDown = vm::moveAccountDown
                             )
@@ -226,7 +228,7 @@ fun AccountsScreen(
                                 mode = actionMode,
                                 onOpen = onOpenAccountDetail,
                                 onToggleVisibility = vm::toggleAccountVisibility,
-                                onDelete = vm::deleteAccount,
+                                onDelete = { accountId -> pendingPermanentDeleteAccountId = accountId },
                                 onMoveUp = vm::moveAccountUp,
                                 onMoveDown = vm::moveAccountDown
                             )
@@ -257,7 +259,7 @@ fun AccountsScreen(
                                 mode = actionMode,
                                 onOpen = onOpenAccountDetail,
                                 onToggleVisibility = vm::toggleAccountVisibility,
-                                onDelete = vm::deleteAccount,
+                                onDelete = { accountId -> pendingPermanentDeleteAccountId = accountId },
                                 onMoveUp = vm::moveAccountUp,
                                 onMoveDown = vm::moveAccountDown
                             )
@@ -275,7 +277,7 @@ fun AccountsScreen(
                                 mode = actionMode,
                                 onOpen = onOpenAccountDetail,
                                 onToggleVisibility = vm::toggleAccountVisibility,
-                                onDelete = vm::deleteAccount,
+                                onDelete = { accountId -> pendingPermanentDeleteAccountId = accountId },
                                 onMoveUp = vm::moveAccountUp,
                                 onMoveDown = vm::moveAccountDown
                             )
@@ -299,7 +301,29 @@ fun AccountsScreen(
             onIncludeInTotalsChange = formVm::updateIncludeInTotals,
             onHiddenChange = formVm::updateHidden,
             onSave = formVm::save,
-            onDelete = formVm::deleteIfAllowed
+            onDelete = formVm::deleteIfAllowed,
+            onDeletePermanently = {
+                pendingPermanentDeleteAccountId = formState.accountId
+            }
+        )
+    }
+
+    val pendingDeleteAccountId = pendingPermanentDeleteAccountId
+    if (pendingDeleteAccountId != null) {
+        val accountName = allAccounts.firstOrNull { it.id == pendingDeleteAccountId }?.accountName ?: "Account"
+        AccountPermanentDeleteDialog(
+            accountName = accountName,
+            reassignOptions = allAccounts
+                .filter { it.id != pendingDeleteAccountId }
+                .map { ReassignAccountOption(id = it.id, label = "${it.accountName} (${it.groupName})") },
+            onDismiss = { pendingPermanentDeleteAccountId = null },
+            onConfirm = { reassignToAccountId ->
+                vm.deleteAccountPermanently(
+                    accountId = pendingDeleteAccountId,
+                    reassignToAccountId = reassignToAccountId
+                )
+                pendingPermanentDeleteAccountId = null
+            }
         )
     }
 }

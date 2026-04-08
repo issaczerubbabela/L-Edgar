@@ -16,6 +16,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.sheetsync.data.local.entity.ExpenseRecord
 import com.sheetsync.data.preferences.ThemePreferenceRepository
+import com.sheetsync.data.remote.ApiService
 import com.sheetsync.data.repository.ExpenseRepository
 import com.sheetsync.sync.SyncWorker
 import com.sheetsync.ui.theme.AppThemeOption
@@ -45,6 +46,13 @@ sealed class SettingsUiEvent {
     data class ShowMessage(val message: String) : SettingsUiEvent()
 }
 
+sealed class ConnectionTestState {
+    object Idle : ConnectionTestState()
+    object Testing : ConnectionTestState()
+    object Success : ConnectionTestState()
+    data class Error(val message: String) : ConnectionTestState()
+}
+
 // ── ViewModel ────────────────────────────────────────────────────────────────
 
 @HiltViewModel
@@ -52,6 +60,7 @@ class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val repository: ExpenseRepository,
     private val themeRepository: ThemePreferenceRepository,
+    private val apiService: ApiService,
     private val workManager: WorkManager
 ) : ViewModel() {
 
@@ -79,6 +88,39 @@ class SettingsViewModel @Inject constructor(
 
     fun updateScriptUrl(newUrl: String) {
         viewModelScope.launch { themeRepository.updateScriptUrl(newUrl) }
+    }
+
+    fun testScriptConnection(url: String) {
+        if (_connectionTestState.value is ConnectionTestState.Testing) return
+        val normalized = url.trim()
+        if (normalized.isBlank()) {
+            _connectionTestState.value = ConnectionTestState.Error("Enter a Web App URL")
+            return
+        }
+
+        viewModelScope.launch {
+            _connectionTestState.value = ConnectionTestState.Testing
+            try {
+                val response = apiService.importDropdownOptions(
+                    url = normalized,
+                    target = "dropdowns"
+                )
+                val body = response.body()
+                _connectionTestState.value = if (
+                    response.isSuccessful && body?.status.equals("ok", ignoreCase = true)
+                ) {
+                    ConnectionTestState.Success
+                } else {
+                    ConnectionTestState.Error(body?.message ?: "HTTP ${response.code()}")
+                }
+            } catch (e: Exception) {
+                _connectionTestState.value = ConnectionTestState.Error(e.message ?: "Connection failed")
+            }
+        }
+    }
+
+    fun resetConnectionTestState() {
+        _connectionTestState.value = ConnectionTestState.Idle
     }
 
     fun backupToGoogleSheets() {
@@ -115,6 +157,9 @@ class SettingsViewModel @Inject constructor(
 
     private val _backupState = MutableStateFlow<ImportState>(ImportState.Idle)
     val backupState: StateFlow<ImportState> = _backupState
+
+    private val _connectionTestState = MutableStateFlow<ConnectionTestState>(ConnectionTestState.Idle)
+    val connectionTestState: StateFlow<ConnectionTestState> = _connectionTestState
 
     private var backupRequestedFromSettings: Boolean = false
 

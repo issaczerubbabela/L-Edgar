@@ -1,5 +1,8 @@
 package com.sheetsync.ui.screens
 
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -13,7 +16,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.sheetsync.ui.theme.AppThemeOption
 import com.sheetsync.ui.theme.ExpenseRed
@@ -21,6 +26,7 @@ import com.sheetsync.ui.theme.IncomeGreen
 import com.sheetsync.viewmodel.ImportState
 import com.sheetsync.viewmodel.SettingsUiEvent
 import com.sheetsync.viewmodel.SettingsViewModel
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,6 +36,7 @@ fun SettingsScreen(
     onNavigateToAppsScriptSetup: () -> Unit,
     vm: SettingsViewModel = hiltViewModel()
 ) {
+    val context = LocalContext.current
     val sheetsState  by vm.sheetsImportState.collectAsState()
     val csvState     by vm.csvImportState.collectAsState()
     val backupState  by vm.backupState.collectAsState()
@@ -100,7 +107,7 @@ fun SettingsScreen(
                         colors = ExposedDropdownMenuDefaults.textFieldColors(),
                         modifier = Modifier
                             .menuAnchor()
-                            .widthIn(min = 118.dp, max = 132.dp)
+                            .width(150.dp)
                     )
 
                     ExposedDropdownMenu(
@@ -146,7 +153,7 @@ fun SettingsScreen(
             SettingsListItem(
                 title = "Database Setup (Sheets)",
                 icon = Icons.Filled.CloudSync,
-                modifier = Modifier.clickable(onClick = onNavigateToAppsScriptSetup)
+                onClick = onNavigateToAppsScriptSetup
             ) {
                 val isConnected = !scriptUrl.isNullOrBlank()
                 Row(
@@ -166,7 +173,7 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsListItem(title = "Backup to Google Sheets", icon = Icons.Filled.CloudUpload) {
+            SettingsListItem(title = "Backup to Google Sheets") {
                 ImportActionControl(
                     state = backupState,
                     idleIcon = Icons.Filled.CloudUpload,
@@ -175,7 +182,7 @@ fun SettingsScreen(
                 )
             }
 
-            SettingsListItem(title = "Import from Google Sheets", icon = Icons.Filled.CloudDownload) {
+            SettingsListItem(title = "Import from Google Sheets") {
                 ImportActionControl(
                     state = sheetsState,
                     idleIcon = Icons.Filled.CloudDownload,
@@ -191,7 +198,7 @@ fun SettingsScreen(
             SettingsListItem(
                 title = "Manage Categories & Dropdowns",
                 icon = Icons.Filled.Tune,
-                modifier = Modifier.clickable(onClick = onNavigateToDropdownManagement)
+                onClick = onNavigateToDropdownManagement
             ) {
                 Icon(
                     imageVector = Icons.Filled.ChevronRight,
@@ -200,7 +207,7 @@ fun SettingsScreen(
                 )
             }
 
-            SettingsListItem(title = "Import from CSV", icon = Icons.Filled.FileOpen) {
+            SettingsListItem(title = "Import from CSV") {
                 ImportActionControl(
                     state = csvState,
                     idleIcon = Icons.Filled.FileOpen,
@@ -211,12 +218,26 @@ fun SettingsScreen(
 
             SettingsListItem(
                 title = "Reset All Data",
-                icon = Icons.Filled.DeleteForever,
                 iconTint = ExpenseRed
             ) {
                 IconButton(onClick = { vm.showResetConfirm = true }) {
                     Icon(Icons.Filled.DeleteForever, contentDescription = "Reset data", tint = ExpenseRed)
                 }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            Text("About", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            SettingsListItem(
+                title = "Share App",
+                onClick = { shareAppApk(context) }
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Share,
+                    contentDescription = "Share app",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -225,19 +246,26 @@ fun SettingsScreen(
 @Composable
 private fun SettingsListItem(
     title: String,
-    icon: ImageVector,
+    icon: ImageVector? = null,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
     iconTint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary,
     trailing: @Composable RowScope.() -> Unit
 ) {
+    val clickableModifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .defaultMinSize(minHeight = 56.dp)
+            .then(clickableModifier)
             .padding(horizontal = 4.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Icon(icon, contentDescription = null, tint = iconTint)
+        if (icon != null) {
+            Icon(icon, contentDescription = null, tint = iconTint)
+        }
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium,
@@ -256,7 +284,12 @@ private fun ImportActionControl(
     onDismiss: () -> Unit
 ) {
     when (state) {
-        is ImportState.Loading -> CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+        is ImportState.Loading -> Box(
+            modifier = Modifier.size(48.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+        }
         is ImportState.Success -> IconButton(onClick = onDismiss) {
             Icon(Icons.Filled.CheckCircle, contentDescription = "Dismiss import status", tint = IncomeGreen)
         }
@@ -274,4 +307,25 @@ private fun themeLabel(option: AppThemeOption): String = when (option) {
     AppThemeOption.LAVENDER -> "Lavender"
     AppThemeOption.TEAL -> "Teal"
     AppThemeOption.RED -> "Red"
+}
+
+private fun shareAppApk(context: Context) {
+    runCatching {
+        val apkFile = File(context.applicationInfo.sourceDir)
+        val apkUri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            apkFile
+        )
+
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/vnd.android.package-archive"
+            putExtra(Intent.EXTRA_STREAM, apkUri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        context.startActivity(Intent.createChooser(shareIntent, "Share App APK"))
+    }.onFailure {
+        Toast.makeText(context, "Unable to share APK", Toast.LENGTH_SHORT).show()
+    }
 }

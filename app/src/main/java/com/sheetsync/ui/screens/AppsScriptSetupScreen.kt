@@ -24,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,6 +43,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.sheetsync.viewmodel.ConnectionTestState
 import com.sheetsync.viewmodel.SettingsViewModel
 
 private const val SCRIPT_URL_PREFIX = "https://script.google.com/macros/s/"
@@ -59,7 +61,7 @@ private val APPS_SCRIPT_CODE = """
  * 2) Type: Web app
  * 3) Execute as: Me
  * 4) Who has access: Anyone
- * 5) Copy the /exec URL and update APPS_SCRIPT_URL
+ * 5) Copy the /exec URL and save it in app Settings > Database Setup
  */
 
 var TRANSACTIONS_SHEET = "_responses";
@@ -414,6 +416,7 @@ fun AppsScriptSetupScreen(
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val configuredUrl by vm.scriptUrl.collectAsState()
+    val connectionState by vm.connectionTestState.collectAsState()
 
     var urlInput by remember(configuredUrl) { mutableStateOf(configuredUrl.orEmpty()) }
     var showValidationError by remember { mutableStateOf(false) }
@@ -484,6 +487,7 @@ fun AppsScriptSetupScreen(
               onValueChange = {
                 urlInput = it
                 showValidationError = false
+                vm.resetConnectionTestState()
               },
               modifier = Modifier.fillMaxWidth(),
               singleLine = true,
@@ -515,6 +519,40 @@ fun AppsScriptSetupScreen(
               modifier = Modifier.padding(top = 4.dp)
             ) {
               Text("Save & Connect")
+            }
+
+            OutlinedButton(
+              onClick = {
+                val normalized = urlInput.trim()
+                val isValid = normalized.startsWith(SCRIPT_URL_PREFIX)
+                if (!isValid) {
+                  showValidationError = true
+                  vm.resetConnectionTestState()
+                  return@OutlinedButton
+                }
+                vm.testScriptConnection(normalized)
+              }
+            ) {
+              Text("Test Connection")
+            }
+
+            when (val state = connectionState) {
+              ConnectionTestState.Idle -> Unit
+              ConnectionTestState.Testing -> Text(
+                text = "Testing...",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+              )
+              ConnectionTestState.Success -> Text(
+                text = "Connected: URL is reachable",
+                color = androidx.compose.ui.graphics.Color(0xFF2E7D32),
+                style = MaterialTheme.typography.bodySmall
+              )
+              is ConnectionTestState.Error -> Text(
+                text = "Connection failed: ${state.message}",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall
+              )
             }
         }
     }

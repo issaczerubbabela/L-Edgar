@@ -131,6 +131,32 @@ interface ExpenseDao {
     @Query("DELETE FROM expense_records WHERE id = :id")
     suspend fun hardDeleteById(id: Long)
 
+    @Query(
+        """
+        DELETE FROM expense_records
+        WHERE accountId = :accountId OR fromAccountId = :accountId OR toAccountId = :accountId
+        """
+    )
+    suspend fun deleteLinkedTransactionsForAccount(accountId: Long)
+
+    @Query(
+        """
+        UPDATE expense_records
+        SET accountId = CASE WHEN accountId = :fromAccountId THEN :toAccountId ELSE accountId END,
+            fromAccountId = CASE WHEN fromAccountId = :fromAccountId THEN :toAccountId ELSE fromAccountId END,
+            toAccountId = CASE WHEN toAccountId = :fromAccountId THEN :toAccountId ELSE toAccountId END,
+            isSynced = 0,
+            syncAction = CASE
+                WHEN syncAction = 'INSERT' THEN 'INSERT'
+                WHEN syncAction = 'DELETE' THEN 'DELETE'
+                ELSE 'UPDATE'
+            END
+        WHERE (accountId = :fromAccountId OR fromAccountId = :fromAccountId OR toAccountId = :fromAccountId)
+          AND syncAction != 'DELETE'
+        """
+    )
+    suspend fun reassignLinkedTransactionsForAccount(fromAccountId: Long, toAccountId: Long)
+
     @Query("DELETE FROM expense_records")
     suspend fun deleteAll()
 

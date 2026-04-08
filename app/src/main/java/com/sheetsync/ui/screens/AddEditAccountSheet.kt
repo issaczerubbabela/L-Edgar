@@ -50,7 +50,8 @@ fun AddEditAccountSheet(
     onIncludeInTotalsChange: (Boolean) -> Unit,
     onHiddenChange: (Boolean) -> Unit,
     onSave: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onDeletePermanently: () -> Unit
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
 
@@ -156,6 +157,13 @@ fun AddEditAccountSheet(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Delete Account", color = MaterialTheme.colorScheme.error)
+                }
+
+                TextButton(
+                    onClick = onDeletePermanently,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Delete Permanently", color = MaterialTheme.colorScheme.error)
                 }
             }
         }

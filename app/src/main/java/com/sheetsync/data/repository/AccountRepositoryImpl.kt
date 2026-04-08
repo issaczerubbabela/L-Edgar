@@ -2,7 +2,9 @@ package com.sheetsync.data.repository
 
 import com.sheetsync.data.local.dao.AccountDao
 import com.sheetsync.data.local.dao.ExpenseDao
+import com.sheetsync.data.local.SheetSyncDatabase
 import com.sheetsync.data.local.entity.AccountRecord
+import androidx.room.withTransaction
 import com.sheetsync.util.parseFlexibleDate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -11,7 +13,8 @@ import javax.inject.Inject
 
 class AccountRepositoryImpl @Inject constructor(
     private val dao: AccountDao,
-    private val expenseDao: ExpenseDao
+    private val expenseDao: ExpenseDao,
+    private val database: SheetSyncDatabase
 ) : AccountRepository {
 
     override fun getAllAccounts(): Flow<List<AccountRecord>> = dao.getAllAccounts()
@@ -91,4 +94,31 @@ class AccountRepositoryImpl @Inject constructor(
         expenseDao.countRecordsForAccount(accountId) > 0
 
     override suspend fun delete(record: AccountRecord) = dao.delete(record)
+
+    override suspend fun permanentlyDeleteAccount(
+        accountId: Long,
+        strategy: PermanentDeleteStrategy,
+        reassignToAccountId: Long?
+    ): Boolean = database.withTransaction {
+        val account = dao.getAccountById(accountId) ?: return@withTransaction false
+        val hasLinkedTransactions = expenseDao.countRecordsForAccount(accountId) > 0
+
+        if (hasLinkedTransactions) {
+            when (strategy) {
+                PermanentDeleteStrategy.REMOVE_LINKED_TRANSACTIONS -> {
+                    expenseDao.deleteLinkedTransactionsForAccount(accountId)
+                }
+
+                PermanentDeleteStrategy.REASSIGN_LINKED_TRANSACTIONS -> {
+                    val targetId = reassignToAccountId ?: return@withTransaction false
+                    if (targetId == accountId) return@withTransaction false
+                    val target = dao.getAccountById(targetId) ?: return@withTransaction false
+                    expenseDao.reassignLinkedTransactionsForAccount(accountId, target.id)
+                }
+            }
+        }
+
+        dao.delete(account)
+        true
+    }
 }

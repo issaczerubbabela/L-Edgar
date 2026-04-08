@@ -8,6 +8,7 @@ import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 import com.sheetsync.data.local.entity.AccountRecord
 import com.sheetsync.data.local.entity.ExpenseRecord
 import com.sheetsync.data.repository.AccountRepository
+import com.sheetsync.data.repository.PermanentDeleteStrategy
 import com.sheetsync.data.repository.ExpenseRepository
 import com.sheetsync.util.parseFlexibleDate
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -80,6 +81,10 @@ class AccountsViewModel @Inject constructor(
         .getAllAccounts()
         .map { accounts -> accounts.groupBy { it.accountGroup } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    val allAccounts: StateFlow<List<AccountRecord>> = accountRepository
+        .getAllAccounts()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val accountItems: StateFlow<List<AccountListItemUi>> = accountRepository
         .getAccountsWithBalances()
@@ -158,6 +163,29 @@ class AccountsViewModel @Inject constructor(
                 return@launch
             }
             accountRepository.delete(account)
+        }
+    }
+
+    fun deleteAccountPermanently(accountId: Long, reassignToAccountId: Long?) {
+        viewModelScope.launch {
+            val strategy = if (reassignToAccountId == null) {
+                PermanentDeleteStrategy.REMOVE_LINKED_TRANSACTIONS
+            } else {
+                PermanentDeleteStrategy.REASSIGN_LINKED_TRANSACTIONS
+            }
+
+            val deleted = accountRepository.permanentlyDeleteAccount(
+                accountId = accountId,
+                strategy = strategy,
+                reassignToAccountId = reassignToAccountId
+            )
+
+            if (!deleted) {
+                _events.emit("Unable to delete account permanently")
+                return@launch
+            }
+
+            _events.emit("Account permanently deleted")
         }
     }
 

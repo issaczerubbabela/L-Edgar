@@ -13,6 +13,11 @@ data class AccountWithBalance(
     val balance: Double
 )
 
+enum class PermanentDeleteStrategy {
+    REMOVE_LINKED_TRANSACTIONS,
+    REASSIGN_LINKED_TRANSACTIONS
+}
+
 interface AccountRepository {
     fun getAllAccounts(): Flow<List<AccountRecord>>
     fun getAllVisibleAccounts(): Flow<List<AccountRecord>>
@@ -26,4 +31,9 @@ interface AccountRepository {
     suspend fun swapDisplayOrder(firstAccountId: Long, secondAccountId: Long)
     suspend fun hasTransactions(accountId: Long): Boolean
     suspend fun delete(record: AccountRecord)
+    suspend fun permanentlyDeleteAccount(
+        accountId: Long,
+        strategy: PermanentDeleteStrategy,
+        reassignToAccountId: Long? = null
+    ): Boolean
 }

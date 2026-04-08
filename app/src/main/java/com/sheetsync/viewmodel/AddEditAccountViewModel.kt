@@ -10,6 +10,7 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.sheetsync.data.local.entity.AccountRecord
 import com.sheetsync.data.repository.AccountRepository
+import com.sheetsync.data.repository.PermanentDeleteStrategy
 import com.sheetsync.data.repository.DropdownOptionRepository
 import com.sheetsync.sync.SyncWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -54,6 +55,10 @@ class AddEditAccountViewModel @Inject constructor(
     val accountGroups: StateFlow<List<String>> = dropdownOptionRepository
         .getOptionsByType("ACCOUNT_GROUP")
         .map { options -> options.map { it.name } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allAccounts: StateFlow<List<AccountRecord>> = accountRepository
+        .getAllAccounts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _events = MutableSharedFlow<String>(replay = 0)
@@ -206,6 +211,32 @@ class AddEditAccountViewModel @Inject constructor(
             }
 
             accountRepository.delete(account)
+            enqueueAccountBackupSync()
+            _deleted.emit(Unit)
+        }
+    }
+
+    fun deletePermanently(reassignToAccountId: Long? = null) {
+        val accountId = _uiState.value.accountId ?: return
+
+        viewModelScope.launch {
+            val strategy = if (reassignToAccountId == null) {
+                PermanentDeleteStrategy.REMOVE_LINKED_TRANSACTIONS
+            } else {
+                PermanentDeleteStrategy.REASSIGN_LINKED_TRANSACTIONS
+            }
+
+            val deleted = accountRepository.permanentlyDeleteAccount(
+                accountId = accountId,
+                strategy = strategy,
+                reassignToAccountId = reassignToAccountId
+            )
+
+            if (!deleted) {
+                _events.emit("Unable to delete account permanently")
+                return@launch
+            }
+
             enqueueAccountBackupSync()
             _deleted.emit(Unit)
         }
