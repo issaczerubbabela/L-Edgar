@@ -1,6 +1,5 @@
 package com.sheetsync.ui.screens
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,22 +10,30 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import com.sheetsync.viewmodel.StatsTimeframe
 import com.sheetsync.viewmodel.StatsViewModel
 
@@ -47,20 +54,41 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Text(
-                text = "Stats",
-                style = MaterialTheme.typography.headlineMedium
-            )
-        }
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Stats",
+                    style = MaterialTheme.typography.headlineMedium,
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-        item {
-            FilterRow(
-                selectedTimeframe = filterState.timeframe,
-                selectedAccountGroup = filterState.accountGroupId,
-                accountGroups = accountGroupOptions,
-                onTimeframeSelected = vm::updateTimeframe,
-                onAccountGroupSelected = vm::updateAccountGroup
-            )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TopRightFilterDropdown(
+                        selectedLabel = filterState.timeframe.label(),
+                        options = StatsTimeframe.entries.map { it.label() },
+                        modifier = Modifier.weight(1f),
+                        onSelect = { selectedLabel ->
+                            StatsTimeframe.entries
+                                .firstOrNull { it.label() == selectedLabel }
+                                ?.let(vm::updateTimeframe)
+                        }
+                    )
+
+                    TopRightFilterDropdown(
+                        selectedLabel = filterState.accountGroupId ?: "All Accounts",
+                        options = listOf("All Accounts") + accountGroupOptions,
+                        modifier = Modifier.weight(1f),
+                        onSelect = { selected ->
+                            vm.updateAccountGroup(if (selected == "All Accounts") null else selected)
+                        }
+                    )
+                }
+            }
         }
 
         if (isLoading) {
@@ -136,49 +164,38 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
 }
 
 @Composable
-private fun FilterRow(
-    selectedTimeframe: StatsTimeframe,
-    selectedAccountGroup: String?,
-    accountGroups: List<String>,
-    onTimeframeSelected: (StatsTimeframe) -> Unit,
-    onAccountGroupSelected: (String?) -> Unit
+private fun TopRightFilterDropdown(
+    selectedLabel: String,
+    options: List<String>,
+    modifier: Modifier = Modifier,
+    onSelect: (String) -> Unit
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth()
         ) {
-            StatsTimeframe.entries.forEach { timeframe ->
-                FilterChip(
-                    selected = timeframe == selectedTimeframe,
-                    onClick = { onTimeframeSelected(timeframe) },
-                    label = { Text(timeframe.label()) }
-                )
-            }
+            Text(
+                text = selectedLabel,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
         }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
         ) {
-            FilterChip(
-                selected = selectedAccountGroup == null,
-                onClick = { onAccountGroupSelected(null) },
-                label = { Text("All Accounts") }
-            )
-
-            accountGroups.forEach { group ->
-                FilterChip(
-                    selected = selectedAccountGroup == group,
-                    onClick = { onAccountGroupSelected(group) },
-                    label = { Text(group) }
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    onClick = {
+                        onSelect(option)
+                        expanded = false
+                    }
                 )
             }
         }
