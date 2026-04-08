@@ -1,6 +1,10 @@
 /**
  * SheetSync — Google Apps Script (Transactions + Dropdowns + Budgets + Accounts)
  *
+ * Transaction Date Output Contract:
+ * - doGet(target=transactions) must emit `date` as `yyyy-MM-dd`.
+ * - Android import uses this for month grouping in the Trans/History tab.
+ *
  * Deploy as Web App:
  * 1) Deploy > New Deployment
  * 2) Type: Web app

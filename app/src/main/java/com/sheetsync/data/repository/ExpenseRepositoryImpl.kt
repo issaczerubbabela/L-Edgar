@@ -1,5 +1,6 @@
 package com.sheetsync.data.repository
 
+import android.util.Log
 import com.sheetsync.BuildConfig
 import com.sheetsync.data.local.dao.AccountDao
 import com.sheetsync.data.local.dao.BudgetDao
@@ -20,6 +21,8 @@ class ExpenseRepositoryImpl @Inject constructor(
     private val dropdownOptionRepository: DropdownOptionRepository,
     private val budgetDao: BudgetDao
 ) : ExpenseRepository {
+
+    private val importLogTag = "ExpenseImport"
 
     override suspend fun save(record: ExpenseRecord): Long = dao.insert(record)
 
@@ -93,9 +96,17 @@ class ExpenseRepositoryImpl @Inject constructor(
 
         val toInsert = mutableListOf<ExpenseRecord>()
 
+        var unexpectedDateLogCount = 0
         records.forEach { dto ->
             val resolvedType = canonicalType(dto.type)
             val resolvedDate = normalizeDate(dto.date, dto.timestamp)
+            if (parseFlexibleDate(resolvedDate) == null && unexpectedDateLogCount < 5) {
+                Log.w(
+                    importLogTag,
+                    "Unparseable imported date. rawDate='${dto.date}', rawTimestamp='${dto.timestamp}', normalized='$resolvedDate', type='${dto.type}'"
+                )
+                unexpectedDateLogCount++
+            }
             val mappedCategory = when {
                 resolvedType.equals("Expense", ignoreCase = true) -> dto.expCategory
                 resolvedType.equals("Income", ignoreCase = true) -> dto.incCategory
