@@ -85,7 +85,7 @@ fun SettingsScreen(
             // ── Appearance ───────────────────────────────────────────────────
             Card(
                 shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -138,6 +138,13 @@ fun SettingsScreen(
                                     themeDropdownExpanded = false
                                 }
                             )
+                            DropdownMenuItem(
+                                text = { Text("Red") },
+                                onClick = {
+                                    vm.updateTheme(AppThemeOption.RED)
+                                    themeDropdownExpanded = false
+                                }
+                            )
                         }
                     }
                 }
@@ -145,7 +152,7 @@ fun SettingsScreen(
 
             Card(
                 shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(onClick = onNavigateToDropdownManagement)
@@ -239,7 +246,7 @@ private fun ImportCard(
 ) {
     Card(
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -283,4 +290,5 @@ private fun themeLabel(option: AppThemeOption): String = when (option) {
     AppThemeOption.SYSTEM -> "System MUI"
     AppThemeOption.LAVENDER -> "Lavender"
     AppThemeOption.TEAL -> "Teal"
+    AppThemeOption.RED -> "Red"
 }

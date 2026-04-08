@@ -11,6 +11,7 @@ enum class AppThemeOption {
     SYSTEM,
     LAVENDER,
     TEAL,
+    RED,
 }
 
 private val LavenderDarkColorScheme = darkColorScheme(
@@ -25,6 +26,20 @@ private val TealDarkColorScheme = darkColorScheme(
     primary = TealPrimary,
     secondary = TealSecondary,
     tertiary = TealTertiary,
+    primaryContainer = TealPrimaryContainer,
+    secondaryContainer = TealSecondaryContainer,
+    tertiaryContainer = TealTertiaryContainer,
+    background = DarkBackground,
+    surface = DarkSurface,
+)
+
+private val RedDarkColorScheme = darkColorScheme(
+    primary = RedPrimary,
+    secondary = RedSecondary,
+    tertiary = RedTertiary,
+    primaryContainer = RedPrimaryContainer,
+    secondaryContainer = RedSecondaryContainer,
+    tertiaryContainer = RedTertiaryContainer,
     background = DarkBackground,
     surface = DarkSurface,
 )
@@ -46,6 +61,7 @@ fun SheetSyncTheme(
         }
         AppThemeOption.LAVENDER -> LavenderDarkColorScheme
         AppThemeOption.TEAL -> TealDarkColorScheme
+        AppThemeOption.RED -> RedDarkColorScheme
     }
 
     MaterialTheme(
