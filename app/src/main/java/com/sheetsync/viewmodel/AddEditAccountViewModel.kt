@@ -25,12 +25,14 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 data class AddEditAccountUiState(
     val accountId: Long? = null,
     val selectedGroup: String = "",
     val accountName: String = "",
     val amountInput: String = "",
+    val initialBalanceDate: String = LocalDate.now().toString(),
     val description: String = "",
     val includeInTotals: Boolean = true,
     val isHidden: Boolean = false
@@ -82,7 +84,8 @@ class AddEditAccountViewModel @Inject constructor(
     fun startCreate() {
         _uiState.update {
             AddEditAccountUiState(
-                selectedGroup = accountGroups.value.firstOrNull().orEmpty()
+                    selectedGroup = accountGroups.value.firstOrNull().orEmpty(),
+                    initialBalanceDate = LocalDate.now().toString()
             )
         }
     }
@@ -100,6 +103,7 @@ class AddEditAccountViewModel @Inject constructor(
                     selectedGroup = account.groupName,
                     accountName = account.accountName,
                     amountInput = account.initialBalance.toString(),
+                    initialBalanceDate = account.initialBalanceDate,
                     description = account.description.orEmpty(),
                     includeInTotals = account.includeInTotals,
                     isHidden = account.isHidden
@@ -118,6 +122,10 @@ class AddEditAccountViewModel @Inject constructor(
 
     fun updateAmount(amount: String) {
         _uiState.update { it.copy(amountInput = amount) }
+    }
+
+    fun updateInitialBalanceDate(initialBalanceDate: String) {
+        _uiState.update { it.copy(initialBalanceDate = initialBalanceDate) }
     }
 
     fun updateDescription(description: String) {
@@ -161,6 +169,7 @@ class AddEditAccountViewModel @Inject constructor(
                     groupName = state.selectedGroup,
                     accountName = name,
                     initialBalance = parsedAmount,
+                    initialBalanceDate = state.initialBalanceDate,
                     isHidden = state.isHidden,
                     displayOrder = displayOrder,
                     description = state.description.trim().ifBlank { null },
@@ -177,14 +186,22 @@ class AddEditAccountViewModel @Inject constructor(
         val accountId = _uiState.value.accountId ?: return
 
         viewModelScope.launch {
-            if (accountRepository.hasTransactions(accountId)) {
-                _events.emit("Cannot delete account with existing transactions. Please Hide it instead.")
-                return@launch
-            }
-
             val account = accountRepository.getAccountById(accountId)
             if (account == null) {
                 _events.emit("Account not found")
+                return@launch
+            }
+
+            if (accountRepository.hasTransactions(accountId)) {
+                accountRepository.save(
+                    account.copy(
+                        isHidden = true,
+                        includeInTotals = false
+                    )
+                )
+                enqueueAccountBackupSync()
+                _events.emit("Account has linked transactions, so it was archived (hidden) instead of deleted.")
+                _deleted.emit(Unit)
                 return@launch
             }
 

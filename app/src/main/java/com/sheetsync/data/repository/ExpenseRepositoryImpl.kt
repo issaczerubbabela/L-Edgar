@@ -1,7 +1,6 @@
 package com.sheetsync.data.repository
 
 import android.util.Log
-import com.sheetsync.BuildConfig
 import com.sheetsync.data.local.dao.AccountDao
 import com.sheetsync.data.local.dao.BudgetDao
 import com.sheetsync.data.local.dao.ExpenseDao
@@ -9,10 +8,13 @@ import com.sheetsync.data.local.entity.Budget
 import com.sheetsync.data.local.entity.DropdownOption
 import com.sheetsync.data.local.entity.ExpenseRecord
 import com.sheetsync.data.local.entity.AccountRecord
+import com.sheetsync.data.preferences.ThemePreferenceRepository
 import com.sheetsync.data.remote.ApiService
 import com.sheetsync.data.remote.ImportRecordDto
+import com.sheetsync.sync.SyncUrlNotConfiguredException
 import com.sheetsync.util.parseFlexibleDate
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 
 class ExpenseRepositoryImpl @Inject constructor(
@@ -20,7 +22,8 @@ class ExpenseRepositoryImpl @Inject constructor(
     private val accountDao: AccountDao,
     private val apiService: ApiService,
     private val dropdownOptionRepository: DropdownOptionRepository,
-    private val budgetDao: BudgetDao
+    private val budgetDao: BudgetDao,
+    private val preferenceRepository: ThemePreferenceRepository
 ) : ExpenseRepository {
 
     private val importLogTag = "ExpenseImport"
@@ -115,6 +118,7 @@ class ExpenseRepositoryImpl @Inject constructor(
                     groupName = "Cash",
                     accountName = "Cash",
                     initialBalance = 0.0,
+                    initialBalanceDate = "1970-01-01",
                     isHidden = false
                 )
             )
@@ -123,6 +127,7 @@ class ExpenseRepositoryImpl @Inject constructor(
                 groupName = "Cash",
                 accountName = "Cash",
                 initialBalance = 0.0,
+                initialBalanceDate = "1970-01-01",
                 isHidden = false
             )
         }
@@ -240,8 +245,11 @@ class ExpenseRepositoryImpl @Inject constructor(
     }
 
     override suspend fun importFromGoogleSheets(): GoogleSheetsImportResult {
+        val scriptUrl = preferenceRepository.scriptUrl.first()
+            ?: throw SyncUrlNotConfiguredException()
+
         val dropdownResponse = apiService.importDropdownOptions(
-            url = BuildConfig.APPS_SCRIPT_URL,
+            url = scriptUrl,
             target = "dropdowns"
         )
         if (!dropdownResponse.isSuccessful) {
@@ -268,7 +276,7 @@ class ExpenseRepositoryImpl @Inject constructor(
         }
 
         val accountsResponse = apiService.importAccounts(
-            url = BuildConfig.APPS_SCRIPT_URL,
+            url = scriptUrl,
             target = "accounts"
         )
         if (!accountsResponse.isSuccessful) {
@@ -287,6 +295,7 @@ class ExpenseRepositoryImpl @Inject constructor(
                     groupName = dto.groupName,
                     accountName = dto.accountName,
                     initialBalance = dto.initialBalance,
+                    initialBalanceDate = dto.initialBalanceDate.ifBlank { "1970-01-01" },
                     isHidden = dto.isHidden,
                     displayOrder = dto.displayOrder ?: index,
                     description = dto.description,
@@ -298,7 +307,7 @@ class ExpenseRepositoryImpl @Inject constructor(
         }
 
         val budgetResponse = apiService.importBudgets(
-            url = BuildConfig.APPS_SCRIPT_URL,
+            url = scriptUrl,
             target = "budgets"
         )
         if (!budgetResponse.isSuccessful) {
@@ -327,7 +336,7 @@ class ExpenseRepositoryImpl @Inject constructor(
         }
 
         val txResponse = apiService.importRecords(
-            url = BuildConfig.APPS_SCRIPT_URL,
+            url = scriptUrl,
             target = "transactions"
         )
         if (!txResponse.isSuccessful) {

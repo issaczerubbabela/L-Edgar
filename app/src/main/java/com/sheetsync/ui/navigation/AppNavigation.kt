@@ -36,6 +36,7 @@ import com.sheetsync.ui.screens.FilteredTransactionsScreen
 import com.sheetsync.ui.screens.OverallAccountStatsScreen
 import com.sheetsync.ui.screens.SearchScreen
 import com.sheetsync.ui.screens.SettingsScreen
+import com.sheetsync.ui.screens.AppsScriptSetupScreen
 import com.sheetsync.viewmodel.ACCOUNT_ROUTE_ADD
 
 sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
@@ -61,6 +62,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object More : Screen("more", "More", Icons.Filled.MoreHoriz)
     object BudgetSetting : Screen("budget_setting", "BudgetSetting", Icons.Filled.Settings)
     object DropdownManagement : Screen("dropdown_management", "DropdownManagement", Icons.Filled.Settings)
+    object AppsScriptSetup : Screen("apps_script_setup", "AppsScriptSetup", Icons.Filled.Settings)
 }
 
 private const val LOG_BASE_ROUTE = "log"
@@ -230,6 +232,11 @@ fun AppNavigation() {
                         navController.navigate(Screen.DropdownManagement.route) {
                             launchSingleTop = true
                         }
+                    },
+                    onNavigateToAppsScriptSetup = {
+                        navController.navigate(Screen.AppsScriptSetup.route) {
+                            launchSingleTop = true
+                        }
                     }
                 )
             }
@@ -241,6 +248,12 @@ fun AppNavigation() {
             }
             composable(Screen.DropdownManagement.route) {
                 DropdownManagementScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(Screen.AppsScriptSetup.route) {
+                AppsScriptSetupScreen(
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() }
                 )

@@ -877,7 +877,7 @@ private fun MoneyManagerAppBar(
     TopAppBar(
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("l.edgar", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = contentColor)
+                Text("l.edgar's", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = contentColor)
                 Spacer(Modifier.width(8.dp))
                 IconButton(onClick = onPrevPeriod, modifier = Modifier.size(30.dp)) {
                     Icon(Icons.Filled.ChevronLeft, null, tint = contentColor)

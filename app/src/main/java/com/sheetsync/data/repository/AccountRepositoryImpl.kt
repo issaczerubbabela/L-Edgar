@@ -3,6 +3,7 @@ package com.sheetsync.data.repository
 import com.sheetsync.data.local.dao.AccountDao
 import com.sheetsync.data.local.dao.ExpenseDao
 import com.sheetsync.data.local.entity.AccountRecord
+import com.sheetsync.util.parseFlexibleDate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -20,19 +21,22 @@ class AccountRepositoryImpl @Inject constructor(
     override fun getAccountBalances(): Flow<List<AccountBalance>> =
         combine(dao.getAllAccounts(), expenseDao.getAllRecords()) { accounts, records ->
             val totalsByAccount = mutableMapOf<Long, Double>()
+            val asOfDateByAccount = accounts.associate { it.id to it.initialBalanceDate }
 
-            fun addDelta(accountId: Long?, delta: Double) {
+            fun addDelta(accountId: Long?, delta: Double, txDate: String) {
                 if (accountId == null) return
+                val asOfDate = asOfDateByAccount[accountId] ?: "1970-01-01"
+                if (!isOnOrAfterAsOf(txDate, asOfDate)) return
                 totalsByAccount[accountId] = (totalsByAccount[accountId] ?: 0.0) + delta
             }
 
             records.forEach { txn ->
                 when (txn.type) {
-                    "Income" -> addDelta(txn.toAccountId ?: txn.accountId, txn.amount)
-                    "Expense" -> addDelta(txn.fromAccountId ?: txn.accountId, -txn.amount)
+                    "Income" -> addDelta(txn.toAccountId ?: txn.accountId, txn.amount, txn.date)
+                    "Expense" -> addDelta(txn.fromAccountId ?: txn.accountId, -txn.amount, txn.date)
                     "Transfer" -> {
-                        addDelta(txn.fromAccountId, -txn.amount)
-                        addDelta(txn.toAccountId, txn.amount)
+                        addDelta(txn.fromAccountId, -txn.amount, txn.date)
+                        addDelta(txn.toAccountId, txn.amount, txn.date)
                     }
                 }
             }
@@ -42,6 +46,15 @@ class AccountRepositoryImpl @Inject constructor(
                 AccountBalance(accountId = account.id, balance = account.initialBalance + net)
             }
         }
+
+    private fun isOnOrAfterAsOf(txDate: String, asOfDate: String): Boolean {
+        val tx = parseFlexibleDate(txDate)
+        val asOf = parseFlexibleDate(asOfDate)
+        return when {
+            tx != null && asOf != null -> !tx.isBefore(asOf)
+            else -> txDate >= asOfDate
+        }
+    }
 
     override fun getAccountsWithBalances(): Flow<List<AccountWithBalance>> =
         combine(dao.getAllAccounts(), getAccountBalances()) { accounts, balances ->

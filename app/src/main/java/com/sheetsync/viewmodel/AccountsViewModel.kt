@@ -9,6 +9,7 @@ import com.sheetsync.data.local.entity.AccountRecord
 import com.sheetsync.data.local.entity.ExpenseRecord
 import com.sheetsync.data.repository.AccountRepository
 import com.sheetsync.data.repository.ExpenseRepository
+import com.sheetsync.util.parseFlexibleDate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -147,7 +148,13 @@ class AccountsViewModel @Inject constructor(
         viewModelScope.launch {
             val account = accountRepository.getAccountById(accountId) ?: return@launch
             if (accountRepository.hasTransactions(accountId)) {
-                _events.emit("Cannot delete account with existing transactions. Please Hide it instead.")
+                accountRepository.save(
+                    account.copy(
+                        isHidden = true,
+                        includeInTotals = false
+                    )
+                )
+                _events.emit("Account has linked transactions, so it was archived (hidden) instead of deleted.")
                 return@launch
             }
             accountRepository.delete(account)
@@ -195,6 +202,7 @@ data class AccountStatementItemUi(
 data class AccountDetailUiState(
     val accountId: Long = -1,
     val accountName: String = "",
+    val asOfDate: String = "1970-01-01",
     val selectedMonth: YearMonth = YearMonth.now(),
     val periodLabel: String = "",
     val deposit: Double = 0.0,
@@ -221,24 +229,32 @@ class AccountDetailViewModel @Inject constructor(
         .map { accounts -> accounts.firstOrNull { it.id == accountId } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    private val monthRecords: StateFlow<List<ExpenseRecord>> = selectedMonth
-        .flatMapLatest { ym ->
-            expenseRepository.getTransactionsForAccountInMonth(
-                accountId = accountId,
-                startOfMonth = ym.atDay(1).toString(),
-                endOfMonth = ym.atEndOfMonth().toString()
-            )
-        }
+    private val accountScopedRecords: StateFlow<List<ExpenseRecord>> = expenseRepository
+        .getRecordsForAccount(accountId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val historicalSum: StateFlow<Double?> = selectedMonth
-        .flatMapLatest { ym ->
-            expenseRepository.getHistoricalSumForAccount(
-                accountId = accountId,
-                beforeDate = ym.atDay(1).toString()
-            )
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    private val monthRecords: StateFlow<List<ExpenseRecord>> = combine(
+        selectedMonth,
+        accountScopedRecords
+    ) { ym, records ->
+        val startOfMonth = ym.atDay(1).toString()
+        val endOfMonth = ym.atEndOfMonth().toString()
+        records
+            .filter { it.date >= startOfMonth && it.date <= endOfMonth }
+            .sortedWith(compareBy<ExpenseRecord> { it.date }.thenBy { it.id })
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val historicalSum: StateFlow<Double?> = combine(
+        selectedMonth,
+        accountFlow,
+        accountScopedRecords
+    ) { ym, account, records ->
+        val beforeDate = ym.atDay(1).toString()
+        val asOfDate = account?.initialBalanceDate ?: "1970-01-01"
+        records
+            .filter { isOnOrAfterAsOf(it.date, asOfDate) && it.date < beforeDate }
+            .sumOf { accountDelta(it, accountId, asOfDate) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     init {
         viewModelScope.launch {
@@ -263,11 +279,13 @@ class AccountDetailViewModel @Inject constructor(
 
         val sorted = records.sortedWith(compareBy<ExpenseRecord> { it.date }.thenBy { it.id })
 
+        val asOfDate = account?.initialBalanceDate ?: "1970-01-01"
+
         val deposit = records.sumOf { record ->
-            if (record.type == "Income") record.amount else 0.0
+            if (record.type == "Income" && accountDelta(record, accountId, asOfDate) > 0.0) record.amount else 0.0
         }
         val withdrawal = records.sumOf { record ->
-            if (record.type == "Expense") record.amount else 0.0
+            if (record.type == "Expense" && accountDelta(record, accountId, asOfDate) < 0.0) record.amount else 0.0
         }
         val total = deposit - withdrawal
 
@@ -276,7 +294,7 @@ class AccountDetailViewModel @Inject constructor(
 
         var running = baseBalance
         val statement = sorted.map { record ->
-            running += accountDelta(record, accountId)
+            running += accountDelta(record, accountId, asOfDate)
             val item = AccountStatementItemUi(
                 id = record.id,
                 date = record.date,
@@ -295,6 +313,7 @@ class AccountDetailViewModel @Inject constructor(
         AccountDetailUiState(
             accountId = accountId,
             accountName = account?.accountName ?: "Account",
+            asOfDate = account?.initialBalanceDate ?: "1970-01-01",
             selectedMonth = ym,
             periodLabel = ym.format(periodFormatter),
             deposit = deposit,
@@ -321,10 +340,13 @@ class AccountDetailViewModel @Inject constructor(
         selectedMonth.value = YearMonth.of(year, month.coerceIn(1, 12))
     }
 
-    private fun accountDelta(record: ExpenseRecord, accountId: Long): Double {
+    private fun accountDelta(record: ExpenseRecord, accountId: Long, asOfDate: String): Double {
+        if (!isOnOrAfterAsOf(record.date, asOfDate)) return 0.0
         return when {
-            record.type == "Income" && record.accountId == accountId -> record.amount
-            record.type == "Expense" && record.accountId == accountId -> -record.amount
+            record.type == "Income" && (record.toAccountId == accountId || record.accountId == accountId) -> record.amount
+            record.type == "Expense" && (record.fromAccountId == accountId || record.accountId == accountId) -> -record.amount
+            record.type == "Transfer" && record.toAccountId == accountId -> record.amount
+            record.type == "Transfer" && record.fromAccountId == accountId -> -record.amount
             else -> 0.0
         }
     }
@@ -334,10 +356,11 @@ class AccountDetailViewModel @Inject constructor(
         baseBalance: Double,
         ym: YearMonth
     ): Pair<List<Double>, List<Double>> {
+        val asOfDate = accountFlow.value?.initialBalanceDate ?: "1970-01-01"
         val dailyNetByDay = records.groupBy {
             runCatching { LocalDate.parse(it.date).dayOfMonth }.getOrDefault(1)
         }.mapValues { (_, txns) ->
-            txns.sumOf { accountDelta(it, accountId) }
+            txns.sumOf { accountDelta(it, accountId, asOfDate) }
         }
 
         var running = baseBalance
@@ -349,5 +372,14 @@ class AccountDetailViewModel @Inject constructor(
             yValues += running
         }
         return xValues to yValues
+    }
+
+    private fun isOnOrAfterAsOf(txDate: String, asOfDate: String): Boolean {
+        val tx = parseFlexibleDate(txDate)
+        val asOf = parseFlexibleDate(asOfDate)
+        return when {
+            tx != null && asOf != null -> !tx.isBefore(asOf)
+            else -> txDate >= asOfDate
+        }
     }
 }

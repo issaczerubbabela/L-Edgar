@@ -24,12 +24,14 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import javax.inject.Inject
 
 data class AddAccountUiState(
     val selectedGroup: String = "",
     val accountName: String = "",
     val amountInput: String = "",
+    val initialBalanceDate: String = LocalDate.now().toString(),
     val errorMessage: String? = null
 )
 
@@ -80,6 +82,10 @@ class AddAccountViewModel @Inject constructor(
         _uiState.update { it.copy(amountInput = amount, errorMessage = null) }
     }
 
+    fun updateInitialBalanceDate(initialBalanceDate: String) {
+        _uiState.update { it.copy(initialBalanceDate = initialBalanceDate, errorMessage = null) }
+    }
+
     fun save() {
         val state = _uiState.value
         val trimmedName = state.accountName.trim()
@@ -105,6 +111,7 @@ class AddAccountViewModel @Inject constructor(
                     groupName = state.selectedGroup,
                     accountName = trimmedName,
                     initialBalance = parsedAmount,
+                    initialBalanceDate = state.initialBalanceDate,
                     displayOrder = nextDisplayOrder
                 )
             )

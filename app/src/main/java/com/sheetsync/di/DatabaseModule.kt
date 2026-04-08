@@ -49,6 +49,12 @@ object DatabaseModule {
         }
     }
 
+    private val MIGRATION_13_14 = object : Migration(13, 14) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE account_records ADD COLUMN initialBalanceDate TEXT NOT NULL DEFAULT '1970-01-01'")
+        }
+    }
+
     private fun seedDropdownDefaultsIfEmpty(db: SupportSQLiteDatabase) {
         val cursor = db.query("SELECT COUNT(*) FROM dropdown_options")
         val hasRows = cursor.use {
@@ -147,6 +153,7 @@ object DatabaseModule {
             .addMigrations(MIGRATION_10_11)
             .addMigrations(MIGRATION_11_12)
             .addMigrations(MIGRATION_12_13)
+            .addMigrations(MIGRATION_13_14)
             .fallbackToDestructiveMigration()
             .addCallback(callback)
             .build()

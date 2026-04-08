@@ -120,41 +120,43 @@ class OverallAccountStatsViewModel @Inject constructor(
         val months = (5 downTo 0).map { selectedYm.minusMonths(it.toLong()) }
         val firstMonth = months.firstOrNull() ?: selectedYm
         val monthSet = months.toSet()
+        val asOfDateByAccount = accounts.associate { it.id to it.initialBalanceDate }
 
         val startingBalance = accounts.sumOf { it.initialBalance }
         var preRangeNet = 0.0
 
+        val netByMonth = mutableMapOf<YearMonth, Double>()
         val incomeByMonth = mutableMapOf<YearMonth, Double>()
         val expenseByMonth = mutableMapOf<YearMonth, Double>()
 
         records.forEach { record ->
             val date = parseFlexibleDate(record.date) ?: return@forEach
             val recordMonth = YearMonth.from(date)
+            val deltas = accountDeltas(record, asOfDateByAccount)
+            if (deltas.isEmpty()) return@forEach
+
+            val netDelta = deltas.sum()
+            val positiveDelta = deltas.filter { it > 0.0 }.sum()
+            val negativeDeltaAbs = deltas.filter { it < 0.0 }.sumOf { kotlin.math.abs(it) }
 
             if (recordMonth < firstMonth) {
-                preRangeNet += netAmount(record)
+                preRangeNet += netDelta
                 return@forEach
             }
 
             if (recordMonth !in monthSet) return@forEach
-
-            when {
-                record.type.equals("Income", ignoreCase = true) -> {
-                    incomeByMonth[recordMonth] = (incomeByMonth[recordMonth] ?: 0.0) + record.amount
-                }
-
-                record.type.equals("Expense", ignoreCase = true) -> {
-                    expenseByMonth[recordMonth] = (expenseByMonth[recordMonth] ?: 0.0) + record.amount
-                }
-            }
+            netByMonth[recordMonth] = (netByMonth[recordMonth] ?: 0.0) + netDelta
+            incomeByMonth[recordMonth] = (incomeByMonth[recordMonth] ?: 0.0) + positiveDelta
+            expenseByMonth[recordMonth] = (expenseByMonth[recordMonth] ?: 0.0) + negativeDeltaAbs
         }
 
         var runningBalance = startingBalance + preRangeNet
 
         return months.map { ym ->
+            val monthNet = netByMonth[ym] ?: 0.0
             val income = incomeByMonth[ym] ?: 0.0
             val expense = expenseByMonth[ym] ?: 0.0
-            runningBalance += (income - expense)
+            runningBalance += monthNet
             MonthlyStatsPoint(
                 month = ym,
                 label = ym.format(monthLabelFormatter),
@@ -165,11 +167,38 @@ class OverallAccountStatsViewModel @Inject constructor(
         }
     }
 
-    private fun netAmount(record: ExpenseRecord): Double {
-        return when {
-            record.type.equals("Income", ignoreCase = true) -> record.amount
-            record.type.equals("Expense", ignoreCase = true) -> -record.amount
-            else -> 0.0
+    private fun accountDeltas(
+        record: ExpenseRecord,
+        asOfDateByAccount: Map<Long, String>
+    ): List<Double> {
+        fun isAfterAsOf(accountId: Long?): Boolean {
+            if (accountId == null) return false
+            val asOf = asOfDateByAccount[accountId] ?: "1970-01-01"
+            val txDate = parseFlexibleDate(record.date)
+            val asOfDate = parseFlexibleDate(asOf)
+            return when {
+                txDate != null && asOfDate != null -> !txDate.isBefore(asOfDate)
+                else -> record.date >= asOf
+            }
         }
+
+        val deltas = mutableListOf<Double>()
+        when {
+            record.type.equals("Income", ignoreCase = true) -> {
+                val target = record.toAccountId ?: record.accountId
+                if (isAfterAsOf(target)) deltas += record.amount
+            }
+
+            record.type.equals("Expense", ignoreCase = true) -> {
+                val source = record.fromAccountId ?: record.accountId
+                if (isAfterAsOf(source)) deltas += -record.amount
+            }
+
+            record.type.equals("Transfer", ignoreCase = true) -> {
+                if (isAfterAsOf(record.fromAccountId)) deltas += -record.amount
+                if (isAfterAsOf(record.toAccountId)) deltas += record.amount
+            }
+        }
+        return deltas
     }
 }

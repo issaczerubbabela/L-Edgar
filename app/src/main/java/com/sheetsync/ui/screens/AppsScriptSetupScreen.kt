@@ -1,9 +1,65 @@
+package com.sheetsync.ui.screens
+
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.background
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.sheetsync.viewmodel.SettingsViewModel
+
+private const val SCRIPT_URL_PREFIX = "https://script.google.com/macros/s/"
+
+private val APPS_SCRIPT_CODE = """
 /**
- * SheetSync — Google Apps Script (Transactions + Dropdowns + Budgets + Accounts)
+ * SheetSync - Google Apps Script (Transactions + Dropdowns + Budgets + Accounts)
  *
  * Transaction Date Output Contract:
  * - doGet(target=transactions) must emit `date` as `yyyy-MM-dd`.
  * - Android import uses this for month grouping in the Trans/History tab.
+ *
+ * Deploy as Web App:
+ * 1) Deploy > New Deployment
+ * 2) Type: Web app
+ * 3) Execute as: Me
+ * 4) Who has access: Anyone
+ * 5) Copy the /exec URL and update APPS_SCRIPT_URL
  */
 
 var TRANSACTIONS_SHEET = "_responses";
@@ -40,9 +96,6 @@ function doPost(e) {
     var records = payload.records || [];
     var timeZone = Session.getScriptTimeZone();
 
-    // =============================================================
-    // ACCOUNTS BACKUP (Updated with Current Balance)
-    // =============================================================
     if (target === "accounts" && action === "backup") {
       var accountSheet = ensureSheet(spreadsheet, ACCOUNTS_SHEET);
       accountSheet.clear();
@@ -53,7 +106,7 @@ function doPost(e) {
         "Description",
         "Initial Balance",
         "Initial Balance Date",
-        "Current Balance", // <-- ADDED CURRENT BALANCE
+        "Current Balance",
         "Is Hidden",
         "Include In Totals",
         "Display Order",
@@ -75,17 +128,14 @@ function doPost(e) {
           r.description || "",
           Number(r.initialBalance) || 0,
           r.initialBalanceDate || "",
-          Number(
-            r.currentBalance !== undefined
-              ? r.currentBalance
-              : r.initialBalance,
-          ) || 0, // <-- ADDED DATA
+          Number(r.currentBalance !== undefined ? r.currentBalance : r.initialBalance) || 0,
           toBool(r.isHidden),
           toBool(incTotals),
           Number(r.displayOrder) || 0,
           backupTime,
         ]);
       });
+
       return jsonOut({
         status: "ok",
         type: "accounts_backed_up",
@@ -93,9 +143,6 @@ function doPost(e) {
       });
     }
 
-    // =============================================================
-    // DROPDOWNS & BUDGETS BACKUP
-    // =============================================================
     if (
       (target === "dropdowns" || target === "budgets") &&
       action === "backup"
@@ -146,6 +193,7 @@ function doPost(e) {
           ]);
         }
       });
+
       return jsonOut({
         status: "ok",
         type: target + "_backed_up",
@@ -153,9 +201,6 @@ function doPost(e) {
       });
     }
 
-    // =============================================================
-    // TRANSACTIONS LOGIC
-    // =============================================================
     var txSheet = ensureSheet(spreadsheet, TRANSACTIONS_SHEET);
     if (txSheet.getLastRow() === 0) {
       txSheet.appendRow([
@@ -169,17 +214,17 @@ function doPost(e) {
         "Account Name",
         "Remarks",
         "Synced At",
-        "Is Bookmarked",
       ]);
     }
 
     if (action === "delete") {
       var targetTimestamp = String(payload.targetTimestamp || "");
-      if (!targetTimestamp)
+      if (!targetTimestamp) {
         return jsonOut({
           status: "error",
           message: "targetTimestamp is required for delete",
         });
+      }
 
       var displayData = txSheet.getDataRange().getDisplayValues();
       for (var i = displayData.length - 1; i >= 1; i--) {
@@ -188,6 +233,7 @@ function doPost(e) {
           return jsonOut({ status: "ok", action: "deleted", count: 1 });
         }
       }
+
       return jsonOut({ status: "ok", action: "deleted", count: 0 });
     }
 
@@ -216,7 +262,6 @@ function doPost(e) {
         r.accountName || r.paymentMode || "",
         r.remarks || "",
         syncedAtIso,
-        toBool(r.isBookmarked),
       ];
 
       if (action === "update") {
@@ -248,12 +293,10 @@ function doGet(e) {
       (e && e.parameter && e.parameter.target) || "transactions",
     ).toLowerCase();
 
-    // =============================================================
-    // ACCOUNTS FETCH (Indices shifted to accommodate Current Balance)
-    // =============================================================
     if (target === "accounts") {
       var accountSheet = spreadsheet.getSheetByName(ACCOUNTS_SHEET);
       if (!accountSheet) return jsonOut({ status: "ok", data: [] });
+
       var accountData = accountSheet.getDataRange().getValues();
       var accounts = [];
       for (var i = 1; i < accountData.length; i++) {
@@ -264,11 +307,11 @@ function doGet(e) {
           description: String(accountData[i][3] || ""),
           initialBalance: Number(accountData[i][4]) || 0,
           initialBalanceDate: String(accountData[i][5] || ""),
-          currentBalance: Number(accountData[i][6]) || 0, // <-- FETCH MAPPED
-          isHidden: toBool(accountData[i][7]), // Index shifted from 6 -> 7
+          currentBalance: Number(accountData[i][6]) || 0,
+          isHidden: toBool(accountData[i][7]),
           includeInTotals:
-            accountData[i][8] === "" ? true : toBool(accountData[i][8]), // Shifted 7 -> 8
-          displayOrder: Number(accountData[i][9]) || 0, // Shifted 8 -> 9
+            accountData[i][8] === "" ? true : toBool(accountData[i][8]),
+          displayOrder: Number(accountData[i][9]) || 0,
         });
       }
       return jsonOut({ status: "ok", data: accounts });
@@ -277,6 +320,7 @@ function doGet(e) {
     if (target === "dropdowns") {
       var dropdownSheet = spreadsheet.getSheetByName(DROPDOWNS_SHEET);
       if (!dropdownSheet) return jsonOut({ status: "ok", data: [] });
+
       var dropdownData = dropdownSheet.getDataRange().getValues();
       var dropdowns = [];
       for (var d = 1; d < dropdownData.length; d++) {
@@ -293,6 +337,7 @@ function doGet(e) {
     if (target === "budgets") {
       var budgetSheet = spreadsheet.getSheetByName(BUDGETS_SHEET);
       if (!budgetSheet) return jsonOut({ status: "ok", data: [] });
+
       var budgetData = budgetSheet.getDataRange().getValues();
       var budgets = [];
       for (var b = 1; b < budgetData.length; b++) {
@@ -306,9 +351,6 @@ function doGet(e) {
       return jsonOut({ status: "ok", data: budgets });
     }
 
-    // =============================================================
-    // TRANSACTIONS FETCH
-    // =============================================================
     var txSheet = spreadsheet.getSheetByName(TRANSACTIONS_SHEET);
     if (!txSheet) return jsonOut({ status: "ok", count: 0, data: [] });
 
@@ -325,10 +367,11 @@ function doGet(e) {
         incCategory: String(row[4] || ""),
         description: String(row[5] || ""),
         amount: Number(row[6]) || 0,
+        // Keep paymentMode key for backward compatibility with Android import DTO.
+        paymentMode: String(row[7] || ""),
         accountName: String(row[7] || ""),
         remarks: String(row[8] || ""),
         syncedAt: row[9] ? String(row[9]) : "",
-        isBookmarked: row[10] ? toBool(row[10]) : false,
       });
     }
 
@@ -346,6 +389,9 @@ function formatDate(value) {
     var d = String(value.getDate()).padStart(2, "0");
     return y + "-" + m + "-" + d;
   }
+
+  // Handle Date-like strings such as
+  // "Mon Apr 06 2026 00:00:00 GMT+0530 (India Standard Time)".
   var parsed = new Date(value);
   if (!isNaN(parsed.getTime())) {
     var py = parsed.getFullYear();
@@ -353,5 +399,123 @@ function formatDate(value) {
     var pd = String(parsed.getDate()).padStart(2, "0");
     return py + "-" + pm + "-" + pd;
   }
+
   return String(value);
+}
+""".trimIndent()
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AppsScriptSetupScreen(
+    innerPadding: PaddingValues,
+    onBack: () -> Unit,
+    vm: SettingsViewModel = hiltViewModel()
+) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+    val configuredUrl by vm.scriptUrl.collectAsState()
+
+    var urlInput by remember(configuredUrl) { mutableStateOf(configuredUrl.orEmpty()) }
+    var showValidationError by remember { mutableStateOf(false) }
+
+    Scaffold(
+      containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = { Text("Database Setup") },
+                colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.background
+          ),
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { scaffoldPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+              .background(MaterialTheme.colorScheme.background)
+                .padding(scaffoldPadding)
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("Step 1: The Code", style = MaterialTheme.typography.titleMedium)
+            Text(
+              "Deploy a private Google Apps Script as your sync backend. Copy this script and paste it into Apps Script.",
+              style = MaterialTheme.typography.bodyMedium
+            )
+            Button(onClick = {
+              clipboardManager.setText(AnnotatedString(APPS_SCRIPT_CODE))
+              Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
+            }) {
+              Text("Copy Script Code")
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text("Step 2: Deployment", style = MaterialTheme.typography.titleMedium)
+            Text(
+              "- Create a new Google Sheet\n- Go to Extensions > Apps Script\n- Paste the copied code\n- Click Deploy > New Deployment > Web App (Execute as: Me, Access: Anyone)\n- Copy the resulting Web App URL",
+              style = MaterialTheme.typography.bodyMedium
+            )
+            TextButton(onClick = {
+              val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://docs.google.com/spreadsheets"))
+              context.startActivity(intent)
+            }) {
+              Text("Open Google Sheets")
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text("Step 3: Connect", style = MaterialTheme.typography.titleMedium)
+            Text("Paste your deployed Web App URL and save it.", style = MaterialTheme.typography.bodyMedium)
+
+            OutlinedTextField(
+              value = urlInput,
+              onValueChange = {
+                urlInput = it
+                showValidationError = false
+              },
+              modifier = Modifier.fillMaxWidth(),
+              singleLine = true,
+              label = { Text("Web App URL") },
+              isError = showValidationError,
+              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+            )
+
+            if (showValidationError) {
+              Text(
+                text = "URL must start with $SCRIPT_URL_PREFIX",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 2.dp)
+              )
+            }
+
+            Button(
+              onClick = {
+                val normalized = urlInput.trim()
+                val isValid = normalized.startsWith(SCRIPT_URL_PREFIX)
+                if (!isValid) {
+                  showValidationError = true
+                  return@Button
+                }
+                vm.updateScriptUrl(normalized)
+                Toast.makeText(context, "Connected", Toast.LENGTH_SHORT).show()
+              },
+              modifier = Modifier.padding(top = 4.dp)
+            ) {
+              Text("Save & Connect")
+            }
+        }
+    }
 }

@@ -5,6 +5,8 @@ data class AccountSyncDto(
     val groupName: String,
     val accountName: String,
     val initialBalance: Double,
+    val initialBalanceDate: String,
+    val currentBalance: Double? = null,
     val isHidden: Boolean,
     val displayOrder: Int = 0,
     val description: String? = null,

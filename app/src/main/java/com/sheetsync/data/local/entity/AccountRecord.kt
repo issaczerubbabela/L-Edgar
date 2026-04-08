@@ -9,6 +9,7 @@ data class AccountRecord(
     val groupName: String,
     val accountName: String,
     val initialBalance: Double,
+    val initialBalanceDate: String = "1970-01-01",
     val isHidden: Boolean = false,
     val displayOrder: Int = 0,
     val description: String? = null,

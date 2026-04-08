@@ -205,17 +205,21 @@ interface ExpenseDao {
 
     @Query(
         """
-        SELECT SUM(
+                SELECT COALESCE(SUM(
             CASE
-                WHEN type = 'Income' THEN amount
-                WHEN type = 'Expense' THEN -amount
+                                WHEN e.type = 'Income' AND (e.toAccountId = :accountId OR e.accountId = :accountId) THEN e.amount
+                                WHEN e.type = 'Expense' AND (e.fromAccountId = :accountId OR e.accountId = :accountId) THEN -e.amount
+                                WHEN e.type = 'Transfer' AND e.toAccountId = :accountId THEN e.amount
+                                WHEN e.type = 'Transfer' AND e.fromAccountId = :accountId THEN -e.amount
                 ELSE 0
             END
-        )
-        FROM expense_records
-        WHERE accountId = :accountId
-          AND date < :beforeDate
-          AND syncAction != 'DELETE'
+                ), 0)
+                FROM expense_records e
+                INNER JOIN account_records a ON a.id = :accountId
+                WHERE (e.accountId = :accountId OR e.fromAccountId = :accountId OR e.toAccountId = :accountId)
+                    AND e.date < :beforeDate
+                    AND e.date >= a.initialBalanceDate
+                    AND e.syncAction != 'DELETE'
         """
     )
     fun getHistoricalSumForAccount(accountId: Long, beforeDate: String): Flow<Double?>
@@ -233,6 +237,7 @@ interface ExpenseDao {
         LEFT JOIN expense_records e
             ON e.accountId = a.id
            AND e.syncAction != 'DELETE'
+              AND e.date >= a.initialBalanceDate
            AND e.date <= :endDate
         WHERE a.id = :accountId
         """
@@ -254,6 +259,7 @@ interface ExpenseDao {
         LEFT JOIN expense_records e
             ON (e.fromAccountId = a.id OR e.toAccountId = a.id)
            AND e.syncAction != 'DELETE'
+           AND e.date >= a.initialBalanceDate
         WHERE a.id = :accountId
         """
     )

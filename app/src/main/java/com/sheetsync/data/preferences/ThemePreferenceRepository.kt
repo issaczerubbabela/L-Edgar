@@ -22,6 +22,7 @@ class ThemePreferenceRepository @Inject constructor(
 ) {
     private val THEME_PREFERENCE = stringPreferencesKey("theme_preference")
     private val IS_DARK_THEME = booleanPreferencesKey("is_dark_theme")
+    private val SCRIPT_URL = stringPreferencesKey("script_url")
 
     val themePreference: Flow<AppThemeOption> = context.dataStore.data.map { prefs ->
         val raw = (prefs[THEME_PREFERENCE] ?: AppThemeOption.SYSTEM.name).uppercase()
@@ -31,6 +32,13 @@ class ThemePreferenceRepository @Inject constructor(
     /** Backward-compatible dark mode flow while callers migrate to [themePreference]. */
     val isDarkTheme: Flow<Boolean> = context.dataStore.data
         .map { prefs -> prefs[IS_DARK_THEME] ?: true }
+
+    val scriptUrl: Flow<String?> = context.dataStore.data
+        .map { prefs ->
+            prefs[SCRIPT_URL]
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+        }
 
     suspend fun updateTheme(option: AppThemeOption) {
         context.dataStore.edit { prefs ->
@@ -46,6 +54,17 @@ class ThemePreferenceRepository @Inject constructor(
             prefs[IS_DARK_THEME] = isDark
             if (!isDark) {
                 prefs[THEME_PREFERENCE] = AppThemeOption.LAVENDER.name
+            }
+        }
+    }
+
+    suspend fun updateScriptUrl(newUrl: String) {
+        context.dataStore.edit { prefs ->
+            val normalized = newUrl.trim()
+            if (normalized.isEmpty()) {
+                prefs.remove(SCRIPT_URL)
+            } else {
+                prefs[SCRIPT_URL] = normalized
             }
         }
     }

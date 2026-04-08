@@ -162,6 +162,11 @@ fun AccountDetailScreen(
                 ) {
                     Text("Statement", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                     Text(statementLabel, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    Text(
+                        text = "As-Of: ${state.asOfDate}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp
+                    )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -310,6 +315,7 @@ fun AccountDetailScreen(
             onGroupChange = formVm::updateGroup,
             onNameChange = formVm::updateName,
             onAmountChange = formVm::updateAmount,
+            onInitialBalanceDateChange = formVm::updateInitialBalanceDate,
             onDescriptionChange = formVm::updateDescription,
             onIncludeInTotalsChange = formVm::updateIncludeInTotals,
             onHiddenChange = formVm::updateHidden,

@@ -7,9 +7,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.workDataOf
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import com.sheetsync.data.local.entity.ExpenseRecord
 import com.sheetsync.data.preferences.ThemePreferenceRepository
 import com.sheetsync.data.repository.ExpenseRepository
+import com.sheetsync.sync.SyncWorker
 import com.sheetsync.ui.theme.AppThemeOption
 import com.sheetsync.util.CsvParser
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -43,8 +51,13 @@ sealed class SettingsUiEvent {
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val repository: ExpenseRepository,
-    private val themeRepository: ThemePreferenceRepository
+    private val themeRepository: ThemePreferenceRepository,
+    private val workManager: WorkManager
 ) : ViewModel() {
+
+    init {
+        observeBackupStatus()
+    }
 
     val themeState: StateFlow<AppThemeOption> = themeRepository.themePreference
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppThemeOption.SYSTEM)
@@ -53,12 +66,40 @@ class SettingsViewModel @Inject constructor(
     val isDarkTheme: StateFlow<Boolean> = themeRepository.isDarkTheme
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
+    val scriptUrl: StateFlow<String?> = themeRepository.scriptUrl
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     fun updateTheme(option: AppThemeOption) {
         viewModelScope.launch { themeRepository.updateTheme(option) }
     }
 
     fun toggleTheme() {
         viewModelScope.launch { themeRepository.setDarkTheme(!isDarkTheme.value) }
+    }
+
+    fun updateScriptUrl(newUrl: String) {
+        viewModelScope.launch { themeRepository.updateScriptUrl(newUrl) }
+    }
+
+    fun backupToGoogleSheets() {
+        if (_backupState.value is ImportState.Loading) return
+        viewModelScope.launch {
+            _backupState.value = ImportState.Loading
+            backupRequestedFromSettings = true
+
+            val request = OneTimeWorkRequestBuilder<SyncWorker>()
+                .setConstraints(
+                    Constraints.Builder()
+                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .build()
+                )
+                .setInputData(workDataOf(SyncWorker.KEY_BACKUP_ONLY to true))
+                .addTag(SyncWorker.TAG)
+                .build()
+
+            workManager.enqueueUniqueWork(SyncWorker.TAG, ExistingWorkPolicy.REPLACE, request)
+            _uiEvents.emit(SettingsUiEvent.ShowMessage("Backup started. Syncing accounts, budgets, and dropdown options to Google Sheets."))
+        }
     }
 
     // ── Reset confirmation state ─────────────────────────────────────────────
@@ -71,6 +112,11 @@ class SettingsViewModel @Inject constructor(
 
     private val _csvState = MutableStateFlow<ImportState>(ImportState.Idle)
     val csvImportState: StateFlow<ImportState> = _csvState
+
+    private val _backupState = MutableStateFlow<ImportState>(ImportState.Idle)
+    val backupState: StateFlow<ImportState> = _backupState
+
+    private var backupRequestedFromSettings: Boolean = false
 
     private val _uiEvents = MutableSharedFlow<SettingsUiEvent>(replay = 0)
     val uiEvents: SharedFlow<SettingsUiEvent> = _uiEvents.asSharedFlow()
@@ -142,4 +188,40 @@ class SettingsViewModel @Inject constructor(
 
     fun resetSheetsState() { _sheetsState.value = ImportState.Idle }
     fun resetCsvState() { _csvState.value = ImportState.Idle }
+    fun resetBackupState() { _backupState.value = ImportState.Idle }
+
+    private fun observeBackupStatus() {
+        viewModelScope.launch {
+            workManager.getWorkInfosForUniqueWorkFlow(SyncWorker.TAG).collect { infos ->
+                if (!backupRequestedFromSettings) return@collect
+
+                val latest = infos.firstOrNull() ?: return@collect
+                when (latest.state) {
+                    WorkInfo.State.ENQUEUED,
+                    WorkInfo.State.RUNNING,
+                    WorkInfo.State.BLOCKED -> {
+                        _backupState.value = ImportState.Loading
+                    }
+
+                    WorkInfo.State.SUCCEEDED -> {
+                        val dropdownCount = latest.outputData.getInt(SyncWorker.KEY_DROPDOWN_BACKUP_COUNT, 0)
+                        val budgetCount = latest.outputData.getInt(SyncWorker.KEY_BUDGET_BACKUP_COUNT, 0)
+                        val accountCount = latest.outputData.getInt(SyncWorker.KEY_ACCOUNTS_BACKUP_COUNT, 0)
+                        val total = (dropdownCount + budgetCount + accountCount).coerceAtLeast(0)
+                        _backupState.value = ImportState.Success(imported = total, skipped = 0)
+                        backupRequestedFromSettings = false
+                    }
+
+                    WorkInfo.State.FAILED,
+                    WorkInfo.State.CANCELLED -> {
+                        val reason = latest.outputData.getString(SyncWorker.KEY_ERROR_MESSAGE)
+                            ?: "Backup failed"
+                        _backupState.value = ImportState.Error(reason)
+                        _uiEvents.emit(SettingsUiEvent.ShowMessage(reason))
+                        backupRequestedFromSettings = false
+                    }
+                }
+            }
+        }
+    }
 }

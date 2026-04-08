@@ -294,6 +294,7 @@ fun AccountsScreen(
             onGroupChange = formVm::updateGroup,
             onNameChange = formVm::updateName,
             onAmountChange = formVm::updateAmount,
+            onInitialBalanceDateChange = formVm::updateInitialBalanceDate,
             onDescriptionChange = formVm::updateDescription,
             onIncludeInTotalsChange = formVm::updateIncludeInTotals,
             onHiddenChange = formVm::updateHidden,

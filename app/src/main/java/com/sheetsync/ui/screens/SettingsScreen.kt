@@ -5,7 +5,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -28,11 +27,14 @@ import com.sheetsync.viewmodel.SettingsViewModel
 fun SettingsScreen(
     innerPadding: PaddingValues,
     onNavigateToDropdownManagement: () -> Unit,
+    onNavigateToAppsScriptSetup: () -> Unit,
     vm: SettingsViewModel = hiltViewModel()
 ) {
     val sheetsState  by vm.sheetsImportState.collectAsState()
     val csvState     by vm.csvImportState.collectAsState()
+    val backupState  by vm.backupState.collectAsState()
     val currentTheme by vm.themeState.collectAsState()
+    val scriptUrl by vm.scriptUrl.collectAsState()
     var themeDropdownExpanded by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -81,7 +83,9 @@ fun SettingsScreen(
         ) {
             Text("Settings", style = MaterialTheme.typography.headlineMedium)
 
-            SettingsRow(title = "Theme", icon = Icons.Filled.Palette) {
+            Text("Appearance", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            SettingsListItem(title = "Theme", icon = Icons.Filled.Palette) {
                 ExposedDropdownMenuBox(
                     expanded = themeDropdownExpanded,
                     onExpandedChange = { themeDropdownExpanded = !themeDropdownExpanded }
@@ -135,7 +139,56 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsRow(
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            Text("Database Setup", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            SettingsListItem(
+                title = "Database Setup (Sheets)",
+                icon = Icons.Filled.CloudSync,
+                modifier = Modifier.clickable(onClick = onNavigateToAppsScriptSetup)
+            ) {
+                val isConnected = !scriptUrl.isNullOrBlank()
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isConnected) Icons.Filled.CheckCircle else Icons.Filled.ErrorOutline,
+                        contentDescription = null,
+                        tint = if (isConnected) IncomeGreen else ExpenseRed
+                    )
+                    Text(
+                        text = if (isConnected) "Connected" else "Not Connected",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (isConnected) IncomeGreen else ExpenseRed
+                    )
+                }
+            }
+
+            SettingsListItem(title = "Backup to Google Sheets", icon = Icons.Filled.CloudUpload) {
+                ImportActionControl(
+                    state = backupState,
+                    idleIcon = Icons.Filled.CloudUpload,
+                    onRun = vm::backupToGoogleSheets,
+                    onDismiss = vm::resetBackupState
+                )
+            }
+
+            SettingsListItem(title = "Import from Google Sheets", icon = Icons.Filled.CloudDownload) {
+                ImportActionControl(
+                    state = sheetsState,
+                    idleIcon = Icons.Filled.CloudDownload,
+                    onRun = vm::importFromSheets,
+                    onDismiss = vm::resetSheetsState
+                )
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            Text("Data", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            SettingsListItem(
                 title = "Manage Categories & Dropdowns",
                 icon = Icons.Filled.Tune,
                 modifier = Modifier.clickable(onClick = onNavigateToDropdownManagement)
@@ -147,16 +200,7 @@ fun SettingsScreen(
                 )
             }
 
-            SettingsRow(title = "Import from Google Sheets", icon = Icons.Filled.CloudDownload) {
-                ImportActionControl(
-                    state = sheetsState,
-                    idleIcon = Icons.Filled.CloudDownload,
-                    onRun = vm::importFromSheets,
-                    onDismiss = vm::resetSheetsState
-                )
-            }
-
-            SettingsRow(title = "Import from CSV", icon = Icons.Filled.FileOpen) {
+            SettingsListItem(title = "Import from CSV", icon = Icons.Filled.FileOpen) {
                 ImportActionControl(
                     state = csvState,
                     idleIcon = Icons.Filled.FileOpen,
@@ -165,11 +209,10 @@ fun SettingsScreen(
                 )
             }
 
-            SettingsRow(
+            SettingsListItem(
                 title = "Reset All Data",
                 icon = Icons.Filled.DeleteForever,
-                iconTint = ExpenseRed,
-                containerColor = ExpenseRed.copy(alpha = 0.10f)
+                iconTint = ExpenseRed
             ) {
                 IconButton(onClick = { vm.showResetConfirm = true }) {
                     Icon(Icons.Filled.DeleteForever, contentDescription = "Reset data", tint = ExpenseRed)
@@ -180,35 +223,28 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SettingsRow(
+private fun SettingsListItem(
     title: String,
     icon: ImageVector,
     modifier: Modifier = Modifier,
     iconTint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary,
-    containerColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
     trailing: @Composable RowScope.() -> Unit
 ) {
-    Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = containerColor),
-        modifier = modifier.fillMaxWidth()
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Icon(icon, contentDescription = null, tint = iconTint)
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                modifier = Modifier.weight(1f)
-            )
-            trailing()
-        }
+        Icon(icon, contentDescription = null, tint = iconTint)
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
+            modifier = Modifier.weight(1f)
+        )
+        trailing()
     }
 }
 
