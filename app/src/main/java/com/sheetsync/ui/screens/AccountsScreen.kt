@@ -31,6 +31,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
@@ -74,7 +75,32 @@ fun AccountsScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showAddSheet by remember { mutableStateOf(false) }
     var actionMode by remember { mutableStateOf(AccountActionMode.None) }
+    var showHidden by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+
+    val visibleAssetGroups = remember(state.assetGroups) {
+        state.assetGroups
+            .mapValues { (_, accounts) -> accounts.filterNot { it.isHidden } }
+            .filterValues { it.isNotEmpty() }
+    }
+    val visibleLiabilityGroups = remember(state.liabilityGroups) {
+        state.liabilityGroups
+            .mapValues { (_, accounts) -> accounts.filterNot { it.isHidden } }
+            .filterValues { it.isNotEmpty() }
+    }
+    val hiddenAssetGroups = remember(state.assetGroups) {
+        state.assetGroups
+            .mapValues { (_, accounts) -> accounts.filter { it.isHidden } }
+            .filterValues { it.isNotEmpty() }
+    }
+    val hiddenLiabilityGroups = remember(state.liabilityGroups) {
+        state.liabilityGroups
+            .mapValues { (_, accounts) -> accounts.filter { it.isHidden } }
+            .filterValues { it.isNotEmpty() }
+    }
+    val hiddenCount = remember(hiddenAssetGroups, hiddenLiabilityGroups) {
+        hiddenAssetGroups.values.sumOf { it.size } + hiddenLiabilityGroups.values.sumOf { it.size }
+    }
 
     LaunchedEffect(Unit) {
         formVm.saved.collect {
@@ -167,9 +193,9 @@ fun AccountsScreen(
                 ActionModeHint(actionMode)
             }
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                if (state.assetGroups.isNotEmpty()) {
+                if (visibleAssetGroups.isNotEmpty()) {
                     item { SectionHeader("Assets") }
-                    state.assetGroups.forEach { (groupName, accounts) ->
+                    visibleAssetGroups.forEach { (groupName, accounts) ->
                         item { GroupHeader(groupName) }
                         items(accounts.size) { index ->
                             AccountRow(
@@ -185,9 +211,58 @@ fun AccountsScreen(
                     }
                 }
 
-                if (state.liabilityGroups.isNotEmpty()) {
+                if (visibleLiabilityGroups.isNotEmpty()) {
                     item { SectionHeader("Liabilities") }
-                    state.liabilityGroups.forEach { (groupName, accounts) ->
+                    visibleLiabilityGroups.forEach { (groupName, accounts) ->
+                        item { GroupHeader(groupName) }
+                        items(accounts.size) { index ->
+                            AccountRow(
+                                item = accounts[index],
+                                mode = actionMode,
+                                onOpen = onOpenAccountDetail,
+                                onToggleVisibility = vm::toggleAccountVisibility,
+                                onDelete = vm::deleteAccount,
+                                onMoveUp = vm::moveAccountUp,
+                                onMoveDown = vm::moveAccountDown
+                            )
+                        }
+                    }
+                }
+
+                if (hiddenCount > 0) {
+                    item {
+                        TextButton(
+                            onClick = { showHidden = !showHidden },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Text(if (showHidden) "Hide Hidden Accounts" else "Show Hidden Accounts")
+                        }
+                    }
+                }
+
+                if (showHidden && hiddenAssetGroups.isNotEmpty()) {
+                    item { SectionHeader("Hidden Assets") }
+                    hiddenAssetGroups.forEach { (groupName, accounts) ->
+                        item { GroupHeader(groupName) }
+                        items(accounts.size) { index ->
+                            AccountRow(
+                                item = accounts[index],
+                                mode = actionMode,
+                                onOpen = onOpenAccountDetail,
+                                onToggleVisibility = vm::toggleAccountVisibility,
+                                onDelete = vm::deleteAccount,
+                                onMoveUp = vm::moveAccountUp,
+                                onMoveDown = vm::moveAccountDown
+                            )
+                        }
+                    }
+                }
+
+                if (showHidden && hiddenLiabilityGroups.isNotEmpty()) {
+                    item { SectionHeader("Hidden Liabilities") }
+                    hiddenLiabilityGroups.forEach { (groupName, accounts) ->
                         item { GroupHeader(groupName) }
                         items(accounts.size) { index ->
                             AccountRow(

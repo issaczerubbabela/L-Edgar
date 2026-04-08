@@ -337,24 +337,32 @@ private fun CalendarCellView(
             .clickable(onClick = onTap)
             .padding(2.dp)
     ) {
-        // Date number — top start
-        Text(
-            text       = dateLabel,
-            color      = dateNumColor,
-            fontSize   = if (cell.date.dayOfMonth == 1) 9.sp else 11.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines   = 1,
-            modifier   = Modifier.align(Alignment.TopStart).padding(start = 3.dp, top = 3.dp)
-        )
-
-        // Today ring — behind the date number
-        if (cell.isToday && !isSelected) {
-            Box(
-                modifier = Modifier
-                    .size(20.dp)
-                    .clip(CircleShape)
-                    .border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                    .align(Alignment.TopStart)
+        // Date badge — centered text for selected/today indicators.
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 3.dp, top = 3.dp)
+                .size(20.dp)
+                .then(
+                    when {
+                        isSelected -> Modifier
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
+                        cell.isToday -> Modifier
+                            .clip(CircleShape)
+                            .border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                        else -> Modifier
+                    }
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = dateLabel,
+                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else dateNumColor,
+                fontSize = if (cell.date.dayOfMonth == 1) 9.sp else 11.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                textAlign = TextAlign.Center
             )
         }
 
