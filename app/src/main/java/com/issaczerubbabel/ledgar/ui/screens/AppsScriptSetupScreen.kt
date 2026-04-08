@@ -87,11 +87,11 @@ function normalizeTimestampKey(value, timeZone) {
   var text = String(value).trim();
   if (!text) return "";
 
-  if (/^\\d{1,2}\\/\\d{1,2}\\/\\d{4}\\s\\d{2}:\\d{2}:\\d{2}$/.test(text)) {
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}\s\d{2}:\d{2}:\d{2}$/.test(text)) {
     return text;
   }
 
-  var cleaned = text.replace(/\\s+\\([^)]*\\)$/, "");
+  var cleaned = text.replace(/\s+\([^)]*\)$/, "");
   var parsed = new Date(cleaned);
   if (!isNaN(parsed.getTime())) {
     return Utilities.formatDate(parsed, timeZone, "M/d/yyyy HH:mm:ss");
@@ -281,7 +281,10 @@ function doPost(e) {
       var formattedTxDate = isNaN(txDateObj.getTime())
         ? String(r.date || "")
         : Utilities.formatDate(txDateObj, timeZone, "M/d/yyyy");
-      var normalizedRecordTimestamp = normalizeTimestampKey(r.timestamp, timeZone);
+      var normalizedRecordTimestamp = normalizeTimestampKey(
+        r.timestamp,
+        timeZone,
+      );
 
       var rowData = [
         normalizedRecordTimestamp || generatedTimestamp,
