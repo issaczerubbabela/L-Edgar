@@ -41,6 +41,7 @@ data class ExpenseRecord(
     val remarks: String,
     val fromAccountId: Long? = null,
     val toAccountId: Long? = null,
+    val isBookmarked: Boolean = false,
     val isSynced: Boolean = false,
     val remoteTimestamp: String? = null,
     val syncAction: String = "INSERT"

@@ -18,6 +18,7 @@ interface ExpenseRepository {
     suspend fun update(record: ExpenseRecord)
     suspend fun hardDeleteById(id: Long)
     fun getAllRecords(): Flow<List<ExpenseRecord>>
+    fun getBookmarkedTransactions(): Flow<List<ExpenseRecord>>
     fun getByType(type: String): Flow<List<ExpenseRecord>>
     fun getRecordsForAccount(accountId: Long): Flow<List<ExpenseRecord>>
     fun getRecordsForAccountInMonth(accountId: Long, startDate: String, endDate: String): Flow<List<ExpenseRecord>>
@@ -28,6 +29,7 @@ interface ExpenseRepository {
     fun getRecordsByDateRange(startDate: String, endDate: String): Flow<List<ExpenseRecord>>
     suspend fun getUnsynced(): List<ExpenseRecord>
     suspend fun markSynced(ids: List<Long>)
+    suspend fun setBookmarked(id: Long, isBookmarked: Boolean)
     suspend fun delete(record: ExpenseRecord)
     suspend fun deleteAll()
     suspend fun isDuplicate(date: String, type: String, category: String, amount: Double): Boolean

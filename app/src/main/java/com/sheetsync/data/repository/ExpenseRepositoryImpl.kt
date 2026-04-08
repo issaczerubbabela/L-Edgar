@@ -35,6 +35,8 @@ class ExpenseRepositoryImpl @Inject constructor(
 
     override fun getAllRecords(): Flow<List<ExpenseRecord>> = dao.getAllRecords()
 
+    override fun getBookmarkedTransactions(): Flow<List<ExpenseRecord>> = dao.getBookmarkedTransactions()
+
     override fun getByType(type: String): Flow<List<ExpenseRecord>> = dao.getByType(type)
 
     override fun getRecordsForAccount(accountId: Long): Flow<List<ExpenseRecord>> = dao.getRecordsForAccount(accountId)
@@ -59,6 +61,9 @@ class ExpenseRepositoryImpl @Inject constructor(
     override suspend fun getUnsynced(): List<ExpenseRecord> = dao.getUnsyncedRecords()
 
     override suspend fun markSynced(ids: List<Long>) = dao.markAsSynced(ids)
+
+    override suspend fun setBookmarked(id: Long, isBookmarked: Boolean) =
+        dao.updateBookmarkStatus(id = id, isBookmarked = isBookmarked)
 
     override suspend fun delete(record: ExpenseRecord) = dao.delete(record)
 

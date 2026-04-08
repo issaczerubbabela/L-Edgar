@@ -39,6 +39,7 @@ import com.sheetsync.viewmodel.PeriodSummary
 import com.sheetsync.viewmodel.TotalViewModel
 import java.time.DayOfWeek
 import java.time.LocalDate
+import kotlinx.coroutines.launch
 
 private val TABS = listOf("Daily", "Calendar", "Monthly", "Total")
 private val monthNames = listOf(
@@ -56,6 +57,8 @@ fun HistoryScreen(
     navInsets: PaddingValues,
     onNavigateToLog: () -> Unit,
     onNavigateToEditTransaction: (Long) -> Unit,
+    onNavigateToCopyTransaction: (Long, Boolean) -> Unit,
+    onNavigateToBookmarks: () -> Unit,
     onNavigateToBudgetSetting: () -> Unit,
     vm: HistoryViewModel = hiltViewModel(),
     monthlyVm: MonthlyViewModel = hiltViewModel(),
@@ -68,6 +71,11 @@ fun HistoryScreen(
     var showMonthPicker by remember { mutableStateOf(false) }
     var pickerMonth by remember(state.selectedMonth, state.selectedYear) { mutableIntStateOf(state.selectedMonth) }
     var pickerYear by remember(state.selectedMonth, state.selectedYear) { mutableIntStateOf(state.selectedYear) }
+    val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetScope = rememberCoroutineScope()
+    var selectedTransaction by remember { mutableStateOf<ExpenseRecord?>(null) }
+    var pendingCopyTransaction by remember { mutableStateOf<ExpenseRecord?>(null) }
+    var showCopyDateDialog by remember { mutableStateOf(false) }
 
     // ── Theme detection ────────────────────────────────────────────────────────
     // luminance() > 0.5 → light theme (white background)
@@ -101,7 +109,8 @@ fun HistoryScreen(
                 onPrevPeriod = onPrevPeriod,
                 onNextPeriod = onNextPeriod,
                 onPeriodClick = { if (canOpenMonthPicker) showMonthPicker = true },
-                periodClickable = canOpenMonthPicker
+                periodClickable = canOpenMonthPicker,
+                onBookmarksClick = onNavigateToBookmarks
             )
         },
         containerColor = MaterialTheme.colorScheme.background
@@ -154,7 +163,7 @@ fun HistoryScreen(
                     )
                     else -> DailyContent(
                         groups = state.groups,
-                        onTransactionClick = onNavigateToEditTransaction,
+                        onTransactionClick = { record -> selectedTransaction = record },
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -221,6 +230,121 @@ fun HistoryScreen(
             dismissButton = {
                 TextButton(onClick = { showMonthPicker = false }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    selectedTransaction?.let { record ->
+        ModalBottomSheet(
+            onDismissRequest = { selectedTransaction = null },
+            sheetState = bottomSheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = record.description.ifBlank { record.category },
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                TextButton(
+                    onClick = {
+                        selectedTransaction = null
+                        onNavigateToEditTransaction(record.id)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Edit", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
+                }
+
+                TextButton(
+                    onClick = {
+                        vm.toggleBookmark(record)
+                        selectedTransaction = null
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Toggle Bookmark",
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Start
+                    )
+                }
+
+                TextButton(
+                    onClick = {
+                        selectedTransaction = null
+                        pendingCopyTransaction = record
+                        showCopyDateDialog = true
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Copy", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
+                }
+
+                TextButton(
+                    onClick = {
+                        vm.delete(record)
+                        sheetScope.launch {
+                            bottomSheetState.hide()
+                            selectedTransaction = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Delete", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+        }
+    }
+
+    if (showCopyDateDialog) {
+        val record = pendingCopyTransaction
+        AlertDialog(
+            onDismissRequest = {
+                showCopyDateDialog = false
+                pendingCopyTransaction = null
+            },
+            title = { Text("Which date to use?") },
+            text = { Text("Choose whether the copied transaction keeps its original date or uses today.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        record?.let { onNavigateToCopyTransaction(it.id, false) }
+                        showCopyDateDialog = false
+                        pendingCopyTransaction = null
+                    }
+                ) {
+                    Text("Original Date")
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(
+                        onClick = {
+                            record?.let { onNavigateToCopyTransaction(it.id, true) }
+                            showCopyDateDialog = false
+                            pendingCopyTransaction = null
+                        }
+                    ) {
+                        Text("Today")
+                    }
+                    TextButton(
+                        onClick = {
+                            showCopyDateDialog = false
+                            pendingCopyTransaction = null
+                        }
+                    ) {
+                        Text("Cancel")
+                    }
                 }
             }
         )
@@ -452,7 +576,7 @@ private fun CalendarCellView(
 @Composable
 private fun DailyContent(
     groups: List<DayGroup>,
-    onTransactionClick: (Long) -> Unit,
+    onTransactionClick: (ExpenseRecord) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (groups.isEmpty()) {
@@ -466,7 +590,7 @@ private fun DailyContent(
             groups.forEach { group ->
                 item(key = group.date.toString()) { DayGroupHeader(group) }
                 itemsIndexed(group.records, key = { _, record -> record.id }) { index, record ->
-                    TransactionRow(record = record, onClick = { onTransactionClick(record.id) })
+                    TransactionRow(record = record, onClick = { onTransactionClick(record) })
                     if (index < group.records.lastIndex) {
                         HorizontalDivider(
                             color = MaterialTheme.colorScheme.outlineVariant,
@@ -491,7 +615,8 @@ private fun MoneyManagerAppBar(
     onPrevPeriod: () -> Unit,
     onNextPeriod: () -> Unit,
     onPeriodClick: () -> Unit,
-    periodClickable: Boolean
+    periodClickable: Boolean,
+    onBookmarksClick: () -> Unit
 ) {
     TopAppBar(
         title = {
@@ -516,7 +641,7 @@ private fun MoneyManagerAppBar(
             }
         },
         actions = {
-            IconButton(onClick = {}) { Icon(Icons.Filled.StarBorder, null, tint = contentColor) }
+            IconButton(onClick = onBookmarksClick) { Icon(Icons.Filled.StarBorder, null, tint = contentColor) }
             IconButton(onClick = {}) { Icon(Icons.Filled.Search, null, tint = contentColor) }
             IconButton(onClick = {}) { Icon(Icons.Filled.Tune, null, tint = contentColor) }
         },

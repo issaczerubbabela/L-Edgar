@@ -20,20 +20,27 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import com.sheetsync.ui.screens.HistoryScreen
 import com.sheetsync.ui.screens.InsightsScreen
 import com.sheetsync.ui.screens.LogScreen
 import com.sheetsync.ui.screens.AccountDetailScreen
 import com.sheetsync.ui.screens.AccountsScreen
 import com.sheetsync.ui.screens.AddAccountScreen
+import com.sheetsync.ui.screens.BookmarksScreen
 import com.sheetsync.ui.screens.BudgetSettingScreen
 import com.sheetsync.ui.screens.DropdownManagementScreen
 import com.sheetsync.ui.screens.SettingsScreen
 import com.sheetsync.viewmodel.ACCOUNT_ROUTE_ADD
 
 sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
-    object Log : Screen("log?transactionId={transactionId}", "Log", Icons.Filled.AddCircle)
+    object Log : Screen(
+        "log?transactionId={transactionId}&copyTransactionId={copyTransactionId}&copyDateMode={copyDateMode}",
+        "Log",
+        Icons.Filled.AddCircle
+    )
     object Trans : Screen("trans", "Trans.", Icons.Filled.MenuBook)
+    object Bookmarks : Screen("bookmarks", "Bookmarks", Icons.Filled.Star)
     object Stats : Screen("stats", "Stats", Icons.Filled.BarChart)
     object Accounts : Screen("accounts", "Accounts", Icons.Filled.Paid)
     object AccountDetail : Screen("account_detail/{accountId}", "AccountDetail", Icons.Filled.Paid)
@@ -45,8 +52,19 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
 
 private const val LOG_BASE_ROUTE = "log"
 
-private fun logRoute(transactionId: Long? = null): String =
-    transactionId?.let { "$LOG_BASE_ROUTE?transactionId=$it" } ?: LOG_BASE_ROUTE
+private fun logRoute(
+    transactionId: Long? = null,
+    copyTransactionId: Long? = null,
+    useTodayDateForCopy: Boolean = false
+): String {
+    val params = mutableListOf<String>()
+    transactionId?.let { params += "transactionId=$it" }
+    copyTransactionId?.let {
+        params += "copyTransactionId=$it"
+        params += "copyDateMode=${if (useTodayDateForCopy) "today" else "original"}"
+    }
+    return if (params.isEmpty()) LOG_BASE_ROUTE else "$LOG_BASE_ROUTE?${params.joinToString("&")}" 
+}
 
 val bottomNavItems = listOf(Screen.Trans, Screen.Stats, Screen.Accounts, Screen.More)
 
@@ -94,6 +112,14 @@ fun AppNavigation() {
                     navArgument("transactionId") {
                         type = NavType.LongType
                         defaultValue = -1L
+                    },
+                    navArgument("copyTransactionId") {
+                        type = NavType.LongType
+                        defaultValue = -1L
+                    },
+                    navArgument("copyDateMode") {
+                        type = NavType.StringType
+                        defaultValue = "original"
                     }
                 )
             ) {
@@ -113,6 +139,18 @@ fun AppNavigation() {
                     },
                     onNavigateToEditTransaction = { transactionId ->
                         navController.navigate(logRoute(transactionId)) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onNavigateToCopyTransaction = { transactionId, useToday ->
+                        navController.navigate(
+                            logRoute(copyTransactionId = transactionId, useTodayDateForCopy = useToday)
+                        ) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onNavigateToBookmarks = {
+                        navController.navigate(Screen.Bookmarks.route) {
                             launchSingleTop = true
                         }
                     },
@@ -159,6 +197,17 @@ fun AppNavigation() {
                 DropdownManagementScreen(
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() }
+                )
+            }
+            composable(Screen.Bookmarks.route) {
+                BookmarksScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
+                    onTransactionClick = { transactionId ->
+                        navController.navigate(logRoute(transactionId = transactionId)) {
+                            launchSingleTop = true
+                        }
+                    }
                 )
             }
             composable("account_detail/{accountId}") {

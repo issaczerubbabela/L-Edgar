@@ -77,6 +77,8 @@ class LogViewModel @Inject constructor(
     init {
         val navId = savedStateHandle.get<Long>("transactionId")
         editingRecordId = navId?.takeIf { it > 0L }
+        val copyTransactionId = savedStateHandle.get<Long>("copyTransactionId")?.takeIf { it > 0L }
+        val copyDateMode = savedStateHandle.get<String>("copyDateMode") ?: "original"
 
         observeSyncStatus()
 
@@ -99,6 +101,32 @@ class LogViewModel @Inject constructor(
                 description = record.description
                 amount = if (record.amount % 1.0 == 0.0) record.amount.toInt().toString() else record.amount.toString()
                 remarks = record.remarks
+            }
+        } else if (copyTransactionId != null) {
+            viewModelScope.launch {
+                val source = repository.getById(copyTransactionId)
+                if (source == null) {
+                    errorMessage = "Transaction to copy not found"
+                    return@launch
+                }
+
+                selectedDate = if (copyDateMode.equals("today", ignoreCase = true)) {
+                    LocalDate.now()
+                } else {
+                    runCatching { LocalDate.parse(source.date) }.getOrDefault(LocalDate.now())
+                }
+
+                selectedType = source.type
+                selectedCategory = source.category
+                selectedAccountId = when (source.type) {
+                    "Expense", "Income" -> source.accountId
+                    else -> null
+                }
+                selectedFromAccountId = source.fromAccountId
+                selectedToAccountId = source.toAccountId
+                description = source.description
+                amount = if (source.amount % 1.0 == 0.0) source.amount.toInt().toString() else source.amount.toString()
+                remarks = source.remarks
             }
         }
     }
@@ -139,6 +167,7 @@ class LogViewModel @Inject constructor(
                     "Transfer" -> selectedToAccountId
                     else -> null
                 },
+                isBookmarked = baseRecord?.isBookmarked ?: false,
                 isSynced = false,
                 remoteTimestamp = baseRecord?.remoteTimestamp,
                 syncAction = if (isEditMode) "UPDATE" else "INSERT"

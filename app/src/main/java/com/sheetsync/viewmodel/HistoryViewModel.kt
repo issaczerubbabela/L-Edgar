@@ -179,6 +179,12 @@ class HistoryViewModel @Inject constructor(
         viewModelScope.launch { repository.delete(record) }
     }
 
+    fun toggleBookmark(record: ExpenseRecord) {
+        viewModelScope.launch {
+            repository.setBookmarked(id = record.id, isBookmarked = !record.isBookmarked)
+        }
+    }
+
     // ── Calendar grid builder ─────────────────────────────────────────────────
 
     private fun buildCalendarCells(

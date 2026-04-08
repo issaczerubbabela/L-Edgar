@@ -22,6 +22,9 @@ interface ExpenseDao {
     @Query("SELECT * FROM expense_records WHERE syncAction != 'DELETE' ORDER BY date DESC")
     fun getAllRecords(): Flow<List<ExpenseRecord>>
 
+    @Query("SELECT * FROM expense_records WHERE isBookmarked = 1 AND syncAction != 'DELETE' ORDER BY date DESC, id DESC")
+    fun getBookmarkedTransactions(): Flow<List<ExpenseRecord>>
+
     @Query("SELECT * FROM expense_records")
     suspend fun getAllRecordsSnapshot(): List<ExpenseRecord>
 
@@ -39,6 +42,9 @@ interface ExpenseDao {
 
     @Delete
     suspend fun delete(record: ExpenseRecord)
+
+    @Query("UPDATE expense_records SET isBookmarked = :isBookmarked WHERE id = :id")
+    suspend fun updateBookmarkStatus(id: Long, isBookmarked: Boolean)
 
     @Query("DELETE FROM expense_records WHERE id = :id")
     suspend fun hardDeleteById(id: Long)
