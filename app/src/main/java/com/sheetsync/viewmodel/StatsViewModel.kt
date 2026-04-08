@@ -3,6 +3,8 @@ package com.sheetsync.viewmodel
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
+import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
 import com.sheetsync.data.local.entity.AccountRecord
 import com.sheetsync.data.local.entity.ExpenseRecord
 import com.sheetsync.data.repository.AccountRepository
@@ -14,21 +16,30 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @HiltViewModel
 class StatsViewModel @Inject constructor(
     private val expenseRepository: ExpenseRepository,
     private val accountRepository: AccountRepository
 ) : ViewModel() {
+
+    val cashFlowChartModelProducer = CartesianChartModelProducer()
+
+    private val _cashFlowXAxisLabels = MutableStateFlow<List<String>>(emptyList())
+    val cashFlowXAxisLabels: StateFlow<List<String>> = _cashFlowXAxisLabels.asStateFlow()
 
     private val _filterState = MutableStateFlow(StatsFilterState())
     val filterState: StateFlow<StatsFilterState> = _filterState.asStateFlow()
@@ -75,12 +86,9 @@ class StatsViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val cashFlowOverTime: StateFlow<Map<String, Pair<Double, Double>>> = combine(
-        filteredTransactions,
-        filterState
-    ) { records, filter ->
-        buildCashFlowOverTime(records, filter.timeframe)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+    init {
+        observeCashFlowChartData()
+    }
 
     fun updateTimeframe(timeframe: StatsTimeframe) {
         _filterState.update { it.copy(timeframe = timeframe) }
@@ -92,6 +100,30 @@ class StatsViewModel @Inject constructor(
 
     fun updateTransactionType(transactionType: StatsTransactionType) {
         _filterState.update { it.copy(transactionType = transactionType) }
+    }
+
+    private fun observeCashFlowChartData() {
+        viewModelScope.launch {
+            combine(filteredTransactions, filterState) { records, filter ->
+                buildCashFlowOverTime(records, filter.timeframe)
+            }.collectLatest { cashFlowByPeriod ->
+                val entries = cashFlowByPeriod.entries.toList()
+                _cashFlowXAxisLabels.value = entries.map { it.key }
+
+                val xValues = entries.indices.map { index -> index.toDouble() }
+                val incomeValues = entries.map { it.value.first }
+                val expenseValues = entries.map { it.value.second }
+
+                withContext(Dispatchers.Default) {
+                    cashFlowChartModelProducer.runTransaction {
+                        columnSeries {
+                            series(xValues, incomeValues)
+                            series(xValues, expenseValues)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private fun applyFilters(

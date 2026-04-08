@@ -23,20 +23,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
+import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottomAxis
+import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStartAxis
+import com.patrykandpatrick.vico.compose.cartesian.layer.rememberColumnCartesianLayer
+import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
+import com.patrykandpatrick.vico.core.cartesian.axis.Axis
+import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
+import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
+import com.patrykandpatrick.vico.core.cartesian.data.ChartValues
 import com.sheetsync.ui.theme.ExpenseRed
 import com.sheetsync.ui.theme.IncomeGreen
 import com.sheetsync.viewmodel.CategoryTotal
 import java.text.NumberFormat
 import java.util.Locale
-import kotlin.math.max
 
 @Composable
 fun ExpenseDonutChart(
@@ -162,13 +167,11 @@ fun ExpenseDonutChart(
 
 @Composable
 fun CashFlowBarChart(
-    cashFlowByPeriod: Map<String, Pair<Double, Double>>,
+    modelProducer: CartesianChartModelProducer,
+    xAxisLabels: List<String>,
     modifier: Modifier = Modifier
 ) {
-    val points = remember(cashFlowByPeriod) { cashFlowByPeriod.entries.toList() }
-    val baselineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
-
-    if (points.isEmpty()) {
+    if (xAxisLabels.isEmpty()) {
         Box(
             modifier = modifier
                 .fillMaxWidth()
@@ -184,82 +187,30 @@ fun CashFlowBarChart(
         return
     }
 
-    val maxValue = remember(points) {
-        points.maxOfOrNull { (_, pair) -> max(pair.first, pair.second) }?.coerceAtLeast(1.0) ?: 1.0
+    val bottomAxisFormatter = remember(xAxisLabels) {
+        object : CartesianValueFormatter {
+            override fun format(
+                value: Double,
+                chartValues: ChartValues,
+                verticalAxisPosition: Axis.Position.Vertical?
+            ): CharSequence {
+                return xAxisLabels.getOrNull(value.toInt()) ?: ""
+            }
+        }
     }
 
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Canvas(
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        CartesianChartHost(
+            chart = rememberCartesianChart(
+                rememberColumnCartesianLayer(),
+                startAxis = rememberStartAxis(),
+                bottomAxis = rememberBottomAxis(valueFormatter = bottomAxisFormatter)
+            ),
+            modelProducer = modelProducer,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(220.dp)
-        ) {
-            val topPadding = 16.dp.toPx()
-            val bottomPadding = 18.dp.toPx()
-            val baselineY = size.height - bottomPadding
-            val maxBarHeight = baselineY - topPadding
-
-            drawLine(
-                color = baselineColor,
-                start = androidx.compose.ui.geometry.Offset(0f, baselineY),
-                end = androidx.compose.ui.geometry.Offset(size.width, baselineY),
-                strokeWidth = 1.dp.toPx(),
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f), 0f)
-            )
-
-            val slotWidth = size.width / points.size
-            val groupWidth = slotWidth * 0.72f
-            val intraGroupGap = groupWidth * 0.12f
-            val barWidth = (groupWidth - intraGroupGap) / 2f
-            val corner = CornerRadius(8.dp.toPx(), 8.dp.toPx())
-
-            points.forEachIndexed { index, (_, pair) ->
-                val income = pair.first.coerceAtLeast(0.0)
-                val expense = pair.second.coerceAtLeast(0.0)
-                val incomeHeight = ((income / maxValue) * maxBarHeight).toFloat()
-                val expenseHeight = ((expense / maxValue) * maxBarHeight).toFloat()
-
-                val slotStart = index * slotWidth
-                val groupStart = slotStart + (slotWidth - groupWidth) / 2f
-
-                drawRoundRect(
-                    color = IncomeGreen,
-                    topLeft = androidx.compose.ui.geometry.Offset(
-                        x = groupStart,
-                        y = baselineY - incomeHeight
-                    ),
-                    size = androidx.compose.ui.geometry.Size(barWidth, incomeHeight),
-                    cornerRadius = corner
-                )
-
-                drawRoundRect(
-                    color = ExpenseRed,
-                    topLeft = androidx.compose.ui.geometry.Offset(
-                        x = groupStart + barWidth + intraGroupGap,
-                        y = baselineY - expenseHeight
-                    ),
-                    size = androidx.compose.ui.geometry.Size(barWidth, expenseHeight),
-                    cornerRadius = corner
-                )
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            points.forEach { (label, _) ->
-                Text(
-                    text = label,
-                    modifier = Modifier.width(56.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1
-                )
-            }
-        }
+                .height(250.dp)
+        )
 
         Row(
             modifier = Modifier.fillMaxWidth(),

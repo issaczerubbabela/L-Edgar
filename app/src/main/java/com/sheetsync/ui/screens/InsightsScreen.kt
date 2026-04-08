@@ -36,7 +36,7 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
     val accountGroupOptions by vm.accountGroupOptions.collectAsState()
     val filteredTransactions by vm.filteredTransactions.collectAsState()
     val expenseByCategory by vm.expenseByCategory.collectAsState()
-    val cashFlowOverTime by vm.cashFlowOverTime.collectAsState()
+    val cashFlowXAxisLabels by vm.cashFlowXAxisLabels.collectAsState()
     val isLoading by vm.isLoading.collectAsState()
 
     LazyColumn(
@@ -120,7 +120,8 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
                     ) {
                         Text("Cash Flow", style = MaterialTheme.typography.titleMedium)
                         CashFlowBarChart(
-                            cashFlowByPeriod = cashFlowOverTime,
+                            modelProducer = vm.cashFlowChartModelProducer,
+                            xAxisLabels = cashFlowXAxisLabels,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
