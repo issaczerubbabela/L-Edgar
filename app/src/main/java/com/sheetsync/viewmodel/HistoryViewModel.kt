@@ -47,6 +47,8 @@ data class CalendarCell(
 )
 
 data class HistoryUiState(
+    val selectedMonth: Int      = LocalDate.now().monthValue,
+    val selectedYear: Int       = LocalDate.now().year,
     val monthLabel: String       = "",
     val summary: PeriodSummary   = PeriodSummary(),
     val groups: List<DayGroup>   = emptyList(),
@@ -140,7 +142,14 @@ class HistoryViewModel @Inject constructor(
             // ── Calendar cells (7 × 5 or 7 × 6 grid) ─────────────────────
             val calCells = buildCalendarCells(monthDate, today, byDate, records)
 
-            HistoryUiState(monthLabel, PeriodSummary(income, expense, income - expense), groups, calCells)
+            HistoryUiState(
+                selectedMonth = month,
+                selectedYear = year,
+                monthLabel = monthLabel,
+                summary = PeriodSummary(income, expense, income - expense),
+                groups = groups,
+                calendarCells = calCells
+            )
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HistoryUiState())
 
@@ -148,6 +157,15 @@ class HistoryViewModel @Inject constructor(
 
     fun nextMonth() = shiftMonth(1)
     fun prevMonth() = shiftMonth(-1)
+
+    fun setMonthYear(year: Int, month: Int) {
+        val safeMonth = month.coerceIn(1, 12)
+        val safeYear = year.coerceIn(1900, 2100)
+        shouldAutoFocusLatestMonth = false
+        _month.value = safeMonth
+        _year.value = safeYear
+        selectedDate = null
+    }
 
     private fun shiftMonth(delta: Long) {
         shouldAutoFocusLatestMonth = false

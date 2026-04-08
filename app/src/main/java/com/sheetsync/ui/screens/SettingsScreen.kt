@@ -13,7 +13,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -82,207 +81,155 @@ fun SettingsScreen(
         ) {
             Text("Settings", style = MaterialTheme.typography.headlineMedium)
 
-            // ── Appearance ───────────────────────────────────────────────────
-            Card(
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+            SettingsRow(title = "Theme", icon = Icons.Filled.Palette) {
+                ExposedDropdownMenuBox(
+                    expanded = themeDropdownExpanded,
+                    onExpandedChange = { themeDropdownExpanded = !themeDropdownExpanded }
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Icon(Icons.Filled.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Text("Appearance", style = MaterialTheme.typography.titleMedium)
-                    }
+                    TextField(
+                        value = themeLabel(currentTheme),
+                        onValueChange = {},
+                        readOnly = true,
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = themeDropdownExpanded) },
+                        colors = ExposedDropdownMenuDefaults.textFieldColors(),
+                        modifier = Modifier
+                            .menuAnchor()
+                            .widthIn(min = 118.dp, max = 132.dp)
+                    )
 
-                    ExposedDropdownMenuBox(
+                    ExposedDropdownMenu(
                         expanded = themeDropdownExpanded,
-                        onExpandedChange = { themeDropdownExpanded = !themeDropdownExpanded }
+                        onDismissRequest = { themeDropdownExpanded = false }
                     ) {
-                        TextField(
-                            value = themeLabel(currentTheme),
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Theme") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = themeDropdownExpanded) },
-                            colors = ExposedDropdownMenuDefaults.textFieldColors(),
-                            modifier = Modifier
-                                .menuAnchor()
-                                .fillMaxWidth()
+                        DropdownMenuItem(
+                            text = { Text("System MUI") },
+                            onClick = {
+                                vm.updateTheme(AppThemeOption.SYSTEM)
+                                themeDropdownExpanded = false
+                            }
                         )
-
-                        ExposedDropdownMenu(
-                            expanded = themeDropdownExpanded,
-                            onDismissRequest = { themeDropdownExpanded = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("System MUI") },
-                                onClick = {
-                                    vm.updateTheme(AppThemeOption.SYSTEM)
-                                    themeDropdownExpanded = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Lavender") },
-                                onClick = {
-                                    vm.updateTheme(AppThemeOption.LAVENDER)
-                                    themeDropdownExpanded = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Teal") },
-                                onClick = {
-                                    vm.updateTheme(AppThemeOption.TEAL)
-                                    themeDropdownExpanded = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Red") },
-                                onClick = {
-                                    vm.updateTheme(AppThemeOption.RED)
-                                    themeDropdownExpanded = false
-                                }
-                            )
-                        }
+                        DropdownMenuItem(
+                            text = { Text("Lavender") },
+                            onClick = {
+                                vm.updateTheme(AppThemeOption.LAVENDER)
+                                themeDropdownExpanded = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Teal") },
+                            onClick = {
+                                vm.updateTheme(AppThemeOption.TEAL)
+                                themeDropdownExpanded = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Red") },
+                            onClick = {
+                                vm.updateTheme(AppThemeOption.RED)
+                                themeDropdownExpanded = false
+                            }
+                        )
                     }
                 }
             }
 
-            Card(
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onNavigateToDropdownManagement)
+            SettingsRow(
+                title = "Manage Categories & Dropdowns",
+                icon = Icons.Filled.Tune,
+                modifier = Modifier.clickable(onClick = onNavigateToDropdownManagement)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Tune,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Manage Categories & Dropdowns", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "Add, delete, and reorder dropdown options.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Icon(
-                        imageVector = Icons.Filled.ChevronRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Filled.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
+            SettingsRow(title = "Import from Google Sheets", icon = Icons.Filled.CloudDownload) {
+                ImportActionControl(
+                    state = sheetsState,
+                    idleIcon = Icons.Filled.CloudDownload,
+                    onRun = vm::importFromSheets,
+                    onDismiss = vm::resetSheetsState
+                )
+            }
 
-            // ── Import from Sheets ───────────────────────────────────────────
-            ImportCard(
-                title = "Import from Google Sheets",
-                description = "Pulls all existing records directly from your connected Google Sheet.",
-                icon = Icons.Filled.CloudDownload,
-                state = sheetsState,
-                onAction = { vm.importFromSheets() },
-                actionLabel = "Import from Sheets",
-                onDismiss = { vm.resetSheetsState() }
-            )
+            SettingsRow(title = "Import from CSV", icon = Icons.Filled.FileOpen) {
+                ImportActionControl(
+                    state = csvState,
+                    idleIcon = Icons.Filled.FileOpen,
+                    onRun = { csvLauncher.launch("text/*") },
+                    onDismiss = vm::resetCsvState
+                )
+            }
 
-            // ── Import from CSV ──────────────────────────────────────────────
-            ImportCard(
-                title = "Import from CSV",
-                description = "Pick a CSV exported from Google Sheets. Columns are auto-detected from the header row.",
-                icon = Icons.Filled.FileOpen,
-                state = csvState,
-                onAction = { csvLauncher.launch("text/*") },
-                actionLabel = "Pick CSV File",
-                onDismiss = { vm.resetCsvState() }
-            )
-
-            // ── Reset all data ───────────────────────────────────────────────
-            Card(
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = ExpenseRed.copy(alpha = 0.10f)),
-                modifier = Modifier.fillMaxWidth()
+            SettingsRow(
+                title = "Reset All Data",
+                icon = Icons.Filled.DeleteForever,
+                iconTint = ExpenseRed,
+                containerColor = ExpenseRed.copy(alpha = 0.10f)
             ) {
-                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Icon(Icons.Filled.DeleteForever, null, tint = ExpenseRed)
-                        Text("Reset All Data", style = MaterialTheme.typography.titleMedium, color = ExpenseRed)
-                    }
-                    Text(
-                        "Permanently deletes all local transaction records. Google Sheets data is not affected.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    OutlinedButton(
-                        onClick = { vm.showResetConfirm = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ExpenseRed)
-                    ) {
-                        Icon(Icons.Filled.DeleteForever, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Reset All Data")
-                    }
+                IconButton(onClick = { vm.showResetConfirm = true }) {
+                    Icon(Icons.Filled.DeleteForever, contentDescription = "Reset data", tint = ExpenseRed)
                 }
             }
         }
     }
 }
 
-// ── Reusable import card ─────────────────────────────────────────────────────
-
 @Composable
-private fun ImportCard(
-    title: String, description: String, icon: ImageVector,
-    state: ImportState, onAction: () -> Unit, actionLabel: String, onDismiss: () -> Unit
+private fun SettingsRow(
+    title: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    iconTint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary,
+    containerColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+    trailing: @Composable RowScope.() -> Unit
 ) {
     Card(
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-        modifier = Modifier.fillMaxWidth()
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        modifier = modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
-                Text(title, style = MaterialTheme.typography.titleMedium)
-            }
-            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            when (state) {
-                is ImportState.Loading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Text("Importing…", style = MaterialTheme.typography.bodyMedium)
-                }
-                is ImportState.Success -> {
-                    StatusRow(Icons.Filled.CheckCircle, IncomeGreen,
-                        "Imported ${state.imported} record${if (state.imported != 1) "s" else ""}." +
-                        if (state.skipped > 0) " Skipped ${state.skipped} duplicate${if (state.skipped != 1) "s" else ""}." else "")
-                    TextButton(onClick = onDismiss) { Text("Dismiss") }
-                }
-                is ImportState.Error -> {
-                    StatusRow(Icons.Filled.ErrorOutline, ExpenseRed, state.message)
-                    TextButton(onClick = onDismiss) { Text("Dismiss") }
-                }
-                is ImportState.Idle -> Button(onClick = onAction, modifier = Modifier.fillMaxWidth()) {
-                    Icon(icon, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(actionLabel)
-                }
-            }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(icon, contentDescription = null, tint = iconTint)
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
+            )
+            trailing()
         }
     }
 }
 
 @Composable
-private fun StatusRow(icon: ImageVector, color: Color, message: String) {
-    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Icon(icon, null, tint = color, modifier = Modifier.size(20.dp))
-        Text(message, style = MaterialTheme.typography.bodySmall, color = color)
+private fun ImportActionControl(
+    state: ImportState,
+    idleIcon: ImageVector,
+    onRun: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    when (state) {
+        is ImportState.Loading -> CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+        is ImportState.Success -> IconButton(onClick = onDismiss) {
+            Icon(Icons.Filled.CheckCircle, contentDescription = "Dismiss import status", tint = IncomeGreen)
+        }
+        is ImportState.Error -> IconButton(onClick = onDismiss) {
+            Icon(Icons.Filled.ErrorOutline, contentDescription = "Dismiss import status", tint = ExpenseRed)
+        }
+        is ImportState.Idle -> IconButton(onClick = onRun) {
+            Icon(idleIcon, contentDescription = "Run import")
+        }
     }
 }
 

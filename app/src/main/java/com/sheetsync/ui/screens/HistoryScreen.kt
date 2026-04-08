@@ -41,6 +41,10 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 
 private val TABS = listOf("Daily", "Calendar", "Monthly", "Total")
+private val monthNames = listOf(
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+)
 private fun formatMoney(amount: Double)   = "₹ %,.2f".format(amount)
 private fun formatCompact(amount: Double) = "%,.2f".format(kotlin.math.abs(amount))
 
@@ -61,6 +65,9 @@ fun HistoryScreen(
     val monthlyState by monthlyVm.uiState.collectAsState()
     val totalState by totalVm.uiState.collectAsState()
     var selectedTab by remember { mutableIntStateOf(0) }
+    var showMonthPicker by remember { mutableStateOf(false) }
+    var pickerMonth by remember(state.selectedMonth, state.selectedYear) { mutableIntStateOf(state.selectedMonth) }
+    var pickerYear by remember(state.selectedMonth, state.selectedYear) { mutableIntStateOf(state.selectedYear) }
 
     // ── Theme detection ────────────────────────────────────────────────────────
     // luminance() > 0.5 → light theme (white background)
@@ -68,8 +75,35 @@ fun HistoryScreen(
     val headerBg   = if (isLight) HeaderGreen else MaterialTheme.colorScheme.background
     val headerText = Color.White   // always white on header (green or black)
 
+    val periodLabel = when (selectedTab) {
+        2 -> monthlyState.selectedYear.toString()
+        3 -> totalState.periodLabel
+        else -> state.monthLabel
+    }
+    val onPrevPeriod = when (selectedTab) {
+        2 -> monthlyVm::prevYear
+        3 -> totalVm::prevMonth
+        else -> vm::prevMonth
+    }
+    val onNextPeriod = when (selectedTab) {
+        2 -> monthlyVm::nextYear
+        3 -> totalVm::nextMonth
+        else -> vm::nextMonth
+    }
+    val canOpenMonthPicker = selectedTab == 0 || selectedTab == 1
+
     Scaffold(
-        topBar = { MoneyManagerAppBar(headerBg, headerText) },
+        topBar = {
+            MoneyManagerAppBar(
+                bg = headerBg,
+                contentColor = headerText,
+                periodLabel = periodLabel,
+                onPrevPeriod = onPrevPeriod,
+                onNextPeriod = onNextPeriod,
+                onPeriodClick = { if (canOpenMonthPicker) showMonthPicker = true },
+                periodClickable = canOpenMonthPicker
+            )
+        },
         containerColor = MaterialTheme.colorScheme.background
     ) { scaffoldPadding ->
         Column(
@@ -78,24 +112,6 @@ fun HistoryScreen(
                 .padding(top = scaffoldPadding.calculateTopPadding())
                 .padding(bottom = navInsets.calculateBottomPadding())
         ) {
-            // Date nav — year mode for Monthly tab, month mode for other tabs
-            val periodLabel = when (selectedTab) {
-                2 -> monthlyState.selectedYear.toString()
-                3 -> totalState.periodLabel
-                else -> state.monthLabel
-            }
-            val onPrevPeriod = when (selectedTab) {
-                2 -> monthlyVm::prevYear
-                3 -> totalVm::prevMonth
-                else -> vm::prevMonth
-            }
-            val onNextPeriod = when (selectedTab) {
-                2 -> monthlyVm::nextYear
-                3 -> totalVm::nextMonth
-                else -> vm::nextMonth
-            }
-            DateNavigatorRow(periodLabel, headerBg, headerText, onPrevPeriod, onNextPeriod)
-
             PeriodTabRow(selectedTab, headerBg, headerText) { selectedTab = it }
 
             // Single pinned summary row below tabs
@@ -143,7 +159,7 @@ fun HistoryScreen(
                     )
                 }
 
-                // Dual FABs
+                // Primary add-transaction FAB
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
@@ -151,14 +167,6 @@ fun HistoryScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    SmallFloatingActionButton(
-                        onClick = {},
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        contentColor   = MaterialTheme.colorScheme.onSurfaceVariant,
-                        shape          = CircleShape,
-                        elevation      = FloatingActionButtonDefaults.elevation(4.dp)
-                    ) { Icon(Icons.Filled.Receipt, null, modifier = Modifier.size(20.dp)) }
-
                     FloatingActionButton(
                         onClick         = onNavigateToLog,
                         shape           = CircleShape,
@@ -170,6 +178,52 @@ fun HistoryScreen(
                 }
             }
         }
+    }
+
+    if (showMonthPicker) {
+        AlertDialog(
+            onDismissRequest = { showMonthPicker = false },
+            title = { Text("Select Month") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    DropdownField(
+                        label = "Month",
+                        options = monthNames,
+                        selected = monthNames[pickerMonth - 1],
+                        onSelect = { selected ->
+                            pickerMonth = monthNames.indexOf(selected) + 1
+                        }
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        IconButton(onClick = { pickerYear -= 1 }) {
+                            Icon(Icons.Filled.ChevronLeft, contentDescription = "Previous year")
+                        }
+                        Text(pickerYear.toString(), style = MaterialTheme.typography.titleMedium)
+                        IconButton(onClick = { pickerYear += 1 }) {
+                            Icon(Icons.Filled.ChevronRight, contentDescription = "Next year")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.setMonthYear(year = pickerYear, month = pickerMonth)
+                    showMonthPicker = false
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMonthPicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
@@ -422,34 +476,44 @@ private fun DailyContent(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MoneyManagerAppBar(bg: Color, contentColor: Color) {
-    CenterAlignedTopAppBar(
-        title = { Text("l.edgar", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = contentColor) },
+private fun MoneyManagerAppBar(
+    bg: Color,
+    contentColor: Color,
+    periodLabel: String,
+    onPrevPeriod: () -> Unit,
+    onNextPeriod: () -> Unit,
+    onPeriodClick: () -> Unit,
+    periodClickable: Boolean
+) {
+    TopAppBar(
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("l.edgar", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = contentColor)
+                Spacer(Modifier.width(8.dp))
+                IconButton(onClick = onPrevPeriod, modifier = Modifier.size(30.dp)) {
+                    Icon(Icons.Filled.ChevronLeft, null, tint = contentColor)
+                }
+                Text(
+                    text = periodLabel,
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = contentColor,
+                    modifier = if (periodClickable) Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onPeriodClick)
+                        .padding(horizontal = 6.dp, vertical = 4.dp) else Modifier
+                )
+                IconButton(onClick = onNextPeriod, modifier = Modifier.size(30.dp)) {
+                    Icon(Icons.Filled.ChevronRight, null, tint = contentColor)
+                }
+            }
+        },
         actions = {
             IconButton(onClick = {}) { Icon(Icons.Filled.StarBorder, null, tint = contentColor) }
             IconButton(onClick = {}) { Icon(Icons.Filled.Search, null, tint = contentColor) }
             IconButton(onClick = {}) { Icon(Icons.Filled.Tune, null, tint = contentColor) }
         },
-        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = bg)
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = bg)
     )
-}
-
-// ── Date Navigator ────────────────────────────────────────────────────────────
-
-@Composable
-private fun DateNavigatorRow(
-    label: String, bg: Color, textColor: Color,
-    onPrev: () -> Unit, onNext: () -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().background(bg).padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        IconButton(onClick = onPrev) { Icon(Icons.Filled.ChevronLeft, null, tint = textColor) }
-        Text(label, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold), color = textColor)
-        IconButton(onClick = onNext) { Icon(Icons.Filled.ChevronRight, null, tint = textColor) }
-    }
 }
 
 // ── Period Tabs ───────────────────────────────────────────────────────────────
