@@ -83,6 +83,20 @@ class ExpenseRepositoryImpl @Inject constructor(
     override suspend fun setBookmarked(id: Long, isBookmarked: Boolean) =
         dao.updateBookmarkStatus(id = id, isBookmarked = isBookmarked)
 
+    override suspend fun deleteTransactionsByIds(ids: List<Long>) = dao.deleteTransactionsByIds(ids)
+
+    override suspend fun updateTransactionsDateByIds(ids: List<Long>, newDate: String) =
+        dao.updateTransactionsDateByIds(ids = ids, newDate = newDate)
+
+    override suspend fun updateTransactionsCategoryByIds(ids: List<Long>, newCategory: String) =
+        dao.updateTransactionsCategoryByIds(ids = ids, newCategory = newCategory)
+
+    override suspend fun updateTransactionsAssetByIds(ids: List<Long>, accountId: Long) =
+        dao.updateTransactionsAssetByIds(ids = ids, accountId = accountId)
+
+    override suspend fun updateTransactionsDescriptionByIds(ids: List<Long>, newDescription: String) =
+        dao.updateTransactionsDescriptionByIds(ids = ids, newDescription = newDescription)
+
     override suspend fun delete(record: ExpenseRecord) = dao.delete(record)
 
     override suspend fun deleteAll() = dao.deleteAll()

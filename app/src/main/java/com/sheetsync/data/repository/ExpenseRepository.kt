@@ -39,6 +39,11 @@ interface ExpenseRepository {
     suspend fun getUnsynced(): List<ExpenseRecord>
     suspend fun markSynced(ids: List<Long>)
     suspend fun setBookmarked(id: Long, isBookmarked: Boolean)
+    suspend fun deleteTransactionsByIds(ids: List<Long>)
+    suspend fun updateTransactionsDateByIds(ids: List<Long>, newDate: String)
+    suspend fun updateTransactionsCategoryByIds(ids: List<Long>, newCategory: String)
+    suspend fun updateTransactionsAssetByIds(ids: List<Long>, accountId: Long)
+    suspend fun updateTransactionsDescriptionByIds(ids: List<Long>, newDescription: String)
     suspend fun delete(record: ExpenseRecord)
     suspend fun deleteAll()
     suspend fun isDuplicate(date: String, type: String, category: String, amount: Double): Boolean

@@ -1,9 +1,11 @@
 package com.sheetsync.ui.screens
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.sheetsync.data.local.entity.ExpenseRecord
+import com.sheetsync.data.local.entity.AccountRecord
 import com.sheetsync.ui.theme.*
 import com.sheetsync.viewmodel.CalendarCell
 import com.sheetsync.viewmodel.DayGroup
@@ -38,7 +41,9 @@ import com.sheetsync.viewmodel.MonthlyViewModel
 import com.sheetsync.viewmodel.PeriodSummary
 import com.sheetsync.viewmodel.TotalViewModel
 import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import kotlinx.coroutines.launch
 
 private val TABS = listOf("Daily", "Calendar", "Monthly", "Total")
@@ -48,6 +53,17 @@ private val monthNames = listOf(
 )
 private fun formatMoney(amount: Double)   = "₹ %,.2f".format(amount)
 private fun formatCompact(amount: Double) = "%,.2f".format(kotlin.math.abs(amount))
+private fun formatSignedMoney(amount: Double): String {
+    val sign = if (amount > 0.0001) "+" else if (amount < -0.0001) "-" else ""
+    return "$sign₹ %,.2f".format(kotlin.math.abs(amount))
+}
+
+private enum class BatchAction {
+    EDIT_DATES,
+    EDIT_CATEGORIES,
+    EDIT_ASSETS,
+    EDIT_DESCRIPTIONS
+}
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
@@ -67,6 +83,8 @@ fun HistoryScreen(
     totalVm: TotalViewModel = hiltViewModel()
 ) {
     val state      by vm.uiState.collectAsState()
+    val accounts by vm.accounts.collectAsState()
+    val categories by vm.categories.collectAsState()
     val monthlyState by monthlyVm.uiState.collectAsState()
     val totalState by totalVm.uiState.collectAsState()
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -78,6 +96,23 @@ fun HistoryScreen(
     var selectedTransaction by remember { mutableStateOf<ExpenseRecord?>(null) }
     var pendingCopyTransaction by remember { mutableStateOf<ExpenseRecord?>(null) }
     var showCopyDateDialog by remember { mutableStateOf(false) }
+    var showDeleteSelectedDialog by remember { mutableStateOf(false) }
+    var isBatchMenuExpanded by remember { mutableStateOf(false) }
+    var pendingBatchAction by remember { mutableStateOf<BatchAction?>(null) }
+    var selectedCategory by remember { mutableStateOf("") }
+    var selectedAssetId by remember { mutableStateOf<Long?>(null) }
+    var updatedDescription by remember { mutableStateOf("") }
+
+    val allVisibleRecords = remember(state.groups) { state.groups.flatMap { it.records } }
+    val selectedCount = vm.selectedTxIds.size
+    val selectedSum = vm.selectedSum(allVisibleRecords)
+    val selectedIdSet = vm.selectedTxIds.toSet()
+
+    LaunchedEffect(selectedTab) {
+        if (selectedTab != 0 && vm.isSelectionMode()) {
+            vm.clearSelection()
+        }
+    }
 
     // ── Theme detection ────────────────────────────────────────────────────────
     // luminance() > 0.5 → light theme (white background)
@@ -104,18 +139,32 @@ fun HistoryScreen(
 
     Scaffold(
         topBar = {
-            MoneyManagerAppBar(
-                bg = headerBg,
-                contentColor = headerText,
-                periodLabel = periodLabel,
-                onPrevPeriod = onPrevPeriod,
-                onNextPeriod = onNextPeriod,
-                onPeriodClick = { if (canOpenMonthPicker) showMonthPicker = true },
-                periodClickable = canOpenMonthPicker,
-                onBookmarksClick = onNavigateToBookmarks,
-                onSearchClick = onNavigateToSearch,
-                onFilterClick = onNavigateToFilterSelection
-            )
+            if (selectedCount > 0) {
+                ContextualSelectionAppBar(
+                    selectedCount = selectedCount,
+                    selectedSum = selectedSum,
+                    onDeleteClick = { showDeleteSelectedDialog = true },
+                    isMenuExpanded = isBatchMenuExpanded,
+                    onMenuExpandedChange = { isBatchMenuExpanded = it },
+                    onSelectBatchAction = { action ->
+                        pendingBatchAction = action
+                        isBatchMenuExpanded = false
+                    }
+                )
+            } else {
+                MoneyManagerAppBar(
+                    bg = headerBg,
+                    contentColor = headerText,
+                    periodLabel = periodLabel,
+                    onPrevPeriod = onPrevPeriod,
+                    onNextPeriod = onNextPeriod,
+                    onPeriodClick = { if (canOpenMonthPicker) showMonthPicker = true },
+                    periodClickable = canOpenMonthPicker,
+                    onBookmarksClick = onNavigateToBookmarks,
+                    onSearchClick = onNavigateToSearch,
+                    onFilterClick = onNavigateToFilterSelection
+                )
+            }
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { scaffoldPadding ->
@@ -167,27 +216,39 @@ fun HistoryScreen(
                     )
                     else -> DailyContent(
                         groups = state.groups,
-                        onTransactionClick = { record -> selectedTransaction = record },
+                        selectedIds = selectedIdSet,
+                        onTransactionClick = { record ->
+                            if (vm.isSelectionMode()) {
+                                vm.toggleTransactionSelection(record.id)
+                            } else {
+                                selectedTransaction = record
+                            }
+                        },
+                        onTransactionLongClick = { record ->
+                            vm.onTransactionLongPress(record.id)
+                        },
                         modifier = Modifier.fillMaxSize()
                     )
                 }
 
                 // Primary add-transaction FAB
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    FloatingActionButton(
-                        onClick         = onNavigateToLog,
-                        shape           = CircleShape,
-                        containerColor  = MaterialTheme.colorScheme.primary,
-                        contentColor    = MaterialTheme.colorScheme.onPrimary,
-                        elevation       = FloatingActionButtonDefaults.elevation(6.dp),
-                        modifier        = Modifier.size(58.dp)
-                    ) { Icon(Icons.Filled.Add, null, modifier = Modifier.size(28.dp)) }
+                if (!vm.isSelectionMode()) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 16.dp, bottom = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        FloatingActionButton(
+                            onClick         = onNavigateToLog,
+                            shape           = CircleShape,
+                            containerColor  = MaterialTheme.colorScheme.primary,
+                            contentColor    = MaterialTheme.colorScheme.onPrimary,
+                            elevation       = FloatingActionButtonDefaults.elevation(6.dp),
+                            modifier        = Modifier.size(58.dp)
+                        ) { Icon(Icons.Filled.Add, null, modifier = Modifier.size(28.dp)) }
+                    }
                 }
             }
         }
@@ -349,6 +410,162 @@ fun HistoryScreen(
                     ) {
                         Text("Cancel")
                     }
+                }
+            }
+        )
+    }
+
+    if (showDeleteSelectedDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteSelectedDialog = false },
+            title = { Text("Delete selected transactions?") },
+            text = { Text("This action will remove all selected transactions.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteSelectedDialog = false
+                    vm.deleteSelectedTransactions()
+                }) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteSelectedDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (pendingBatchAction == BatchAction.EDIT_DATES) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = LocalDate.now()
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { pendingBatchAction = null },
+            confirmButton = {
+                TextButton(onClick = {
+                    val selectedMillis = datePickerState.selectedDateMillis
+                    if (selectedMillis != null) {
+                        val selectedDate = Instant.ofEpochMilli(selectedMillis)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                        vm.updateSelectedDates(selectedDate.toString())
+                    }
+                    pendingBatchAction = null
+                }) {
+                    Text("Update")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingBatchAction = null }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    if (pendingBatchAction == BatchAction.EDIT_CATEGORIES) {
+        AlertDialog(
+            onDismissRequest = { pendingBatchAction = null },
+            title = { Text("Edit All Categories") },
+            text = {
+                DropdownField(
+                    label = "Category",
+                    options = categories,
+                    selected = selectedCategory,
+                    onSelect = { selectedCategory = it }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.updateSelectedCategories(selectedCategory)
+                    selectedCategory = ""
+                    pendingBatchAction = null
+                }) {
+                    Text("Update")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    selectedCategory = ""
+                    pendingBatchAction = null
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (pendingBatchAction == BatchAction.EDIT_ASSETS) {
+        val accountNames = accounts.map { it.accountName }
+        val selectedAssetName = accounts.firstOrNull { it.id == selectedAssetId }?.accountName.orEmpty()
+        AlertDialog(
+            onDismissRequest = { pendingBatchAction = null },
+            title = { Text("Edit All Assets") },
+            text = {
+                DropdownField(
+                    label = "Asset Account",
+                    options = accountNames,
+                    selected = selectedAssetName,
+                    onSelect = { selectedName ->
+                        selectedAssetId = accounts.firstOrNull { it.accountName == selectedName }?.id
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    selectedAssetId?.let(vm::updateSelectedAssets)
+                    selectedAssetId = null
+                    pendingBatchAction = null
+                }) {
+                    Text("Update")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    selectedAssetId = null
+                    pendingBatchAction = null
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (pendingBatchAction == BatchAction.EDIT_DESCRIPTIONS) {
+        AlertDialog(
+            onDismissRequest = { pendingBatchAction = null },
+            title = { Text("Edit All Descriptions") },
+            text = {
+                OutlinedTextField(
+                    value = updatedDescription,
+                    onValueChange = { updatedDescription = it },
+                    label = { Text("Description") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = false,
+                    minLines = 2
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.updateSelectedDescriptions(updatedDescription)
+                    updatedDescription = ""
+                    pendingBatchAction = null
+                }) {
+                    Text("Update")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    updatedDescription = ""
+                    pendingBatchAction = null
+                }) {
+                    Text("Cancel")
                 }
             }
         )
@@ -580,7 +797,9 @@ private fun CalendarCellView(
 @Composable
 private fun DailyContent(
     groups: List<DayGroup>,
+    selectedIds: Set<Long>,
     onTransactionClick: (ExpenseRecord) -> Unit,
+    onTransactionLongClick: (ExpenseRecord) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (groups.isEmpty()) {
@@ -594,7 +813,12 @@ private fun DailyContent(
             groups.forEach { group ->
                 item(key = group.date.toString()) { DayGroupHeader(group) }
                 itemsIndexed(group.records, key = { _, record -> record.id }) { index, record ->
-                    TransactionRow(record = record, onClick = { onTransactionClick(record) })
+                    TransactionRow(
+                        record = record,
+                        isSelected = selectedIds.contains(record.id),
+                        onClick = { onTransactionClick(record) },
+                        onLongClick = { onTransactionLongClick(record) }
+                    )
                     if (index < group.records.lastIndex) {
                         HorizontalDivider(
                             color = MaterialTheme.colorScheme.outlineVariant,
@@ -652,6 +876,63 @@ private fun MoneyManagerAppBar(
             IconButton(onClick = onFilterClick) { Icon(Icons.Filled.Tune, null, tint = contentColor) }
         },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = bg)
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ContextualSelectionAppBar(
+    selectedCount: Int,
+    selectedSum: Double,
+    onDeleteClick: () -> Unit,
+    isMenuExpanded: Boolean,
+    onMenuExpandedChange: (Boolean) -> Unit,
+    onSelectBatchAction: (BatchAction) -> Unit
+) {
+    TopAppBar(
+        title = {
+            Text(
+                text = "$selectedCount selected",
+                fontWeight = FontWeight.SemiBold
+            )
+        },
+        actions = {
+            Text(
+                text = formatSignedMoney(selectedSum),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(end = 6.dp)
+            )
+            IconButton(onClick = onDeleteClick) {
+                Icon(Icons.Filled.Delete, contentDescription = "Delete selected")
+            }
+            Box {
+                IconButton(onClick = { onMenuExpandedChange(true) }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "Batch actions")
+                }
+                DropdownMenu(
+                    expanded = isMenuExpanded,
+                    onDismissRequest = { onMenuExpandedChange(false) }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Edit All Dates") },
+                        onClick = { onSelectBatchAction(BatchAction.EDIT_DATES) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Edit All Categories") },
+                        onClick = { onSelectBatchAction(BatchAction.EDIT_CATEGORIES) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Edit All Assets") },
+                        onClick = { onSelectBatchAction(BatchAction.EDIT_ASSETS) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Edit All Descriptions") },
+                        onClick = { onSelectBatchAction(BatchAction.EDIT_DESCRIPTIONS) }
+                    )
+                }
+            }
+        }
     )
 }
 
@@ -770,14 +1051,22 @@ private fun DayGroupHeader(group: DayGroup) {
 // ── Transaction Row ───────────────────────────────────────────────────────────
 
 @Composable
-private fun TransactionRow(record: ExpenseRecord, onClick: () -> Unit) {
+@OptIn(ExperimentalFoundationApi::class)
+private fun TransactionRow(
+    record: ExpenseRecord,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
     val isIncome  = record.type == "Income"
     val isExpense = record.type == "Expense"
+    val selectedBg = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.32f)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
-            .clickable(onClick = onClick)
+            .background(if (isSelected) selectedBg else MaterialTheme.colorScheme.background)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

@@ -79,6 +79,55 @@ interface ExpenseDao {
     @Query("UPDATE expense_records SET isBookmarked = :isBookmarked WHERE id = :id")
     suspend fun updateBookmarkStatus(id: Long, isBookmarked: Boolean)
 
+    @Query("DELETE FROM expense_records WHERE id IN (:ids)")
+    suspend fun deleteTransactionsByIds(ids: List<Long>)
+
+    @Query(
+        """
+        UPDATE expense_records
+        SET date = :newDate,
+            isSynced = 0,
+            syncAction = 'UPDATE'
+        WHERE id IN (:ids)
+        """
+    )
+    suspend fun updateTransactionsDateByIds(ids: List<Long>, newDate: String)
+
+    @Query(
+        """
+        UPDATE expense_records
+        SET category = :newCategory,
+            isSynced = 0,
+            syncAction = 'UPDATE'
+        WHERE id IN (:ids)
+        """
+    )
+    suspend fun updateTransactionsCategoryByIds(ids: List<Long>, newCategory: String)
+
+    @Query(
+        """
+        UPDATE expense_records
+        SET accountId = CASE WHEN type IN ('Expense', 'Income') THEN :accountId ELSE accountId END,
+            fromAccountId = CASE WHEN type = 'Expense' THEN :accountId ELSE fromAccountId END,
+            toAccountId = CASE WHEN type = 'Income' THEN :accountId ELSE toAccountId END,
+            isSynced = 0,
+            syncAction = 'UPDATE'
+        WHERE id IN (:ids)
+        """
+    )
+    suspend fun updateTransactionsAssetByIds(ids: List<Long>, accountId: Long)
+
+    @Query(
+        """
+        UPDATE expense_records
+        SET description = :newDescription,
+            isSynced = 0,
+            syncAction = 'UPDATE'
+        WHERE id IN (:ids)
+        """
+    )
+    suspend fun updateTransactionsDescriptionByIds(ids: List<Long>, newDescription: String)
+
     @Query("DELETE FROM expense_records WHERE id = :id")
     suspend fun hardDeleteById(id: Long)
 

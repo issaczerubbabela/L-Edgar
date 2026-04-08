@@ -1,11 +1,15 @@
 package com.sheetsync.viewmodel
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sheetsync.data.local.entity.AccountRecord
 import com.sheetsync.data.local.entity.ExpenseRecord
+import com.sheetsync.data.repository.AccountRepository
+import com.sheetsync.data.repository.DropdownOptionRepository
 import com.sheetsync.data.repository.ExpenseRepository
 import com.sheetsync.util.parseFlexibleDate
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -59,12 +63,26 @@ data class HistoryUiState(
 
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
-    private val repository: ExpenseRepository
+    private val repository: ExpenseRepository,
+    accountRepository: AccountRepository,
+    dropdownOptionRepository: DropdownOptionRepository
 ) : ViewModel() {
 
     private val _month = MutableStateFlow(LocalDate.now().monthValue)
     private val _year  = MutableStateFlow(LocalDate.now().year)
     private var shouldAutoFocusLatestMonth = true
+    val selectedTxIds = mutableStateListOf<Long>()
+
+    val accounts: StateFlow<List<AccountRecord>> = accountRepository
+        .getAllVisibleAccounts()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val categories: StateFlow<List<String>> = combine(
+        dropdownOptionRepository.getOptionsByType("EXPENSE_CATEGORY"),
+        dropdownOptionRepository.getOptionsByType("INCOME_CATEGORY")
+    ) { expense, income ->
+        (expense + income).map { it.name }.distinct().sorted()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** The date the user has tapped in the Calendar grid. */
     var selectedDate: LocalDate? by mutableStateOf(null)
@@ -165,6 +183,7 @@ class HistoryViewModel @Inject constructor(
         _month.value = safeMonth
         _year.value = safeYear
         selectedDate = null
+        clearSelection()
     }
 
     private fun shiftMonth(delta: Long) {
@@ -173,10 +192,88 @@ class HistoryViewModel @Inject constructor(
         _month.value = next.monthValue
         _year.value  = next.year
         selectedDate = null
+        clearSelection()
     }
 
     fun delete(record: ExpenseRecord) {
         viewModelScope.launch { repository.delete(record) }
+    }
+
+    fun onTransactionLongPress(id: Long) {
+        if (!selectedTxIds.contains(id)) selectedTxIds.add(id)
+    }
+
+    fun toggleTransactionSelection(id: Long) {
+        if (selectedTxIds.contains(id)) {
+            selectedTxIds.remove(id)
+        } else {
+            selectedTxIds.add(id)
+        }
+    }
+
+    fun clearSelection() {
+        selectedTxIds.clear()
+    }
+
+    fun isSelectionMode(): Boolean = selectedTxIds.isNotEmpty()
+
+    fun selectedSum(records: List<ExpenseRecord>): Double {
+        val selected = selectedTxIds.toSet()
+        return records
+            .asSequence()
+            .filter { selected.contains(it.id) }
+            .sumOf { record ->
+                when (record.type) {
+                    "Income" -> record.amount
+                    "Expense" -> -record.amount
+                    else -> 0.0
+                }
+            }
+    }
+
+    fun deleteSelectedTransactions() {
+        val ids = selectedTxIds.toList()
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            repository.deleteTransactionsByIds(ids)
+            clearSelection()
+        }
+    }
+
+    fun updateSelectedDates(newDate: String) {
+        val ids = selectedTxIds.toList()
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            repository.updateTransactionsDateByIds(ids = ids, newDate = newDate)
+            clearSelection()
+        }
+    }
+
+    fun updateSelectedCategories(newCategory: String) {
+        val ids = selectedTxIds.toList()
+        if (ids.isEmpty() || newCategory.isBlank()) return
+        viewModelScope.launch {
+            repository.updateTransactionsCategoryByIds(ids = ids, newCategory = newCategory)
+            clearSelection()
+        }
+    }
+
+    fun updateSelectedAssets(accountId: Long) {
+        val ids = selectedTxIds.toList()
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            repository.updateTransactionsAssetByIds(ids = ids, accountId = accountId)
+            clearSelection()
+        }
+    }
+
+    fun updateSelectedDescriptions(newDescription: String) {
+        val ids = selectedTxIds.toList()
+        if (ids.isEmpty() || newDescription.isBlank()) return
+        viewModelScope.launch {
+            repository.updateTransactionsDescriptionByIds(ids = ids, newDescription = newDescription)
+            clearSelection()
+        }
     }
 
     fun toggleBookmark(record: ExpenseRecord) {
