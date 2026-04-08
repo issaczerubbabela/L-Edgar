@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -30,6 +31,7 @@ data class SearchUiState(
     val accounts: List<AccountRecord> = emptyList(),
     val categories: List<String> = emptyList(),
     val results: List<ExpenseRecord> = emptyList(),
+    val hasActiveSearch: Boolean = false,
     val incomeTotal: Double = 0.0,
     val expenseTotal: Double = 0.0,
     val transferTotal: Double = 0.0
@@ -63,7 +65,8 @@ private data class SearchHeaderState(
 private data class SearchDataState(
     val accounts: List<AccountRecord>,
     val categories: List<String>,
-    val results: List<ExpenseRecord>
+    val results: List<ExpenseRecord>,
+    val hasActiveSearch: Boolean
 )
 
 @HiltViewModel
@@ -103,15 +106,19 @@ class SearchViewModel @Inject constructor(
 
     private val results = searchParams
         .flatMapLatest { params ->
-            expenseRepository.searchTransactions(
-                query = params.query,
-                startDate = params.startDate,
-                endDate = params.endDate,
-                accountId = params.accountId,
-                category = params.category,
-                minAmount = params.minAmount,
-                maxAmount = params.maxAmount
-            )
+            if (!hasActiveSearch(params)) {
+                flowOf(emptyList())
+            } else {
+                expenseRepository.searchTransactions(
+                    query = params.query,
+                    startDate = params.startDate,
+                    endDate = params.endDate,
+                    accountId = params.accountId,
+                    category = params.category,
+                    minAmount = params.minAmount,
+                    maxAmount = params.maxAmount
+                )
+            }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -126,9 +133,15 @@ class SearchViewModel @Inject constructor(
     private val dataState = combine(
         accounts,
         categories,
+        searchParams,
         results
-    ) { accountList, categoryList, searchResults ->
-        SearchDataState(accounts = accountList, categories = categoryList, results = searchResults)
+    ) { accountList, categoryList, params, searchResults ->
+        SearchDataState(
+            accounts = accountList,
+            categories = categoryList,
+            results = searchResults,
+            hasActiveSearch = hasActiveSearch(params)
+        )
     }
 
     val uiState: StateFlow<SearchUiState> = combine(headerState, dataState) { header, data ->
@@ -144,6 +157,7 @@ class SearchViewModel @Inject constructor(
             accounts = data.accounts,
             categories = data.categories,
             results = data.results,
+            hasActiveSearch = data.hasActiveSearch,
             incomeTotal = data.results.filter { it.type == "Income" }.sumOf { it.amount },
             expenseTotal = data.results.filter { it.type == "Expense" }.sumOf { it.amount },
             transferTotal = data.results.filter { it.type == "Transfer" }.sumOf { it.amount }
@@ -165,4 +179,14 @@ class SearchViewModel @Inject constructor(
     fun onMinAmountChange(value: String) = filters.update { it.copy(minAmount = value) }
 
     fun onMaxAmountChange(value: String) = filters.update { it.copy(maxAmount = value) }
+
+    private fun hasActiveSearch(params: SearchParams): Boolean {
+        return params.query != null ||
+            params.startDate != null ||
+            params.endDate != null ||
+            params.accountId != null ||
+            params.category != null ||
+            params.minAmount != null ||
+            params.maxAmount != null
+    }
 }

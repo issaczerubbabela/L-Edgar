@@ -21,6 +21,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Tune
 import com.sheetsync.ui.screens.HistoryScreen
 import com.sheetsync.ui.screens.InsightsScreen
 import com.sheetsync.ui.screens.LogScreen
@@ -30,6 +31,8 @@ import com.sheetsync.ui.screens.AddAccountScreen
 import com.sheetsync.ui.screens.BookmarksScreen
 import com.sheetsync.ui.screens.BudgetSettingScreen
 import com.sheetsync.ui.screens.DropdownManagementScreen
+import com.sheetsync.ui.screens.FilterSelectionScreen
+import com.sheetsync.ui.screens.FilteredTransactionsScreen
 import com.sheetsync.ui.screens.SearchScreen
 import com.sheetsync.ui.screens.SettingsScreen
 import com.sheetsync.viewmodel.ACCOUNT_ROUTE_ADD
@@ -42,6 +45,12 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     )
     object Trans : Screen("trans", "Trans.", Icons.Filled.MenuBook)
     object Search : Screen("search", "Search", Icons.Filled.MoreHoriz)
+    object FilterSelection : Screen("filter_selection", "Filter", Icons.Filled.Tune)
+    object FilteredTransactions : Screen(
+        "filtered_transactions?year={year}&month={month}&incomeIds={incomeIds}&expenseIds={expenseIds}&accountIds={accountIds}",
+        "Filtered",
+        Icons.Filled.Tune
+    )
     object Bookmarks : Screen("bookmarks", "Bookmarks", Icons.Filled.Star)
     object Stats : Screen("stats", "Stats", Icons.Filled.BarChart)
     object Accounts : Screen("accounts", "Accounts", Icons.Filled.Paid)
@@ -53,6 +62,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
 }
 
 private const val LOG_BASE_ROUTE = "log"
+private const val FILTERED_BASE_ROUTE = "filtered_transactions"
 
 private fun logRoute(
     transactionId: Long? = null,
@@ -68,6 +78,19 @@ private fun logRoute(
     return if (params.isEmpty()) LOG_BASE_ROUTE else "$LOG_BASE_ROUTE?${params.joinToString("&")}" 
 }
 
+private fun filteredTransactionsRoute(
+    year: Int,
+    month: Int,
+    incomeIds: Set<Long>,
+    expenseIds: Set<Long>,
+    accountIds: Set<Long>
+): String {
+    val income = incomeIds.sorted().joinToString(",")
+    val expense = expenseIds.sorted().joinToString(",")
+    val accounts = accountIds.sorted().joinToString(",")
+    return "$FILTERED_BASE_ROUTE?year=$year&month=$month&incomeIds=$income&expenseIds=$expense&accountIds=$accounts"
+}
+
 val bottomNavItems = listOf(Screen.Trans, Screen.Stats, Screen.Accounts, Screen.More)
 
 @Composable
@@ -75,34 +98,37 @@ fun AppNavigation() {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDest = navBackStackEntry?.destination
+    val showBottomBar = currentDest?.route != Screen.FilteredTransactions.route
 
     Scaffold(
         bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 0.dp
-            ) {
-                bottomNavItems.forEach { screen ->
-                    val selected = currentDest?.hierarchy?.any { it.route == screen.route } == true
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = {
-                            navController.navigate(screen.route) {
-                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = { Icon(screen.icon, contentDescription = screen.label) },
-                        label = { Text(screen.label) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer
+            if (showBottomBar) {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 0.dp
+                ) {
+                    bottomNavItems.forEach { screen ->
+                        val selected = currentDest?.hierarchy?.any { it.route == screen.route } == true
+                        NavigationBarItem(
+                            selected = selected,
+                            onClick = {
+                                navController.navigate(screen.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            icon = { Icon(screen.icon, contentDescription = screen.label) },
+                            label = { Text(screen.label) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                indicatorColor = MaterialTheme.colorScheme.primaryContainer
+                            )
                         )
-                    )
+                    }
                 }
             }
         }
@@ -158,6 +184,11 @@ fun AppNavigation() {
                     },
                     onNavigateToSearch = {
                         navController.navigate(Screen.Search.route) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onNavigateToFilterSelection = {
+                        navController.navigate(Screen.FilterSelection.route) {
                             launchSingleTop = true
                         }
                     },
@@ -222,6 +253,45 @@ fun AppNavigation() {
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() },
                     onTransactionClick = { transactionId ->
+                        navController.navigate(logRoute(transactionId = transactionId)) {
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
+            composable(Screen.FilterSelection.route) {
+                FilterSelectionScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
+                    onApplyFilters = { year, month, incomeIds, expenseIds, accountIds ->
+                        navController.navigate(
+                            filteredTransactionsRoute(
+                                year = year,
+                                month = month,
+                                incomeIds = incomeIds,
+                                expenseIds = expenseIds,
+                                accountIds = accountIds
+                            )
+                        ) {
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
+            composable(
+                route = Screen.FilteredTransactions.route,
+                arguments = listOf(
+                    navArgument("year") { type = NavType.IntType; defaultValue = 0 },
+                    navArgument("month") { type = NavType.IntType; defaultValue = 0 },
+                    navArgument("incomeIds") { type = NavType.StringType; defaultValue = "" },
+                    navArgument("expenseIds") { type = NavType.StringType; defaultValue = "" },
+                    navArgument("accountIds") { type = NavType.StringType; defaultValue = "" }
+                )
+            ) {
+                FilteredTransactionsScreen(
+                    navInsets = innerPadding,
+                    onBack = { navController.popBackStack() },
+                    onNavigateToEditTransaction = { transactionId ->
                         navController.navigate(logRoute(transactionId = transactionId)) {
                             launchSingleTop = true
                         }

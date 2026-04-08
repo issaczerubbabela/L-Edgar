@@ -60,6 +60,7 @@ fun HistoryScreen(
     onNavigateToCopyTransaction: (Long, Boolean) -> Unit,
     onNavigateToBookmarks: () -> Unit,
     onNavigateToSearch: () -> Unit,
+    onNavigateToFilterSelection: () -> Unit,
     onNavigateToBudgetSetting: () -> Unit,
     vm: HistoryViewModel = hiltViewModel(),
     monthlyVm: MonthlyViewModel = hiltViewModel(),
@@ -112,7 +113,8 @@ fun HistoryScreen(
                 onPeriodClick = { if (canOpenMonthPicker) showMonthPicker = true },
                 periodClickable = canOpenMonthPicker,
                 onBookmarksClick = onNavigateToBookmarks,
-                onSearchClick = onNavigateToSearch
+                onSearchClick = onNavigateToSearch,
+                onFilterClick = onNavigateToFilterSelection
             )
         },
         containerColor = MaterialTheme.colorScheme.background
@@ -619,7 +621,8 @@ private fun MoneyManagerAppBar(
     onPeriodClick: () -> Unit,
     periodClickable: Boolean,
     onBookmarksClick: () -> Unit,
-    onSearchClick: () -> Unit
+    onSearchClick: () -> Unit,
+    onFilterClick: () -> Unit
 ) {
     TopAppBar(
         title = {
@@ -646,7 +649,7 @@ private fun MoneyManagerAppBar(
         actions = {
             IconButton(onClick = onBookmarksClick) { Icon(Icons.Filled.StarBorder, null, tint = contentColor) }
             IconButton(onClick = onSearchClick) { Icon(Icons.Filled.Search, null, tint = contentColor) }
-            IconButton(onClick = {}) { Icon(Icons.Filled.Tune, null, tint = contentColor) }
+            IconButton(onClick = onFilterClick) { Icon(Icons.Filled.Tune, null, tint = contentColor) }
         },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = bg)
     )

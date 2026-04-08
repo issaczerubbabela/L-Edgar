@@ -112,7 +112,11 @@ fun SearchScreen(
             if (state.results.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        text = "No matching transactions",
+                        text = if (state.hasActiveSearch) {
+                            "No matching transactions"
+                        } else {
+                            "Start typing or apply a filter"
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
