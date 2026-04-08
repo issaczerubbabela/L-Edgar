@@ -423,7 +423,7 @@ private fun DailyContent(
 @Composable
 private fun MoneyManagerAppBar(bg: Color, contentColor: Color) {
     CenterAlignedTopAppBar(
-        title = { Text("SheetSync", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = contentColor) },
+        title = { Text("L.Edgar", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = contentColor) },
         actions = {
             IconButton(onClick = {}) { Icon(Icons.Filled.StarBorder, null, tint = contentColor) }
             IconButton(onClick = {}) { Icon(Icons.Filled.Search, null, tint = contentColor) }
