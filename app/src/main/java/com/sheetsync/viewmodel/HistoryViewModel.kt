@@ -75,6 +75,11 @@ class HistoryViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             repository.getAllRecords().collect { records ->
+                if (records.isEmpty()) {
+                    shouldAutoFocusLatestMonth = true
+                    return@collect
+                }
+
                 if (!shouldAutoFocusLatestMonth) return@collect
 
                 val latest = records

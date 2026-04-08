@@ -62,6 +62,8 @@ class SyncWorker @AssistedInject constructor(
                 }
             }
 
+            val shouldRunAccountBackup = shouldBackupAccounts || unsynced.isNotEmpty()
+
             val dropdownBackupCount = backupDropdownOptions() ?: run {
                 return Result.retry()
             }
@@ -70,7 +72,7 @@ class SyncWorker @AssistedInject constructor(
                 return Result.retry()
             }
 
-            val accountsBackupCount = if (shouldBackupAccounts) {
+            val accountsBackupCount = if (shouldRunAccountBackup) {
                 backupAccounts(accounts) ?: return Result.retry()
             } else {
                 -1

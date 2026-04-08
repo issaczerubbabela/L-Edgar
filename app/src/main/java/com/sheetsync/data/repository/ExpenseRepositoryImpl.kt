@@ -55,12 +55,31 @@ class ExpenseRepositoryImpl @Inject constructor(
         repairLegacyRecords()
         if (records.isEmpty()) return 0
 
-        val accounts = accountDao.getAllAccountsSnapshot()
-        val accountsByName = accounts.associateBy { normalizeAccountKey(it.accountName) }
-        val fallbackAccountId = accounts
+        val initialAccounts = accountDao.getAllAccountsSnapshot().toMutableList()
+        if (initialAccounts.isEmpty()) {
+            val fallbackId = accountDao.insert(
+                com.sheetsync.data.local.entity.AccountRecord(
+                    groupName = "Cash",
+                    accountName = "Cash",
+                    initialBalance = 0.0,
+                    isHidden = false
+                )
+            )
+            initialAccounts += com.sheetsync.data.local.entity.AccountRecord(
+                id = fallbackId,
+                groupName = "Cash",
+                accountName = "Cash",
+                initialBalance = 0.0,
+                isHidden = false
+            )
+        }
+
+        val accountsByName = initialAccounts.associateBy { normalizeAccountKey(it.accountName) }
+        val accountsByGroup = initialAccounts.associateBy { normalizeAccountKey(it.groupName) }
+        val fallbackAccountId = initialAccounts
             .firstOrNull { it.accountName.equals("Cash", ignoreCase = true) || it.groupName.equals("Cash", ignoreCase = true) }
             ?.id
-            ?: accounts.firstOrNull()?.id
+            ?: initialAccounts.firstOrNull()?.id
 
         val localComparable = dao.getAllRecordsSnapshot().map { local ->
             ComparableTx(
@@ -86,9 +105,31 @@ class ExpenseRepositoryImpl @Inject constructor(
             val timestamp = dto.timestamp?.trim().takeUnless { it.isNullOrBlank() }
             val remoteAccountName = dto.accountName?.trim().takeUnless { it.isNullOrBlank() }
                 ?: dto.paymentMode?.trim().takeUnless { it.isNullOrBlank() }
-            val mappedAccountId = remoteAccountName
-                ?.let { accountsByName[normalizeAccountKey(it)]?.id }
-                ?: fallbackAccountId
+            val transferParts = remoteAccountName
+                ?.split("->")
+                ?.map { it.trim() }
+                ?.filter { it.isNotBlank() }
+                .orEmpty()
+
+            val fromAccountId = transferParts.getOrNull(0)
+                ?.let { token ->
+                    val key = normalizeAccountKey(token)
+                    accountsByName[key]?.id ?: accountsByGroup[key]?.id
+                }
+            val toAccountId = transferParts.getOrNull(1)
+                ?.let { token ->
+                    val key = normalizeAccountKey(token)
+                    accountsByName[key]?.id ?: accountsByGroup[key]?.id
+                }
+
+            val mappedAccountId = when {
+                resolvedType.equals("Transfer", ignoreCase = true) -> null
+                remoteAccountName == null -> fallbackAccountId
+                else -> {
+                    val key = normalizeAccountKey(remoteAccountName)
+                    accountsByName[key]?.id ?: accountsByGroup[key]?.id ?: fallbackAccountId
+                }
+            }
 
             // For non-transfer rows, drop records that cannot be mapped safely.
             if (!resolvedType.equals("Transfer", ignoreCase = true) && mappedAccountId == null) {
@@ -114,8 +155,16 @@ class ExpenseRepositoryImpl @Inject constructor(
                     amount = dto.amount,
                     accountId = mappedAccountId,
                     remarks = dto.remarks,
-                    fromAccountId = if (resolvedType.equals("Expense", ignoreCase = true)) mappedAccountId else null,
-                    toAccountId = if (resolvedType.equals("Income", ignoreCase = true)) mappedAccountId else null,
+                    fromAccountId = when {
+                        resolvedType.equals("Expense", ignoreCase = true) -> mappedAccountId
+                        resolvedType.equals("Transfer", ignoreCase = true) -> fromAccountId
+                        else -> null
+                    },
+                    toAccountId = when {
+                        resolvedType.equals("Income", ignoreCase = true) -> mappedAccountId
+                        resolvedType.equals("Transfer", ignoreCase = true) -> toAccountId
+                        else -> null
+                    },
                     isSynced = true,
                     remoteTimestamp = timestamp,
                     syncAction = "NONE"

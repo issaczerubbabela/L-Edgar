@@ -318,5 +318,16 @@ function formatDate(value) {
     var d = String(value.getDate()).padStart(2, "0");
     return y + "-" + m + "-" + d;
   }
+
+  // Handle Date-like strings such as
+  // "Mon Apr 06 2026 00:00:00 GMT+0530 (India Standard Time)".
+  var parsed = new Date(value);
+  if (!isNaN(parsed.getTime())) {
+    var py = parsed.getFullYear();
+    var pm = String(parsed.getMonth() + 1).padStart(2, "0");
+    var pd = String(parsed.getDate()).padStart(2, "0");
+    return py + "-" + pm + "-" + pd;
+  }
+
   return String(value);
 }
