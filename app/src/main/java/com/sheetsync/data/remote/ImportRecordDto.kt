@@ -15,5 +15,6 @@ data class ImportRecordDto(
     val paymentMode: String? = null,
     val accountName: String? = null,
     val remarks: String,
+    val isBookmarked: Boolean? = false,
     val syncedAt: String? = null
 )

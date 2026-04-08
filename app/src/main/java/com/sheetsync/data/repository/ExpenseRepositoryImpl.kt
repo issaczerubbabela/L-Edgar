@@ -216,6 +216,7 @@ class ExpenseRepositoryImpl @Inject constructor(
                     amount = dto.amount,
                     accountId = mappedAccountId,
                     remarks = dto.remarks,
+                    isBookmarked = dto.isBookmarked ?: false,
                     fromAccountId = when {
                         resolvedType.equals("Expense", ignoreCase = true) -> mappedAccountId
                         resolvedType.equals("Transfer", ignoreCase = true) -> fromAccountId

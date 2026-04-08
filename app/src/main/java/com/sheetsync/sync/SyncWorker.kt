@@ -115,7 +115,8 @@ class SyncWorker @AssistedInject constructor(
                 description = r.description,
                 amount = r.amount,
                 accountName = resolvedAccountName,
-                remarks = r.remarks
+                remarks = r.remarks,
+                isBookmarked = r.isBookmarked
             )
         }
 
