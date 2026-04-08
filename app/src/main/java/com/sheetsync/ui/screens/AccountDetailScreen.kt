@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -42,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -194,31 +196,51 @@ fun AccountDetailScreen(
                 }
                 items(entriesForDay.size) { i ->
                     val entry = entriesForDay[i]
+                    val isIncome = entry.type == "Income"
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(MaterialTheme.colorScheme.background)
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Text(
+                            text = entry.category,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.width(76.dp),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            lineHeight = 14.sp
+                        )
+                        Spacer(Modifier.width(8.dp))
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(entry.category, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
-                            Text(entry.description.ifBlank { "-" }, color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp)
+                            Text(
+                                text = entry.description.ifBlank { entry.category },
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onBackground,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                             if (entry.paymentMode.isNotBlank()) {
-                                Text(entry.paymentMode, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                                Text(
+                                    text = entry.paymentMode,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
-                        Column(horizontalAlignment = Alignment.End) {
+                        Spacer(Modifier.width(8.dp))
+                        Column(horizontalAlignment = Alignment.End, modifier = Modifier.width(136.dp)) {
                             Text(
                                 "₹ ${money(entry.amount)}",
-                                color = if (entry.type == "Income") IncomeBlue else ExpenseOrange,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.SemiBold
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = if (isIncome) IncomeBlue else ExpenseOrange
                             )
                             Text(
-                                "Post-txn balance ${money(entry.runningBalance)}",
+                                "PostBal ${money(entry.runningBalance)}",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 11.sp
+                                style = MaterialTheme.typography.bodySmall
                             )
                         }
                     }
@@ -313,7 +335,7 @@ private fun DayHeader(date: String) {
     }.getOrElse { date }
 
     Text(
-        text = "$label  (newest first)",
+        text = label,
         color = MaterialTheme.colorScheme.onBackground,
         fontWeight = FontWeight.Bold,
         fontSize = 16.sp,
