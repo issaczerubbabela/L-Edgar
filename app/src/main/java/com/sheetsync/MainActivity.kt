@@ -6,24 +6,30 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import com.sheetsync.data.preferences.ThemePreferenceRepository
+import androidx.core.view.WindowCompat
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.sheetsync.ui.navigation.AppNavigation
 import com.sheetsync.ui.theme.SheetSyncTheme
+import com.sheetsync.viewmodel.SettingsViewModel
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    @Inject
-    lateinit var themeRepository: ThemePreferenceRepository
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
+
         setContent {
-            val isDark by themeRepository.isDarkTheme.collectAsState(initial = true)
-            SheetSyncTheme(isDarkTheme = isDark) {
+            val viewModel: SettingsViewModel = hiltViewModel()
+            val currentTheme by viewModel.themeState.collectAsState()
+
+            SheetSyncTheme(themeOption = currentTheme) {
                 AppNavigation()
             }
         }

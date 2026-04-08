@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -358,7 +359,10 @@ fun CashFlowBarChart(
         )
     }
 
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(
+        modifier = modifier.background(MaterialTheme.colorScheme.surface),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         CartesianChartHost(
             chart = rememberCartesianChart(
                 rememberColumnCartesianLayer(),
@@ -370,6 +374,7 @@ fun CashFlowBarChart(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(250.dp)
+                .background(Color.Transparent)
         )
 
         Row(

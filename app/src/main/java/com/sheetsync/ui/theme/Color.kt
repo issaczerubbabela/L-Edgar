@@ -3,7 +3,16 @@ package com.sheetsync.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // ── Brand ─────────────────────────────────────────────────────────────────
-val TealPrimary   = Color(0xFF20C997)  // light-mode header/tab bar (matches reference)
+val LavenderPrimary   = Color(0xFFD0BCFF)
+val LavenderSecondary = Color(0xFFCCC2DC)
+val LavenderTertiary  = Color(0xFFEFB8C8)
+val DarkBackground    = Color(0xFF121212)
+val DarkSurface       = Color(0xFF1E1E1E)
+
+val TealPrimary   = Color(0xFF80CBC4)
+val TealSecondary = Color(0xFFB2DFDB)
+val TealTertiary  = Color(0xFF80DEEA)
+
 val TealDark      = Color(0xFF005B4F)
 val TealLight     = Color(0xFF4EBAAA)
 val HeaderGreen   = Color(0xFF20C997)  // explicit alias for readability

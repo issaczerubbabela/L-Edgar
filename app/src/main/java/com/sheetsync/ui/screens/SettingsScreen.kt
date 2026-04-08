@@ -17,12 +17,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.sheetsync.ui.theme.AppThemeOption
 import com.sheetsync.ui.theme.ExpenseRed
 import com.sheetsync.ui.theme.IncomeGreen
 import com.sheetsync.viewmodel.ImportState
 import com.sheetsync.viewmodel.SettingsUiEvent
 import com.sheetsync.viewmodel.SettingsViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     innerPadding: PaddingValues,
@@ -31,7 +33,8 @@ fun SettingsScreen(
 ) {
     val sheetsState  by vm.sheetsImportState.collectAsState()
     val csvState     by vm.csvImportState.collectAsState()
-    val isDark       by vm.isDarkTheme.collectAsState()
+    val currentTheme by vm.themeState.collectAsState()
+    var themeDropdownExpanded by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(vm.resetDone) {
@@ -79,60 +82,64 @@ fun SettingsScreen(
         ) {
             Text("Settings", style = MaterialTheme.typography.headlineMedium)
 
-            // ── Theme toggle ─────────────────────────────────────────────────
+            // ── Appearance ───────────────────────────────────────────────────
             Card(
                 shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
+                Column(
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Icon(
-                            if (isDark) Icons.Filled.DarkMode else Icons.Filled.LightMode,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
+                        Icon(Icons.Filled.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text("Appearance", style = MaterialTheme.typography.titleMedium)
+                    }
+
+                    ExposedDropdownMenuBox(
+                        expanded = themeDropdownExpanded,
+                        onExpandedChange = { themeDropdownExpanded = !themeDropdownExpanded }
+                    ) {
+                        TextField(
+                            value = themeLabel(currentTheme),
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Theme") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = themeDropdownExpanded) },
+                            colors = ExposedDropdownMenuDefaults.textFieldColors(),
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth()
                         )
-                        Column {
-                            Text("Theme", style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                if (isDark) "Dark (Teal)" else "Light",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+
+                        ExposedDropdownMenu(
+                            expanded = themeDropdownExpanded,
+                            onDismissRequest = { themeDropdownExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("System MUI") },
+                                onClick = {
+                                    vm.updateTheme(AppThemeOption.SYSTEM)
+                                    themeDropdownExpanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Lavender") },
+                                onClick = {
+                                    vm.updateTheme(AppThemeOption.LAVENDER)
+                                    themeDropdownExpanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Teal") },
+                                onClick = {
+                                    vm.updateTheme(AppThemeOption.TEAL)
+                                    themeDropdownExpanded = false
+                                }
                             )
                         }
                     }
-                    Switch(checked = isDark, onCheckedChange = { vm.toggleTheme() })
-                }
-            }
-
-            // ── Duplicate control toggle ─────────────────────────────────────
-            Card(
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Skip Duplicates on Import", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            if (vm.skipDuplicates)
-                                "Records matching an existing entry (date + type + category + amount) will be skipped."
-                            else
-                                "All records will be inserted, even if they already exist.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Switch(checked = vm.skipDuplicates, onCheckedChange = { vm.skipDuplicates = it })
                 }
             }
 
@@ -270,4 +277,10 @@ private fun StatusRow(icon: ImageVector, color: Color, message: String) {
         Icon(icon, null, tint = color, modifier = Modifier.size(20.dp))
         Text(message, style = MaterialTheme.typography.bodySmall, color = color)
     }
+}
+
+private fun themeLabel(option: AppThemeOption): String = when (option) {
+    AppThemeOption.SYSTEM -> "System MUI"
+    AppThemeOption.LAVENDER -> "Lavender"
+    AppThemeOption.TEAL -> "Teal"
 }

@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -95,9 +96,7 @@ fun HistoryScreen(
             }
             DateNavigatorRow(periodLabel, headerBg, headerText, onPrevPeriod, onNextPeriod)
 
-            // Tabs — red indicator to match app reference style
-            val indicatorColor = FabRed
-            PeriodTabRow(selectedTab, headerBg, headerText, indicatorColor) { selectedTab = it }
+            PeriodTabRow(selectedTab, headerBg, headerText) { selectedTab = it }
 
             // Single pinned summary row below tabs
             val pinnedSummary = when (selectedTab) {
@@ -163,8 +162,8 @@ fun HistoryScreen(
                     FloatingActionButton(
                         onClick         = onNavigateToLog,
                         shape           = CircleShape,
-                        containerColor  = FabRed,
-                        contentColor    = Color.White,
+                        containerColor  = MaterialTheme.colorScheme.primary,
+                        contentColor    = MaterialTheme.colorScheme.onPrimary,
                         elevation       = FloatingActionButtonDefaults.elevation(6.dp),
                         modifier        = Modifier.size(58.dp)
                     ) { Icon(Icons.Filled.Add, null, modifier = Modifier.size(28.dp)) }
@@ -404,13 +403,15 @@ private fun DailyContent(
         LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = 96.dp)) {
             groups.forEach { group ->
                 item(key = group.date.toString()) { DayGroupHeader(group) }
-                items(group.records, key = { it.id }) { record ->
+                itemsIndexed(group.records, key = { _, record -> record.id }) { index, record ->
                     TransactionRow(record = record, onClick = { onTransactionClick(record.id) })
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outline,
-                        thickness = 0.5.dp,
-                        modifier  = Modifier.padding(start = 80.dp)
-                    )
+                    if (index < group.records.lastIndex) {
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                            thickness = 0.5.dp,
+                            modifier  = Modifier.padding(start = 80.dp)
+                        )
+                    }
                 }
             }
         }
@@ -423,7 +424,7 @@ private fun DailyContent(
 @Composable
 private fun MoneyManagerAppBar(bg: Color, contentColor: Color) {
     CenterAlignedTopAppBar(
-        title = { Text("L.Edgar", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = contentColor) },
+        title = { Text("l.edgar", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = contentColor) },
         actions = {
             IconButton(onClick = {}) { Icon(Icons.Filled.StarBorder, null, tint = contentColor) }
             IconButton(onClick = {}) { Icon(Icons.Filled.Search, null, tint = contentColor) }
@@ -455,7 +456,7 @@ private fun DateNavigatorRow(
 
 @Composable
 private fun PeriodTabRow(
-    selected: Int, bg: Color, textColor: Color, indicatorColor: Color,
+    selected: Int, bg: Color, textColor: Color,
     onSelect: (Int) -> Unit
 ) {
     TabRow(
@@ -465,7 +466,7 @@ private fun PeriodTabRow(
         indicator = { positions ->
             TabRowDefaults.Indicator(
                 modifier = Modifier.tabIndicatorOffset(positions[selected]),
-                color    = indicatorColor,
+                color    = MaterialTheme.colorScheme.primary,
                 height   = 2.5.dp
             )
         },
@@ -516,6 +517,8 @@ private fun SummaryColumn(label: String, amount: String, color: Color, modifier:
 
 @Composable
 private fun DayGroupHeader(group: DayGroup) {
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -554,7 +557,11 @@ private fun DayGroupHeader(group: DayGroup) {
             modifier = Modifier.width(80.dp), textAlign = TextAlign.End
         )
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
+    HorizontalDivider(
+        modifier = Modifier.padding(horizontal = 16.dp),
+        color = MaterialTheme.colorScheme.outlineVariant,
+        thickness = 0.5.dp
+    )
 }
 
 // ── Transaction Row ───────────────────────────────────────────────────────────

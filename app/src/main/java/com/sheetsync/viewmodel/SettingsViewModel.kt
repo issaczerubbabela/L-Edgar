@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.sheetsync.data.local.entity.ExpenseRecord
 import com.sheetsync.data.preferences.ThemePreferenceRepository
 import com.sheetsync.data.repository.ExpenseRepository
+import com.sheetsync.ui.theme.AppThemeOption
 import com.sheetsync.util.CsvParser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -45,17 +46,20 @@ class SettingsViewModel @Inject constructor(
     private val themeRepository: ThemePreferenceRepository
 ) : ViewModel() {
 
-    // ── Theme toggle ─────────────────────────────────────────────────────────
+    val themeState: StateFlow<AppThemeOption> = themeRepository.themePreference
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppThemeOption.SYSTEM)
+
+    // Backward-compatible dark flag while UI migrates to a theme picker.
     val isDarkTheme: StateFlow<Boolean> = themeRepository.isDarkTheme
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    fun updateTheme(option: AppThemeOption) {
+        viewModelScope.launch { themeRepository.updateTheme(option) }
+    }
 
     fun toggleTheme() {
         viewModelScope.launch { themeRepository.setDarkTheme(!isDarkTheme.value) }
     }
-
-    // ── Duplicate control (user-facing toggle) ───────────────────────────────
-    /** When true, records that already exist in Room are skipped during import. */
-    var skipDuplicates by mutableStateOf(true)
 
     // ── Reset confirmation state ─────────────────────────────────────────────
     var showResetConfirm by mutableStateOf(false)
@@ -123,14 +127,14 @@ class SettingsViewModel @Inject constructor(
 
     /**
      * Insert [records] into Room.
-     * If [skipDuplicates] is true, checks for an existing record with the same
-     * date + type + category + amount before inserting.
+     * Records matching an existing entry (date + type + category + amount)
+     * are skipped to prevent duplicate imports.
      * Returns (importedCount, skippedCount).
      */
     private suspend fun insertRecords(records: List<ExpenseRecord>): Pair<Int, Int> {
         var imported = 0; var skipped = 0
         for (record in records) {
-            val isDup = skipDuplicates && repository.isDuplicate(record.date, record.type, record.category, record.amount)
+            val isDup = repository.isDuplicate(record.date, record.type, record.category, record.amount)
             if (isDup) { skipped++ } else { repository.save(record); imported++ }
         }
         return imported to skipped

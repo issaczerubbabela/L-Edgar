@@ -20,7 +20,6 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.ui.graphics.Color
 import com.sheetsync.ui.screens.HistoryScreen
 import com.sheetsync.ui.screens.InsightsScreen
 import com.sheetsync.ui.screens.LogScreen
@@ -30,7 +29,6 @@ import com.sheetsync.ui.screens.AddAccountScreen
 import com.sheetsync.ui.screens.BudgetSettingScreen
 import com.sheetsync.ui.screens.DropdownManagementScreen
 import com.sheetsync.ui.screens.SettingsScreen
-import com.sheetsync.ui.theme.FabRed
 import com.sheetsync.viewmodel.ACCOUNT_ROUTE_ADD
 
 sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
@@ -61,7 +59,7 @@ fun AppNavigation() {
     Scaffold(
         bottomBar = {
             NavigationBar(
-                containerColor = Color(0xFF101114),
+                containerColor = MaterialTheme.colorScheme.surface,
                 tonalElevation = 0.dp
             ) {
                 bottomNavItems.forEach { screen ->
@@ -78,11 +76,11 @@ fun AppNavigation() {
                         icon = { Icon(screen.icon, contentDescription = screen.label) },
                         label = { Text(screen.label) },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = FabRed,
-                            selectedTextColor = FabRed,
+                            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
                             unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            indicatorColor = Color(0xFF26292F)
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer
                         )
                     )
                 }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronLeft
@@ -194,8 +195,7 @@ fun AccountDetailScreen(
                 item {
                     DayHeader(date)
                 }
-                items(entriesForDay.size) { i ->
-                    val entry = entriesForDay[i]
+                itemsIndexed(entriesForDay, key = { _, entry -> entry.id }) { index, entry ->
                     val isIncome = entry.type == "Income"
                     Row(
                         modifier = Modifier
@@ -244,7 +244,13 @@ fun AccountDetailScreen(
                             )
                         }
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
+                    if (index < entriesForDay.lastIndex) {
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                            thickness = 0.5.dp,
+                            modifier = Modifier.padding(start = 80.dp)
+                        )
+                    }
                 }
             }
         }
@@ -334,16 +340,23 @@ private fun DayHeader(date: String) {
         d.format(DateTimeFormatter.ofPattern("dd EEE", Locale.ENGLISH))
     }.getOrElse { date }
 
-    Text(
-        text = label,
-        color = MaterialTheme.colorScheme.onBackground,
-        fontWeight = FontWeight.Bold,
-        fontSize = 16.sp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    )
+    Column(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Text(
+            text = label,
+            color = MaterialTheme.colorScheme.onBackground,
+            fontWeight = FontWeight.Bold,
+            fontSize = 16.sp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            color = MaterialTheme.colorScheme.outlineVariant,
+            thickness = 0.5.dp
+        )
+    }
 }
 
 private val monthNames = listOf(
