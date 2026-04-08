@@ -7,7 +7,7 @@
         android:shortcutShortLabel="@string/quick_log">
         <intent
             android:action="android.intent.action.VIEW"
-            android:targetPackage="com.sheetsync"
-            android:targetClass="com.sheetsync.QuickLogActivity" />
+            android:targetPackage="com.issaczerubbabel.ledgar"
+            android:targetClass="com.issaczerubbabel.ledgar.QuickLogActivity" />
     </shortcut>
 </shortcuts>

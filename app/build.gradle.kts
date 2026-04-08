@@ -17,15 +17,15 @@ val appsScriptUrl = localProperties.getProperty("APPS_SCRIPT_URL")
     ?: "https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec"
 
 android {
-    namespace = "com.sheetsync"
+    namespace = "com.issaczerubbabel.ledgar"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.sheetsync"
+        applicationId = "com.issaczerubbabel.ledgar"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
         buildConfigField(
@@ -37,6 +37,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
