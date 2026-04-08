@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -66,6 +67,7 @@ private enum class AccountActionMode {
 fun AccountsScreen(
     innerPadding: PaddingValues,
     onOpenAccountDetail: (Long) -> Unit,
+    onOpenOverallStats: () -> Unit,
     vm: AccountsViewModel = hiltViewModel(),
     formVm: AddEditAccountViewModel = hiltViewModel()
 ) {
@@ -122,6 +124,9 @@ fun AccountsScreen(
             CenterAlignedTopAppBar(
                 title = { Text("Accounts", color = MaterialTheme.colorScheme.onBackground) },
                 actions = {
+                    IconButton(onClick = onOpenOverallStats) {
+                        Icon(Icons.Filled.BarChart, contentDescription = "Overall stats")
+                    }
                     IconButton(onClick = { showMenu = true }) {
                         Icon(Icons.Filled.MoreVert, contentDescription = "More")
                     }

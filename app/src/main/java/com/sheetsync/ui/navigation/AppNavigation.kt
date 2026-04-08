@@ -33,6 +33,7 @@ import com.sheetsync.ui.screens.BudgetSettingScreen
 import com.sheetsync.ui.screens.DropdownManagementScreen
 import com.sheetsync.ui.screens.FilterSelectionScreen
 import com.sheetsync.ui.screens.FilteredTransactionsScreen
+import com.sheetsync.ui.screens.OverallAccountStatsScreen
 import com.sheetsync.ui.screens.SearchScreen
 import com.sheetsync.ui.screens.SettingsScreen
 import com.sheetsync.viewmodel.ACCOUNT_ROUTE_ADD
@@ -55,6 +56,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object Stats : Screen("stats", "Stats", Icons.Filled.BarChart)
     object Accounts : Screen("accounts", "Accounts", Icons.Filled.Paid)
     object AccountDetail : Screen("account_detail/{accountId}", "AccountDetail", Icons.Filled.Paid)
+    object OverallAccountStats : Screen("overall_account_stats", "OverallAccountStats", Icons.Filled.BarChart)
     object AddAccount : Screen(ACCOUNT_ROUTE_ADD, "AddAccount", Icons.Filled.Paid)
     object More : Screen("more", "More", Icons.Filled.MoreHoriz)
     object BudgetSetting : Screen("budget_setting", "BudgetSetting", Icons.Filled.Settings)
@@ -205,7 +207,12 @@ fun AppNavigation() {
                     innerPadding = innerPadding,
                     onOpenAccountDetail = { accountId ->
                         navController.navigate("account_detail/$accountId")
-                    }
+                    },
+                    onOpenOverallStats = {
+                        navController.navigate(Screen.OverallAccountStats.route) {
+                            launchSingleTop = true
+                        }
+                    },
                 )
             }
             composable(Screen.AddAccount.route) {
@@ -302,6 +309,12 @@ fun AppNavigation() {
                 AccountDetailScreen(
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() }
+                )
+            }
+            composable(Screen.OverallAccountStats.route) {
+                OverallAccountStatsScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
                 )
             }
         }
