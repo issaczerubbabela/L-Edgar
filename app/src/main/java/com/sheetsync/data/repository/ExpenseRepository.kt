@@ -20,6 +20,10 @@ interface ExpenseRepository {
     fun getAllRecords(): Flow<List<ExpenseRecord>>
     fun getByType(type: String): Flow<List<ExpenseRecord>>
     fun getRecordsForAccount(accountId: Long): Flow<List<ExpenseRecord>>
+    fun getRecordsForAccountInMonth(accountId: Long, startDate: String, endDate: String): Flow<List<ExpenseRecord>>
+    fun getTransactionsForAccountInMonth(accountId: Long, startOfMonth: String, endOfMonth: String): Flow<List<ExpenseRecord>>
+    fun getHistoricalSumForAccount(accountId: Long, beforeDate: String): Flow<Double?>
+    fun getAccountBalanceUntilDate(accountId: Long, endDate: String): Flow<Double>
     fun getAccountBalance(accountId: Long): Flow<Double>
     fun getRecordsByDateRange(startDate: String, endDate: String): Flow<List<ExpenseRecord>>
     suspend fun getUnsynced(): List<ExpenseRecord>

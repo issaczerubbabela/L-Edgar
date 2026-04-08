@@ -5,5 +5,7 @@ data class AccountImportDto(
     val accountName: String,
     val initialBalance: Double,
     val isHidden: Boolean = false,
-    val displayOrder: Int? = null
+    val displayOrder: Int? = null,
+    val description: String? = null,
+    val includeInTotals: Boolean = true
 )

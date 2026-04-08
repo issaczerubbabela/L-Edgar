@@ -93,6 +93,66 @@ interface ExpenseDao {
 
     @Query(
         """
+        SELECT * FROM expense_records
+        WHERE accountId = :accountId
+          AND date >= :startDate
+          AND date <= :endDate
+          AND syncAction != 'DELETE'
+        ORDER BY date DESC, id DESC
+        """
+    )
+    fun getRecordsForAccountInMonth(accountId: Long, startDate: String, endDate: String): Flow<List<ExpenseRecord>>
+
+    @Query(
+        """
+        SELECT * FROM expense_records
+        WHERE accountId = :accountId
+          AND date >= :startDate
+          AND date <= :endDate
+          AND syncAction != 'DELETE'
+        ORDER BY date ASC, id ASC
+        """
+    )
+    fun getTransactionsForAccountInMonth(accountId: Long, startDate: String, endDate: String): Flow<List<ExpenseRecord>>
+
+    @Query(
+        """
+        SELECT SUM(
+            CASE
+                WHEN type = 'Income' THEN amount
+                WHEN type = 'Expense' THEN -amount
+                ELSE 0
+            END
+        )
+        FROM expense_records
+        WHERE accountId = :accountId
+          AND date < :beforeDate
+          AND syncAction != 'DELETE'
+        """
+    )
+    fun getHistoricalSumForAccount(accountId: Long, beforeDate: String): Flow<Double?>
+
+    @Query(
+        """
+        SELECT a.initialBalance + COALESCE(SUM(
+            CASE
+                WHEN e.type = 'Income' THEN e.amount
+                WHEN e.type = 'Expense' THEN -e.amount
+                ELSE 0
+            END
+        ), 0)
+        FROM account_records a
+        LEFT JOIN expense_records e
+            ON e.accountId = a.id
+           AND e.syncAction != 'DELETE'
+           AND e.date <= :endDate
+        WHERE a.id = :accountId
+        """
+    )
+    fun getAccountBalanceUntilDate(accountId: Long, endDate: String): Flow<Double>
+
+    @Query(
+        """
         SELECT a.initialBalance + COALESCE(SUM(
             CASE
                 WHEN e.type = 'Income' AND e.toAccountId = :accountId THEN e.amount

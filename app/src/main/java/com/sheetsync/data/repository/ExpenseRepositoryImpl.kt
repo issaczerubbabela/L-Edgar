@@ -39,6 +39,18 @@ class ExpenseRepositoryImpl @Inject constructor(
 
     override fun getRecordsForAccount(accountId: Long): Flow<List<ExpenseRecord>> = dao.getRecordsForAccount(accountId)
 
+    override fun getRecordsForAccountInMonth(accountId: Long, startDate: String, endDate: String): Flow<List<ExpenseRecord>> =
+        dao.getRecordsForAccountInMonth(accountId = accountId, startDate = startDate, endDate = endDate)
+
+    override fun getTransactionsForAccountInMonth(accountId: Long, startOfMonth: String, endOfMonth: String): Flow<List<ExpenseRecord>> =
+        dao.getTransactionsForAccountInMonth(accountId = accountId, startDate = startOfMonth, endDate = endOfMonth)
+
+    override fun getHistoricalSumForAccount(accountId: Long, beforeDate: String): Flow<Double?> =
+        dao.getHistoricalSumForAccount(accountId = accountId, beforeDate = beforeDate)
+
+    override fun getAccountBalanceUntilDate(accountId: Long, endDate: String): Flow<Double> =
+        dao.getAccountBalanceUntilDate(accountId = accountId, endDate = endDate)
+
     override fun getAccountBalance(accountId: Long): Flow<Double> = dao.getAccountBalance(accountId)
 
     override fun getRecordsByDateRange(startDate: String, endDate: String): Flow<List<ExpenseRecord>> =
@@ -238,7 +250,9 @@ class ExpenseRepositoryImpl @Inject constructor(
                     accountName = dto.accountName,
                     initialBalance = dto.initialBalance,
                     isHidden = dto.isHidden,
-                    displayOrder = dto.displayOrder ?: index
+                    displayOrder = dto.displayOrder ?: index,
+                    description = dto.description,
+                    includeInTotals = dto.includeInTotals
                 )
             }
             accountDao.overwriteAll(mapped)

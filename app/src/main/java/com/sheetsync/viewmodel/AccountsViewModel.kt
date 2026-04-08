@@ -3,20 +3,25 @@ package com.sheetsync.viewmodel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
+import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 import com.sheetsync.data.local.entity.AccountRecord
 import com.sheetsync.data.local.entity.ExpenseRecord
 import com.sheetsync.data.repository.AccountRepository
 import com.sheetsync.data.repository.ExpenseRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -200,6 +205,7 @@ data class AccountDetailUiState(
 )
 
 @HiltViewModel
+@OptIn(ExperimentalCoroutinesApi::class)
 class AccountDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     accountRepository: AccountRepository,
@@ -207,47 +213,70 @@ class AccountDetailViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val accountId: Long = checkNotNull(savedStateHandle.get<String>("accountId")).toLong()
-    private val selectedMonth = kotlinx.coroutines.flow.MutableStateFlow(YearMonth.now())
+    private val selectedMonth = MutableStateFlow(YearMonth.now())
+    val statementChartModelProducer = CartesianChartModelProducer()
+
+    private val accountFlow: StateFlow<AccountRecord?> = accountRepository
+        .getAllAccounts()
+        .map { accounts -> accounts.firstOrNull { it.id == accountId } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    private val monthRecords: StateFlow<List<ExpenseRecord>> = selectedMonth
+        .flatMapLatest { ym ->
+            expenseRepository.getTransactionsForAccountInMonth(
+                accountId = accountId,
+                startOfMonth = ym.atDay(1).toString(),
+                endOfMonth = ym.atEndOfMonth().toString()
+            )
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val historicalSum: StateFlow<Double?> = selectedMonth
+        .flatMapLatest { ym ->
+            expenseRepository.getHistoricalSumForAccount(
+                accountId = accountId,
+                beforeDate = ym.atDay(1).toString()
+            )
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    init {
+        viewModelScope.launch {
+            combine(accountFlow, historicalSum, monthRecords, selectedMonth) { account, history, records, ym ->
+                val baseBalance = (account?.initialBalance ?: 0.0) + (history ?: 0.0)
+                buildDailyRunningBalanceSeries(records, baseBalance, ym)
+            }.collect { (xValues, yValues) ->
+                statementChartModelProducer.runTransaction {
+                    lineSeries { series(xValues, yValues) }
+                }
+            }
+        }
+    }
 
     val uiState: StateFlow<AccountDetailUiState> = combine(
-        accountRepository.getAllAccounts(),
-        expenseRepository.getRecordsForAccount(accountId),
+        accountFlow,
+        historicalSum,
+        monthRecords,
         selectedMonth
-    ) { accounts, records, ym ->
-        val account = accounts.firstOrNull { it.id == accountId }
+    ) { account, historySum, records, ym ->
         val periodFormatter = DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)
 
-        val monthRecords = records.filter { record ->
-            runCatching { LocalDate.parse(record.date) }.getOrNull()?.let { d ->
-                d.year == ym.year && d.monthValue == ym.monthValue
-            } == true
-        }
+        val sorted = records.sortedWith(compareBy<ExpenseRecord> { it.date }.thenBy { it.id })
 
-        val sorted = monthRecords.sortedByDescending { it.date }
-
-        val deposit = monthRecords.sumOf { record ->
-            when {
-                record.type == "Income" && record.toAccountId == accountId -> record.amount
-                record.type == "Transfer" && record.toAccountId == accountId -> record.amount
-                else -> 0.0
-            }
+        val deposit = records.sumOf { record ->
+            if (record.type == "Income") record.amount else 0.0
         }
-        val withdrawal = monthRecords.sumOf { record ->
-            when {
-                record.type == "Expense" && record.fromAccountId == accountId -> record.amount
-                record.type == "Transfer" && record.fromAccountId == accountId -> record.amount
-                else -> 0.0
-            }
+        val withdrawal = records.sumOf { record ->
+            if (record.type == "Expense") record.amount else 0.0
         }
+        val total = deposit - withdrawal
 
-        var running = account?.initialBalance ?: 0.0
-        val allSortedAsc = records.sortedBy { it.date }
-        allSortedAsc.forEach { record ->
-            running += accountDelta(record, accountId)
-        }
+        val baseBalance = (account?.initialBalance ?: 0.0) + (historySum ?: 0.0)
+        val endBalance = baseBalance + total
 
-        var reverseRunning = running
+        var running = baseBalance
         val statement = sorted.map { record ->
+            running += accountDelta(record, accountId)
             val item = AccountStatementItemUi(
                 id = record.id,
                 date = record.date,
@@ -256,11 +285,12 @@ class AccountDetailViewModel @Inject constructor(
                 paymentMode = record.paymentMode,
                 amount = record.amount,
                 type = record.type,
-                runningBalance = reverseRunning
+                runningBalance = running
             )
-            reverseRunning -= accountDelta(record, accountId)
             item
         }
+
+        val displayStatement = statement.sortedByDescending { it.date }
 
         AccountDetailUiState(
             accountId = accountId,
@@ -269,9 +299,9 @@ class AccountDetailViewModel @Inject constructor(
             periodLabel = ym.format(periodFormatter),
             deposit = deposit,
             withdrawal = withdrawal,
-            total = deposit - withdrawal,
-            currentBalance = running,
-            entries = statement
+            total = total,
+            currentBalance = endBalance,
+            entries = displayStatement
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AccountDetailUiState(accountId = accountId))
 
@@ -283,13 +313,41 @@ class AccountDetailViewModel @Inject constructor(
         selectedMonth.value = selectedMonth.value.plusMonths(1)
     }
 
+    fun setMonthFromDate(date: LocalDate) {
+        selectedMonth.value = YearMonth.from(date)
+    }
+
+    fun setMonthYear(year: Int, month: Int) {
+        selectedMonth.value = YearMonth.of(year, month.coerceIn(1, 12))
+    }
+
     private fun accountDelta(record: ExpenseRecord, accountId: Long): Double {
         return when {
-            record.type == "Income" && record.toAccountId == accountId -> record.amount
-            record.type == "Expense" && record.fromAccountId == accountId -> -record.amount
-            record.type == "Transfer" && record.toAccountId == accountId -> record.amount
-            record.type == "Transfer" && record.fromAccountId == accountId -> -record.amount
+            record.type == "Income" && record.accountId == accountId -> record.amount
+            record.type == "Expense" && record.accountId == accountId -> -record.amount
             else -> 0.0
         }
+    }
+
+    private fun buildDailyRunningBalanceSeries(
+        records: List<ExpenseRecord>,
+        baseBalance: Double,
+        ym: YearMonth
+    ): Pair<List<Double>, List<Double>> {
+        val dailyNetByDay = records.groupBy {
+            runCatching { LocalDate.parse(it.date).dayOfMonth }.getOrDefault(1)
+        }.mapValues { (_, txns) ->
+            txns.sumOf { accountDelta(it, accountId) }
+        }
+
+        var running = baseBalance
+        val xValues = mutableListOf<Double>()
+        val yValues = mutableListOf<Double>()
+        for (day in 1..ym.lengthOfMonth()) {
+            running += dailyNetByDay[day] ?: 0.0
+            xValues += day.toDouble()
+            yValues += running
+        }
+        return xValues to yValues
     }
 }

@@ -1,21 +1,24 @@
 package com.sheetsync.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -23,41 +26,117 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.sheetsync.ui.theme.ExpenseOrange
 import com.sheetsync.ui.theme.IncomeBlue
+import com.sheetsync.viewmodel.AddEditAccountViewModel
 import com.sheetsync.viewmodel.AccountDetailViewModel
+import java.time.LocalDate
+import java.time.YearMonth
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountDetailScreen(
     innerPadding: PaddingValues,
     onBack: () -> Unit,
-    vm: AccountDetailViewModel = hiltViewModel()
+    vm: AccountDetailViewModel = hiltViewModel(),
+    formVm: AddEditAccountViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsState()
+    val formState by formVm.uiState.collectAsState()
+    val accountGroups by formVm.accountGroups.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var showEditSheet by remember { mutableStateOf(false) }
+    var showMonthPicker by remember { mutableStateOf(false) }
+    var showChart by remember { mutableStateOf(false) }
+    var pickerMonth by remember(state.selectedMonth) { mutableStateOf(state.selectedMonth.monthValue) }
+    var pickerYear by remember(state.selectedMonth) { mutableStateOf(state.selectedMonth.year) }
+
+    val monthLabel = remember(state.selectedMonth) {
+        state.selectedMonth.format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH))
+    }
+    val statementLabel = remember(state.selectedMonth) {
+        val start = state.selectedMonth.atDay(1)
+        val end = state.selectedMonth.atEndOfMonth()
+        "${statementDate(start)} ~ ${statementDate(end)}"
+    }
+    val groupedEntries = remember(state.entries) {
+        state.entries.groupBy { it.date }
+            .toSortedMap(compareByDescending { it })
+            .entries
+            .toList()
+    }
+
+    LaunchedEffect(Unit) {
+        formVm.saved.collect {
+            showEditSheet = false
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        formVm.deleted.collect {
+            showEditSheet = false
+            onBack()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        formVm.events.collect { snackbarHostState.showSnackbar(it) }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(state.accountName, color = MaterialTheme.colorScheme.onBackground) },
+                title = {
+                    Text(
+                        text = state.accountName,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        textAlign = TextAlign.Start,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null) }
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
                 },
                 actions = {
                     IconButton(onClick = vm::prevMonth) { Icon(Icons.Filled.ChevronLeft, null) }
-                    Text(state.periodLabel, modifier = Modifier.padding(top = 14.dp))
+                    Row(
+                        modifier = Modifier
+                            .clickable { showMonthPicker = true }
+                            .padding(horizontal = 4.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(monthLabel, fontSize = 14.sp)
+                    }
                     IconButton(onClick = vm::nextMonth) { Icon(Icons.Filled.ChevronRight, null) }
+                    IconButton(onClick = { showChart = !showChart }) { Icon(Icons.Filled.BarChart, null) }
+                    IconButton(onClick = {
+                        formVm.startEdit(state.accountId)
+                        showEditSheet = true
+                    }) {
+                        Icon(Icons.Filled.Edit, contentDescription = "Edit account")
+                    }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
@@ -71,72 +150,188 @@ fun AccountDetailScreen(
                 .padding(bottom = innerPadding.calculateBottomPadding())
         ) {
             item {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(MaterialTheme.colorScheme.surface)
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Statement", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                    Icon(Icons.Filled.BarChart, null)
-                    Spacer(Modifier.padding(4.dp))
-                    Icon(Icons.Filled.Edit, null)
+                    Text("Statement", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    Text(statementLabel, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        SummaryCell("Deposit", state.deposit, IncomeBlue)
+                        SummaryCell("Withdrawal", state.withdrawal, ExpenseOrange)
+                        SummaryCell("Total", state.total, MaterialTheme.colorScheme.onBackground)
+                        SummaryCell("Balance", state.currentBalance, if (state.currentBalance < 0) ExpenseOrange else MaterialTheme.colorScheme.onBackground)
+                    }
+
+                    Text(
+                        text = "Showing newest to oldest. Balance label = post-transaction balance.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
                 }
-                SummaryRow("Deposit", state.deposit, IncomeBlue)
-                SummaryRow("Withdrawal", state.withdrawal, ExpenseOrange)
-                SummaryRow("Total", state.total, MaterialTheme.colorScheme.onBackground)
-                SummaryRow("Balance", state.currentBalance, if (state.currentBalance < 0) ExpenseOrange else MaterialTheme.colorScheme.onBackground)
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
             }
 
-            items(state.entries.size) { i ->
-                val entry = state.entries[i]
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.background)
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(entry.date, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                        Text(entry.category, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
-                        Text(entry.description.ifBlank { "-" }, color = MaterialTheme.colorScheme.onBackground, fontSize = 20.sp)
-                        Text(entry.paymentMode, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            "₹ ${money(entry.amount)}",
-                            color = if (entry.type == "Income" || (entry.type == "Transfer" && entry.amount > 0)) IncomeBlue else ExpenseOrange,
-                            fontSize = 34.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            "(Balance ${money(entry.runningBalance)})",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp
-                        )
-                    }
+            if (showChart) {
+                item {
+                    AccountStatementChart(
+                        modelProducer = vm.statementChartModelProducer,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                    )
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
+            }
+
+            groupedEntries.forEach { (date, entriesForDay) ->
+                item {
+                    DayHeader(date)
+                }
+                items(entriesForDay.size) { i ->
+                    val entry = entriesForDay[i]
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.background)
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(entry.category, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                            Text(entry.description.ifBlank { "-" }, color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp)
+                            if (entry.paymentMode.isNotBlank()) {
+                                Text(entry.paymentMode, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                            }
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                "₹ ${money(entry.amount)}",
+                                color = if (entry.type == "Income") IncomeBlue else ExpenseOrange,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "Post-txn balance ${money(entry.runningBalance)}",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
+                }
             }
         }
+    }
+
+    if (showMonthPicker) {
+        AlertDialog(
+            onDismissRequest = { showMonthPicker = false },
+            title = { Text("Select Month") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    DropdownField(
+                        label = "Month",
+                        options = monthNames,
+                        selected = monthNames[pickerMonth - 1],
+                        onSelect = { selected ->
+                            pickerMonth = monthNames.indexOf(selected) + 1
+                        }
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        IconButton(onClick = { pickerYear -= 1 }) {
+                            Icon(Icons.Filled.ChevronLeft, contentDescription = "Previous year")
+                        }
+                        Text(pickerYear.toString(), style = MaterialTheme.typography.titleMedium)
+                        IconButton(onClick = { pickerYear += 1 }) {
+                            Icon(Icons.Filled.ChevronRight, contentDescription = "Next year")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.setMonthYear(year = pickerYear, month = pickerMonth)
+                    showMonthPicker = false
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMonthPicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showEditSheet) {
+        AddEditAccountSheet(
+            state = formState,
+            accountGroups = accountGroups,
+            onDismiss = { showEditSheet = false },
+            onGroupChange = formVm::updateGroup,
+            onNameChange = formVm::updateName,
+            onAmountChange = formVm::updateAmount,
+            onDescriptionChange = formVm::updateDescription,
+            onIncludeInTotalsChange = formVm::updateIncludeInTotals,
+            onHiddenChange = formVm::updateHidden,
+            onSave = formVm::save,
+            onDelete = formVm::deleteIfAllowed
+        )
     }
 }
 
 @Composable
-private fun SummaryRow(label: String, amount: Double, color: androidx.compose.ui.graphics.Color) {
-    Row(
+private fun SummaryCell(label: String, amount: Double, color: androidx.compose.ui.graphics.Color) {
+    Column(
+        modifier = Modifier
+            .fillMaxHeight()
+            .padding(horizontal = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+        Text("₹ ${money(amount)}", color = color, fontSize = 16.sp)
+    }
+}
+
+@Composable
+private fun DayHeader(date: String) {
+    val label = runCatching {
+        val d = LocalDate.parse(date)
+        d.format(DateTimeFormatter.ofPattern("dd EEE", Locale.ENGLISH))
+    }.getOrElse { date }
+
+    Text(
+        text = "$label  (newest first)",
+        color = MaterialTheme.colorScheme.onBackground,
+        fontWeight = FontWeight.Bold,
+        fontSize = 16.sp,
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, modifier = Modifier.weight(1f))
-        Text("₹ ${money(amount)}", color = color, fontSize = 28.sp)
-    }
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    )
+}
+
+private val monthNames = listOf(
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+)
+
+private fun statementDate(date: LocalDate): String {
+    val yy = date.year % 100
+    return "${date.monthValue}.${date.dayOfMonth}.${yy.toString().padStart(2, '0')}"
 }
 
 private fun money(value: Double): String {

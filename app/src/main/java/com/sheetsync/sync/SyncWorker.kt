@@ -225,7 +225,9 @@ class SyncWorker @AssistedInject constructor(
                 accountName = account.accountName,
                 initialBalance = account.initialBalance,
                 isHidden = account.isHidden,
-                displayOrder = account.displayOrder
+                displayOrder = account.displayOrder,
+                description = account.description,
+                includeInTotals = account.includeInTotals
             )
         }
 

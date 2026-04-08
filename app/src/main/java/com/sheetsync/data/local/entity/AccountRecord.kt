@@ -10,7 +10,9 @@ data class AccountRecord(
     val accountName: String,
     val initialBalance: Double,
     val isHidden: Boolean = false,
-    val displayOrder: Int = 0
+    val displayOrder: Int = 0,
+    val description: String? = null,
+    val includeInTotals: Boolean = true
 ) {
     // Backward-compatible alias for older call sites still using accountGroup.
     val accountGroup: String

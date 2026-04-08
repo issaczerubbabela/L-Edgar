@@ -13,7 +13,7 @@ import com.sheetsync.data.local.entity.ExpenseRecord
 
 @Database(
     entities = [ExpenseRecord::class, Budget::class, AccountRecord::class, DropdownOption::class],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 abstract class SheetSyncDatabase : RoomDatabase() {

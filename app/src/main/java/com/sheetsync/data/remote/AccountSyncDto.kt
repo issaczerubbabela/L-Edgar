@@ -6,5 +6,7 @@ data class AccountSyncDto(
     val accountName: String,
     val initialBalance: Double,
     val isHidden: Boolean,
-    val displayOrder: Int = 0
+    val displayOrder: Int = 0,
+    val description: String? = null,
+    val includeInTotals: Boolean = true
 )

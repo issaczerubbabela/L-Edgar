@@ -36,6 +36,13 @@ object DatabaseModule {
         }
     }
 
+    private val MIGRATION_11_12 = object : Migration(11, 12) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE account_records ADD COLUMN description TEXT")
+            db.execSQL("ALTER TABLE account_records ADD COLUMN includeInTotals INTEGER NOT NULL DEFAULT 1")
+        }
+    }
+
     private fun seedDropdownDefaultsIfEmpty(db: SupportSQLiteDatabase) {
         val cursor = db.query("SELECT COUNT(*) FROM dropdown_options")
         val hasRows = cursor.use {
@@ -132,6 +139,7 @@ object DatabaseModule {
 
         return Room.databaseBuilder(context, SheetSyncDatabase::class.java, "sheetsync.db")
             .addMigrations(MIGRATION_10_11)
+            .addMigrations(MIGRATION_11_12)
             .fallbackToDestructiveMigration()
             .addCallback(callback)
             .build()

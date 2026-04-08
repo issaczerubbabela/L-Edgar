@@ -18,7 +18,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.Button
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.DropdownMenu
@@ -28,8 +27,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -52,7 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.sheetsync.ui.theme.ExpenseRed
 import com.sheetsync.ui.theme.IncomeBlue
-import com.sheetsync.viewmodel.AddAccountViewModel
+import com.sheetsync.viewmodel.AddEditAccountViewModel
 import com.sheetsync.viewmodel.AccountListItemUi
 import com.sheetsync.viewmodel.AccountsViewModel
 
@@ -69,28 +66,28 @@ fun AccountsScreen(
     innerPadding: PaddingValues,
     onOpenAccountDetail: (Long) -> Unit,
     vm: AccountsViewModel = hiltViewModel(),
-    addVm: AddAccountViewModel = hiltViewModel()
+    formVm: AddEditAccountViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsState()
-    val addState by addVm.uiState.collectAsState()
-    val accountGroups by addVm.accountGroups.collectAsState()
+    val formState by formVm.uiState.collectAsState()
+    val accountGroups by formVm.accountGroups.collectAsState()
     var showMenu by remember { mutableStateOf(false) }
     var showAddSheet by remember { mutableStateOf(false) }
     var actionMode by remember { mutableStateOf(AccountActionMode.None) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) {
-        addVm.saved.collect {
+        formVm.saved.collect {
             showAddSheet = false
         }
     }
 
-    LaunchedEffect(addState.errorMessage) {
-        addState.errorMessage?.let { snackbarHostState.showSnackbar(it) }
+    LaunchedEffect(Unit) {
+        vm.events.collect { snackbarHostState.showSnackbar(it) }
     }
 
     LaunchedEffect(Unit) {
-        vm.events.collect { snackbarHostState.showSnackbar(it) }
+        formVm.events.collect { snackbarHostState.showSnackbar(it) }
     }
 
     Scaffold(
@@ -108,6 +105,7 @@ fun AccountsScreen(
                             onClick = {
                                 showMenu = false
                                 actionMode = AccountActionMode.None
+                                formVm.startCreate()
                                 showAddSheet = true
                             }
                         )
@@ -209,60 +207,19 @@ fun AccountsScreen(
     }
 
     if (showAddSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showAddSheet = false },
-            containerColor = MaterialTheme.colorScheme.surface
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .padding(bottom = 24.dp)
-            ) {
-                Text(
-                    text = "Add Account",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-
-                DropdownField(
-                    label = "Group",
-                    options = accountGroups,
-                    selected = addState.selectedGroup,
-                    onSelect = addVm::updateGroup
-                )
-
-                OutlinedTextField(
-                    value = addState.accountName,
-                    onValueChange = addVm::updateName,
-                    label = { Text("Name") },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 10.dp)
-                )
-
-                OutlinedTextField(
-                    value = addState.amountInput,
-                    onValueChange = addVm::updateAmount,
-                    label = { Text("Initial Balance") },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 10.dp)
-                )
-
-                Button(
-                    onClick = addVm::save,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 14.dp)
-                ) {
-                    Text("Save")
-                }
-            }
-        }
+        AddEditAccountSheet(
+            state = formState,
+            accountGroups = accountGroups,
+            onDismiss = { showAddSheet = false },
+            onGroupChange = formVm::updateGroup,
+            onNameChange = formVm::updateName,
+            onAmountChange = formVm::updateAmount,
+            onDescriptionChange = formVm::updateDescription,
+            onIncludeInTotalsChange = formVm::updateIncludeInTotals,
+            onHiddenChange = formVm::updateHidden,
+            onSave = formVm::save,
+            onDelete = formVm::deleteIfAllowed
+        )
     }
 }
 
