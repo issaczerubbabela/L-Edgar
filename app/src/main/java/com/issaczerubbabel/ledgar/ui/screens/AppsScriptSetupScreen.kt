@@ -115,29 +115,32 @@ function doPost(e) {
     if (target === "accounts" && action === "backup") {
       var accountSheet = ensureSheet(spreadsheet, ACCOUNTS_SHEET);
       accountSheet.clear();
-      accountSheet.appendRow([
+      
+      var backupTime = Utilities.formatDate(
+        new Date(),
+        timeZone,
+        "M/d/yyyy HH:mm:ss",
+      );
+      
+      // Build batch of rows
+      var rows = [[
         "Account ID",
         "Group",
         "Account Name",
         "Description",
         "Initial Balance",
         "Initial Balance Date",
-        "Current Balance", // <-- ADDED CURRENT BALANCE
+        "Current Balance",
         "Is Hidden",
         "Include In Totals",
         "Display Order",
         "Last Backed Up",
-      ]);
-
-      var backupTime = Utilities.formatDate(
-        new Date(),
-        timeZone,
-        "M/d/yyyy HH:mm:ss",
-      );
+      ]];
+      
       records.forEach(function (r) {
         var incTotals =
           r.includeInTotals !== undefined ? r.includeInTotals : true;
-        accountSheet.appendRow([
+        rows.push([
           r.id,
           (r.groupName !== undefined ? r.groupName : r.group) || "",
           (r.accountName !== undefined ? r.accountName : r.name) || "",
@@ -148,13 +151,19 @@ function doPost(e) {
             r.currentBalance !== undefined
               ? r.currentBalance
               : r.initialBalance,
-          ) || 0, // <-- ADDED DATA
+          ) || 0,
           toBool(r.isHidden),
           toBool(incTotals),
           Number(r.displayOrder) || 0,
           backupTime,
         ]);
       });
+      
+      // Batch insert all rows at once
+      if (rows.length > 1) {
+        accountSheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
+      }
+      
       return jsonOut({
         status: "ok",
         type: "accounts_backed_up",
@@ -173,8 +182,16 @@ function doPost(e) {
       var backupSheet = ensureSheet(spreadsheet, sheetName);
       backupSheet.clear();
 
+      var backupAt = Utilities.formatDate(
+        new Date(),
+        timeZone,
+        "M/d/yyyy HH:mm:ss",
+      );
+      
+      // Build batch of rows
+      var rows = [];
       if (target === "dropdowns") {
-        backupSheet.appendRow([
+        rows.push([
           "ID",
           "Option Type",
           "Name",
@@ -182,7 +199,7 @@ function doPost(e) {
           "Last Backed Up",
         ]);
       } else {
-        backupSheet.appendRow([
+        rows.push([
           "ID",
           "MonthYear",
           "Category",
@@ -190,15 +207,10 @@ function doPost(e) {
           "Last Backed Up",
         ]);
       }
-
-      var backupAt = Utilities.formatDate(
-        new Date(),
-        timeZone,
-        "M/d/yyyy HH:mm:ss",
-      );
+      
       records.forEach(function (r) {
         if (target === "dropdowns") {
-          backupSheet.appendRow([
+          rows.push([
             r.id,
             r.optionType,
             r.name,
@@ -206,7 +218,7 @@ function doPost(e) {
             backupAt,
           ]);
         } else {
-          backupSheet.appendRow([
+          rows.push([
             r.id,
             r.monthYear,
             r.category,
@@ -215,6 +227,15 @@ function doPost(e) {
           ]);
         }
       });
+      
+      // Batch insert all rows at once
+      if (rows.length > 1) {
+        backupSheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
+      } else {
+        // Header only
+        backupSheet.getRange(1, 1, 1, rows[0].length).setValues(rows);
+      }
+      
       return jsonOut({
         status: "ok",
         type: target + "_backed_up",
