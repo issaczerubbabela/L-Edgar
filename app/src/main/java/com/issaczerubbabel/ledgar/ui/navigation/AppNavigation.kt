@@ -117,9 +117,8 @@ fun AppNavigation() {
                             selected = selected,
                             onClick = {
                                 navController.navigate(screen.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    popUpTo(screen.route) { inclusive = true }
                                     launchSingleTop = true
-                                    restoreState = true
                                 }
                             },
                             icon = { Icon(screen.icon, contentDescription = screen.label) },
