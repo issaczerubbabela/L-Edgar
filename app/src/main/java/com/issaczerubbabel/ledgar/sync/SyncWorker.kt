@@ -230,6 +230,11 @@ class SyncWorker @AssistedInject constructor(
             )
         }
 
+        if (payload.isEmpty()) {
+            Log.i(TAG, "Skipping dropdown backup: local payload is empty")
+            return 0
+        }
+
         val response = apiService.syncRecords(
             scriptUrl,
             SyncRequest(action = "backup", target = "dropdowns", records = payload)
@@ -256,6 +261,11 @@ class SyncWorker @AssistedInject constructor(
             )
         }
 
+        if (payload.isEmpty()) {
+            Log.i(TAG, "Skipping budget backup: local payload is empty")
+            return 0
+        }
+
         val response = apiService.syncRecords(
             scriptUrl,
             SyncRequest(action = "backup", target = "budgets", records = payload)
@@ -275,6 +285,11 @@ class SyncWorker @AssistedInject constructor(
         accounts: List<com.issaczerubbabel.ledgar.data.local.entity.AccountRecord>,
         scriptUrl: String
     ): Int? {
+        if (accounts.isEmpty()) {
+            Log.i(TAG, "Skipping account backup: local payload is empty")
+            return 0
+        }
+
         val balancesByAccountId = accountRepository.getAccountBalances()
             .first()
             .associate { it.accountId to it.balance }

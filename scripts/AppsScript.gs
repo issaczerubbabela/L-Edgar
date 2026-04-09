@@ -56,7 +56,25 @@ function doPost(e) {
     var target = String(payload.target || "transactions").toLowerCase();
     var action = String(payload.action || "insert").toLowerCase();
     var records = payload.records || [];
+    var allowEmptyBackup = toBool(payload.allowEmptyBackup);
     var timeZone = Session.getScriptTimeZone();
+
+    if (
+      action === "backup" &&
+      (target === "accounts" ||
+        target === "dropdowns" ||
+        target === "budgets") &&
+      records.length === 0 &&
+      !allowEmptyBackup
+    ) {
+      return jsonOut({
+        status: "ok",
+        action: "backup_skipped",
+        target: target,
+        count: 0,
+        message: "Skipped empty backup to prevent accidental sheet erase",
+      });
+    }
 
     // =============================================================
     // ACCOUNTS BACKUP (Updated with Current Balance)
