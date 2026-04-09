@@ -17,7 +17,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.issaczerubbabel.ledgar.ui.theme.AppThemeOption
@@ -27,6 +30,12 @@ import com.issaczerubbabel.ledgar.viewmodel.ImportState
 import com.issaczerubbabel.ledgar.viewmodel.SettingsUiEvent
 import com.issaczerubbabel.ledgar.viewmodel.SettingsViewModel
 import java.io.File
+
+@Composable
+private fun responsiveTextSize(baseSp: Float, minSp: Float = 12f, maxSp: Float = 30f) =
+    (
+        baseSp * (LocalConfiguration.current.screenWidthDp / 411f).coerceIn(0.9f, 1.08f)
+    ).coerceIn(minSp, maxSp).sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,9 +104,24 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("Settings", style = MaterialTheme.typography.headlineMedium)
+            Text(
+                text = "Settings",
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontSize = responsiveTextSize(baseSp = 28f, minSp = 24f, maxSp = 30f)
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false
+            )
 
-            Text("Appearance", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                text = "Appearance",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false
+            )
 
             SettingsListItem(title = "Theme", icon = Icons.Filled.Palette) {
                 ExposedDropdownMenuBox(
@@ -114,7 +138,7 @@ fun SettingsScreen(
                         colors = ExposedDropdownMenuDefaults.textFieldColors(),
                         modifier = Modifier
                             .menuAnchor()
-                            .width(150.dp)
+                            .widthIn(min = 132.dp, max = 188.dp)
                     )
 
                     ExposedDropdownMenu(
@@ -155,7 +179,14 @@ fun SettingsScreen(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            Text("Database Setup", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                text = "Database Setup",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false
+            )
 
             SettingsListItem(
                 title = "Database Setup (Sheets)",
@@ -175,7 +206,10 @@ fun SettingsScreen(
                     Text(
                         text = if (isConnected) "Connected" else "Not Connected",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (isConnected) IncomeGreen else ExpenseRed
+                        color = if (isConnected) IncomeGreen else ExpenseRed,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false
                     )
                 }
             }
@@ -200,7 +234,14 @@ fun SettingsScreen(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            Text("Data", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                text = "Data",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false
+            )
 
             SettingsListItem(
                 title = "Manage Categories & Dropdowns",
@@ -234,7 +275,14 @@ fun SettingsScreen(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            Text("About", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                text = "About",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false
+            )
 
             SettingsListItem(
                 title = "Share App",
@@ -277,6 +325,8 @@ private fun SettingsListItem(
             text = title,
             style = MaterialTheme.typography.titleMedium,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            softWrap = false,
             modifier = Modifier.weight(1f)
         )
         trailing()

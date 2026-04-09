@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,6 +24,7 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -80,6 +83,12 @@ private fun formatSignedMoney(amount: Double): String {
     return "$sign₹ %,.2f".format(kotlin.math.abs(amount))
 }
 
+@Composable
+private fun responsiveTextSize(baseSp: Float, minSp: Float = 12f, maxSp: Float = 20f) =
+    (
+        baseSp * (LocalConfiguration.current.screenWidthDp / 411f).coerceIn(0.9f, 1.08f)
+    ).coerceIn(minSp, maxSp).sp
+
 private enum class BatchAction {
     EDIT_DATES,
     EDIT_CATEGORIES,
@@ -89,7 +98,7 @@ private enum class BatchAction {
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HistoryScreen(
     navInsets: PaddingValues,
@@ -110,6 +119,7 @@ fun HistoryScreen(
     val monthlyState by monthlyVm.uiState.collectAsState()
     val totalState by totalVm.uiState.collectAsState()
     var selectedTab by remember { mutableIntStateOf(0) }
+    val pagerState = rememberPagerState(pageCount = { TABS.size })
     var showMonthPicker by remember { mutableStateOf(false) }
     var pickerMonth by remember(state.selectedMonth, state.selectedYear) { mutableIntStateOf(state.selectedMonth) }
     var pickerYear by remember(state.selectedMonth, state.selectedYear) { mutableIntStateOf(state.selectedYear) }
@@ -131,7 +141,16 @@ fun HistoryScreen(
     val selectedSum = vm.selectedSum(allVisibleRecords)
     val selectedIdSet = vm.selectedTxIds.toSet()
 
+    LaunchedEffect(pagerState.currentPage) {
+        if (selectedTab != pagerState.currentPage) {
+            selectedTab = pagerState.currentPage
+        }
+    }
+
     LaunchedEffect(selectedTab) {
+        if (pagerState.currentPage != selectedTab) {
+            pagerState.animateScrollToPage(selectedTab)
+        }
         if (selectedTab != 0 && vm.isSelectionMode()) {
             vm.clearSelection()
         }
@@ -197,7 +216,9 @@ fun HistoryScreen(
                 .padding(top = scaffoldPadding.calculateTopPadding())
                 .padding(bottom = navInsets.calculateBottomPadding())
         ) {
-            PeriodTabRow(selectedTab, headerBg, headerText) { selectedTab = it }
+            PeriodTabRow(selectedTab, headerBg, headerText) { tabIndex ->
+                selectedTab = tabIndex
+            }
 
             // Single pinned summary row below tabs
             val pinnedSummary = when (selectedTab) {
@@ -209,50 +230,55 @@ fun HistoryScreen(
             HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
 
             Box(modifier = Modifier.weight(1f)) {
-                when (selectedTab) {
-                    1 -> CalendarContent(
-                        cells        = state.calendarCells,
-                        selectedDate = vm.selectedDate,
-                        isLight      = isLight,
-                        onDaySelect  = vm::selectDate
-                    )
-                    2 -> MonthlyTabScreen(
-                        monthGroups = monthlyState.monthGroups,
-                        onToggleExpand = monthlyVm::toggleMonthExpanded,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    3 -> TotalTabScreen(
-                        state = totalState,
-                        onToggleBudget = totalVm::toggleBudgetSection,
-                        onToggleAccounts = totalVm::toggleAccountsSection,
-                        onNavigateBudgetSetting = onNavigateToBudgetSetting,
-                        onExportClick = totalVm::openExportDialog,
-                        onExportDismiss = totalVm::closeExportDialog,
-                        onSelectExportInterval = totalVm::selectExportInterval,
-                        onCustomStartChanged = totalVm::updateCustomStart,
-                        onCustomEndChanged = totalVm::updateCustomEnd,
-                        onExportConfirm = totalVm::requestExportDocument,
-                        pendingExportFileName = totalState.pendingExportFileName,
-                        onConsumeExportRequest = totalVm::consumeExportRequest,
-                        onExportUriPicked = totalVm::exportDataToUri,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    else -> DailyContent(
-                        groups = state.groups,
-                        accountsById = accountsById,
-                        selectedIds = selectedIdSet,
-                        onTransactionClick = { record ->
-                            if (vm.isSelectionMode()) {
-                                vm.toggleTransactionSelection(record.id)
-                            } else {
-                                selectedTransaction = record
-                            }
-                        },
-                        onTransactionLongClick = { record ->
-                            vm.onTransactionLongPress(record.id)
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    when (page) {
+                        1 -> CalendarContent(
+                            cells        = state.calendarCells,
+                            selectedDate = vm.selectedDate,
+                            isLight      = isLight,
+                            onDaySelect  = vm::selectDate
+                        )
+                        2 -> MonthlyTabScreen(
+                            monthGroups = monthlyState.monthGroups,
+                            onToggleExpand = monthlyVm::toggleMonthExpanded,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        3 -> TotalTabScreen(
+                            state = totalState,
+                            onToggleBudget = totalVm::toggleBudgetSection,
+                            onToggleAccounts = totalVm::toggleAccountsSection,
+                            onNavigateBudgetSetting = onNavigateToBudgetSetting,
+                            onExportClick = totalVm::openExportDialog,
+                            onExportDismiss = totalVm::closeExportDialog,
+                            onSelectExportInterval = totalVm::selectExportInterval,
+                            onCustomStartChanged = totalVm::updateCustomStart,
+                            onCustomEndChanged = totalVm::updateCustomEnd,
+                            onExportConfirm = totalVm::requestExportDocument,
+                            pendingExportFileName = totalState.pendingExportFileName,
+                            onConsumeExportRequest = totalVm::consumeExportRequest,
+                            onExportUriPicked = totalVm::exportDataToUri,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        else -> DailyContent(
+                            groups = state.groups,
+                            accountsById = accountsById,
+                            selectedIds = selectedIdSet,
+                            onTransactionClick = { record ->
+                                if (vm.isSelectionMode()) {
+                                    vm.toggleTransactionSelection(record.id)
+                                } else {
+                                    selectedTransaction = record
+                                }
+                            },
+                            onTransactionLongClick = { record ->
+                                vm.onTransactionLongPress(record.id)
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
 
                 // Primary add-transaction FAB
@@ -874,12 +900,26 @@ private fun MoneyManagerAppBar(
     onSearchClick: () -> Unit,
     onFilterClick: () -> Unit
 ) {
+    val compactDevice = LocalConfiguration.current.screenWidthDp < 360
+    val appTitle = if (compactDevice) "l.edgar" else "l.edgar's"
+    val navButtonSize = if (compactDevice) 28.dp else 30.dp
+
     TopAppBar(
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("l.edgar's", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = contentColor)
-                Spacer(Modifier.width(8.dp))
-                IconButton(onClick = onPrevPeriod, modifier = Modifier.size(30.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = appTitle,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    softWrap = false
+                )
+                Spacer(Modifier.width(6.dp))
+                IconButton(onClick = onPrevPeriod, modifier = Modifier.size(navButtonSize)) {
                     Icon(Icons.Filled.ChevronLeft, null, tint = contentColor)
                 }
                 Text(
@@ -887,11 +927,15 @@ private fun MoneyManagerAppBar(
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                     color = contentColor,
                     modifier = if (periodClickable) Modifier
+                        .widthIn(min = 68.dp, max = 110.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .clickable(onClick = onPeriodClick)
-                        .padding(horizontal = 6.dp, vertical = 4.dp) else Modifier
+                        .padding(horizontal = 6.dp, vertical = 4.dp) else Modifier.widthIn(min = 68.dp, max = 110.dp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    softWrap = false
                 )
-                IconButton(onClick = onNextPeriod, modifier = Modifier.size(30.dp)) {
+                IconButton(onClick = onNextPeriod, modifier = Modifier.size(navButtonSize)) {
                     Icon(Icons.Filled.ChevronRight, null, tint = contentColor)
                 }
             }
@@ -989,9 +1033,13 @@ private fun PeriodTabRow(
                 text = {
                     Text(
                         label,
+                        style = MaterialTheme.typography.labelLarge,
                         fontWeight = if (selected == idx) FontWeight.Bold else FontWeight.Normal,
-                        fontSize   = 14.sp,
-                        color      = if (selected == idx) textColor else textColor.copy(alpha = 0.55f)
+                        fontSize   = responsiveTextSize(baseSp = 14f, minSp = 13f, maxSp = 15f),
+                        color      = if (selected == idx) textColor else textColor.copy(alpha = 0.55f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false
                     )
                 }
             )
@@ -1019,7 +1067,14 @@ private fun SummaryBar(summary: PeriodSummary) {
 private fun SummaryColumn(label: String, amount: String, color: Color, modifier: Modifier) {
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(amount, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold), color = color, maxLines = 1)
+        Text(
+            amount,
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+            color = color,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            softWrap = false
+        )
     }
 }
 
@@ -1036,20 +1091,38 @@ private fun DayGroupHeader(group: DayGroup) {
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(group.dayNumber, fontSize = 32.sp, fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.width(48.dp))
-        Column(modifier = Modifier.width(96.dp)) {
+        Text(
+            text = group.dayNumber,
+            fontSize = responsiveTextSize(baseSp = 32f, minSp = 28f, maxSp = 34f),
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Clip,
+            modifier = Modifier.widthIn(min = 40.dp, max = 56.dp)
+        )
+        Column(modifier = Modifier.widthIn(min = 78.dp, max = 112.dp)) {
             Text(
                 text = group.date.let { "${it.year}/${it.monthValue.toString().padStart(2,'0')}" },
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false
             )
             Box(
                 modifier = Modifier.clip(RoundedCornerShape(3.dp))
                     .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f))
                     .padding(horizontal = 5.dp, vertical = 1.dp)
             ) {
-                Text(group.dayOfWeekBadge, fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
+                Text(
+                    text = group.dayOfWeekBadge,
+                    fontSize = responsiveTextSize(baseSp = 10f, minSp = 10f, maxSp = 11f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip,
+                    softWrap = false
+                )
             }
         }
         Spacer(Modifier.weight(1f))
@@ -1057,14 +1130,22 @@ private fun DayGroupHeader(group: DayGroup) {
             text = formatMoney(group.dayIncome),
             style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
             color = if (group.dayIncome > 0) IncomeBlue else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-            modifier = Modifier.width(80.dp), textAlign = TextAlign.End
+            modifier = Modifier.widthIn(min = 72.dp, max = 96.dp),
+            textAlign = TextAlign.End,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            softWrap = false
         )
         Spacer(Modifier.width(8.dp))
         Text(
             text = formatMoney(group.dayExpense),
             style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
             color = if (group.dayExpense > 0) ExpenseOrange else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-            modifier = Modifier.width(80.dp), textAlign = TextAlign.End
+            modifier = Modifier.widthIn(min = 72.dp, max = 96.dp),
+            textAlign = TextAlign.End,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            softWrap = false
         )
     }
     HorizontalDivider(
@@ -1100,8 +1181,10 @@ private fun TransactionRow(
         Text(record.category,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(76.dp), maxLines = 2,
-            overflow = TextOverflow.Ellipsis, lineHeight = 14.sp)
+            modifier = Modifier.widthIn(min = 64.dp, max = 96.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            softWrap = false)
         Spacer(Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(record.description.ifBlank { record.category },
@@ -1110,19 +1193,28 @@ private fun TransactionRow(
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(accountLabel,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false)
         }
         Spacer(Modifier.width(8.dp))
-        Column(horizontalAlignment = Alignment.End, modifier = Modifier.width(80.dp)) {
+        Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(min = 72.dp, max = 96.dp)) {
             Text(
                 text = if (isIncome) formatMoney(record.amount) else formatMoney(0.0),
                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                color = if (isIncome) IncomeBlue else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+                color = if (isIncome) IncomeBlue else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false
             )
             Text(
                 text = if (isExpense) formatMoney(record.amount) else formatMoney(0.0),
                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                color = if (isExpense) ExpenseOrange else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+                color = if (isExpense) ExpenseOrange else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false
             )
         }
     }

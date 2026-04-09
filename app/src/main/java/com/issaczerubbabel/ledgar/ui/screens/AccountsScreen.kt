@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
@@ -44,10 +45,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseRed
 import com.issaczerubbabel.ledgar.ui.theme.IncomeBlue
@@ -61,6 +64,12 @@ private enum class AccountActionMode {
     Delete,
     ModifyOrders
 }
+
+@Composable
+private fun responsiveTextSize(baseSp: Float, minSp: Float = 12f, maxSp: Float = 24f) =
+    (
+        baseSp * (LocalConfiguration.current.screenWidthDp / 411f).coerceIn(0.9f, 1.08f)
+    ).coerceIn(minSp, maxSp).sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -124,7 +133,15 @@ fun AccountsScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Accounts", color = MaterialTheme.colorScheme.onBackground) },
+                title = {
+                    Text(
+                        text = "Accounts",
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false
+                    )
+                },
                 actions = {
                     IconButton(onClick = onOpenOverallStats) {
                         Icon(Icons.Filled.BarChart, contentDescription = "Overall stats")
@@ -134,7 +151,7 @@ fun AccountsScreen(
                     }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                         DropdownMenuItem(
-                            text = { Text("Add") },
+                            text = { Text("Add", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) },
                             onClick = {
                                 showMenu = false
                                 actionMode = AccountActionMode.None
@@ -143,7 +160,14 @@ fun AccountsScreen(
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text(if (actionMode == AccountActionMode.ShowHide) "Done Show/Hide" else "Show/Hide") },
+                            text = {
+                                Text(
+                                    text = if (actionMode == AccountActionMode.ShowHide) "Done Show/Hide" else "Show/Hide",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    softWrap = false
+                                )
+                            },
                             onClick = {
                                 showMenu = false
                                 actionMode = if (actionMode == AccountActionMode.ShowHide) {
@@ -154,7 +178,14 @@ fun AccountsScreen(
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text(if (actionMode == AccountActionMode.Delete) "Done Delete" else "Delete") },
+                            text = {
+                                Text(
+                                    text = if (actionMode == AccountActionMode.Delete) "Done Delete" else "Delete",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    softWrap = false
+                                )
+                            },
                             onClick = {
                                 showMenu = false
                                 actionMode = if (actionMode == AccountActionMode.Delete) {
@@ -165,7 +196,14 @@ fun AccountsScreen(
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text(if (actionMode == AccountActionMode.ModifyOrders) "Done Modify Orders" else "Modify Orders") },
+                            text = {
+                                Text(
+                                    text = if (actionMode == AccountActionMode.ModifyOrders) "Done Modify Orders" else "Modify Orders",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    softWrap = false
+                                )
+                            },
                             onClick = {
                                 showMenu = false
                                 actionMode = if (actionMode == AccountActionMode.ModifyOrders) {
@@ -376,7 +414,12 @@ private fun SectionHeader(title: String) {
     Text(
         text = title,
         color = MaterialTheme.colorScheme.onBackground,
-        style = MaterialTheme.typography.titleMedium,
+        style = MaterialTheme.typography.titleMedium.copy(
+            fontSize = responsiveTextSize(baseSp = 16f, minSp = 15f, maxSp = 18f)
+        ),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        softWrap = false,
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceVariant)
@@ -402,8 +445,23 @@ private fun SummaryTopBar(assets: Double, liabilities: Double, total: Double) {
 @Composable
 private fun SummaryCol(label: String, amount: Double, color: androidx.compose.ui.graphics.Color, modifier: Modifier) {
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
-        Text("₹ ${money(amount)}", color = color, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            text = label,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            softWrap = false
+        )
+        Text(
+            text = "₹ ${money(amount)}",
+            color = color,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            softWrap = false
+        )
     }
 }
 
@@ -413,6 +471,9 @@ private fun GroupHeader(title: String) {
         text = title,
         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
         style = MaterialTheme.typography.labelLarge,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        softWrap = false,
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
@@ -467,7 +528,12 @@ private fun AccountRow(
             color = if (item.balance < 0) ExpenseRed else MaterialTheme.colorScheme.onBackground,
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.End,
-            modifier = Modifier.padding(end = if (mode == AccountActionMode.None) 0.dp else 8.dp)
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            softWrap = false,
+            modifier = Modifier
+                .widthIn(min = 84.dp, max = 128.dp)
+                .padding(end = if (mode == AccountActionMode.None) 0.dp else 8.dp)
         )
 
         when (mode) {

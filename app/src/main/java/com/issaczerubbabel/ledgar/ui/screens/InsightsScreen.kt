@@ -30,12 +30,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import com.issaczerubbabel.ledgar.viewmodel.StatsTimeframe
 import com.issaczerubbabel.ledgar.viewmodel.StatsViewModel
+
+@Composable
+private fun responsiveTextSize(baseSp: Float, minSp: Float = 12f, maxSp: Float = 28f) =
+    (
+        baseSp * (LocalConfiguration.current.screenWidthDp / 411f).coerceIn(0.9f, 1.08f)
+    ).coerceIn(minSp, maxSp).sp
 
 @Composable
 fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewModel()) {
@@ -60,7 +69,12 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
             ) {
                 Text(
                     text = "Stats",
-                    style = MaterialTheme.typography.headlineMedium,
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontSize = responsiveTextSize(baseSp = 28f, minSp = 24f, maxSp = 30f)
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    softWrap = false,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -128,7 +142,13 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text("Expense Breakdown", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = "Expense Breakdown",
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            softWrap = false
+                        )
                         ExpenseDonutChart(
                             categoryTotals = expenseByCategory,
                             modifier = Modifier.fillMaxWidth()
@@ -146,7 +166,13 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text("Cash Flow", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = "Cash Flow",
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            softWrap = false
+                        )
                         CashFlowBarChart(
                             modelProducer = vm.cashFlowChartModelProducer,
                             xAxisLabels = cashFlowXAxisLabels,
@@ -180,7 +206,12 @@ private fun TopRightFilterDropdown(
             Text(
                 text = selectedLabel,
                 maxLines = 1,
-                modifier = Modifier.weight(1f)
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = responsiveTextSize(baseSp = 14f, minSp = 14f, maxSp = 16f)
+                )
             )
             Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
         }
@@ -191,7 +222,14 @@ private fun TopRightFilterDropdown(
         ) {
             options.forEach { option ->
                 DropdownMenuItem(
-                    text = { Text(option) },
+                    text = {
+                        Text(
+                            text = option,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            softWrap = false
+                        )
+                    },
                     onClick = {
                         onSelect(option)
                         expanded = false
