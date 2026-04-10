@@ -166,11 +166,15 @@ class ExpenseRepositoryImpl @Inject constructor(
                 )
                 unexpectedDateLogCount++
             }
-            val mappedCategory = when {
+            val mappedCategoryRaw = when {
                 resolvedType.equals("Expense", ignoreCase = true) -> dto.expCategory
                 resolvedType.equals("Income", ignoreCase = true) -> dto.incCategory
                 else -> dto.expCategory ?: dto.incCategory
-            }.orEmpty()
+            }
+            val mappedCategory = mappedCategoryRaw
+                ?.trim()
+                ?.takeUnless { it.isBlank() }
+                ?: if (resolvedType.equals("Transfer", ignoreCase = true)) "Transfer" else ""
 
             val timestamp = normalizeTimestampKey(dto.timestamp)
             if (timestamp != null && localRemoteTimestamps.contains(timestamp)) {
