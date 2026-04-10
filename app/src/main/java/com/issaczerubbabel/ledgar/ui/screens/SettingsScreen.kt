@@ -43,6 +43,7 @@ fun SettingsScreen(
     innerPadding: PaddingValues,
     onNavigateToDropdownManagement: () -> Unit,
     onNavigateToAppsScriptSetup: () -> Unit,
+    onNavigateToChangelog: () -> Unit,
     vm: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -251,7 +252,8 @@ fun SettingsScreen(
                 Icon(
                     imageVector = Icons.Filled.ChevronRight,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp)
                 )
             }
 
@@ -285,13 +287,26 @@ fun SettingsScreen(
             )
 
             SettingsListItem(
+                title = "Changelog",
+                onClick = onNavigateToChangelog
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.ChevronRight,
+                    contentDescription = "Open changelog",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            SettingsListItem(
                 title = "Share App",
                 onClick = { shareAppApk(context) }
             ) {
                 Icon(
                     imageVector = Icons.Filled.Share,
                     contentDescription = "Share app",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }

@@ -37,6 +37,7 @@ import com.issaczerubbabel.ledgar.ui.screens.OverallAccountStatsScreen
 import com.issaczerubbabel.ledgar.ui.screens.SearchScreen
 import com.issaczerubbabel.ledgar.ui.screens.SettingsScreen
 import com.issaczerubbabel.ledgar.ui.screens.AppsScriptSetupScreen
+import com.issaczerubbabel.ledgar.ui.screens.ChangelogScreen
 import com.issaczerubbabel.ledgar.viewmodel.ACCOUNT_ROUTE_ADD
 
 sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
@@ -63,6 +64,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object BudgetSetting : Screen("budget_setting", "BudgetSetting", Icons.Filled.Settings)
     object DropdownManagement : Screen("dropdown_management", "DropdownManagement", Icons.Filled.Settings)
     object AppsScriptSetup : Screen("apps_script_setup", "AppsScriptSetup", Icons.Filled.Settings)
+    object Changelog : Screen("changelog", "Changelog", Icons.Filled.Settings)
 }
 
 private const val LOG_BASE_ROUTE = "log"
@@ -236,7 +238,18 @@ fun AppNavigation() {
                         navController.navigate(Screen.AppsScriptSetup.route) {
                             launchSingleTop = true
                         }
+                    },
+                    onNavigateToChangelog = {
+                        navController.navigate(Screen.Changelog.route) {
+                            launchSingleTop = true
+                        }
                     }
+                )
+            }
+            composable(Screen.Changelog.route) {
+                ChangelogScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() }
                 )
             }
             composable(Screen.BudgetSetting.route) {

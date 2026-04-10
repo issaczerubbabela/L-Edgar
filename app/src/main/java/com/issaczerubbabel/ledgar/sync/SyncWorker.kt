@@ -120,11 +120,13 @@ class SyncWorker @AssistedInject constructor(
         }
 
         val dtos = timestampedRecords.map { (r, resolvedTimestamp) ->
+            val fromAccountName = r.fromAccountId?.let { accountNameById[it] }
+            val toAccountName = r.toAccountId?.let { accountNameById[it] } ?: r.toAccountName
             val resolvedAccountName = when (r.type) {
                 "Expense", "Income" -> r.accountId?.let { accountNameById[it] }.orEmpty()
                 "Transfer" -> {
-                    val from = r.fromAccountId?.let { accountNameById[it] }.orEmpty()
-                    val to = r.toAccountId?.let { accountNameById[it] }.orEmpty()
+                    val from = fromAccountName.orEmpty()
+                    val to = toAccountName.orEmpty()
                     listOf(from, to).filter { it.isNotBlank() }.joinToString(" -> ")
                 }
                 else -> ""
@@ -141,6 +143,8 @@ class SyncWorker @AssistedInject constructor(
                 description = r.description,
                 amount = r.amount,
                 accountName = resolvedAccountName,
+                fromAccountName = if (r.type == "Transfer") fromAccountName else null,
+                toAccountName = if (r.type == "Transfer") toAccountName else null,
                 remarks = r.remarks,
                 isBookmarked = r.isBookmarked
             )

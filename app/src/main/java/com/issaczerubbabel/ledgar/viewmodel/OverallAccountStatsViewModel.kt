@@ -121,6 +121,7 @@ class OverallAccountStatsViewModel @Inject constructor(
         val firstMonth = months.firstOrNull() ?: selectedYm
         val monthSet = months.toSet()
         val asOfDateByAccount = accounts.associate { it.id to it.initialBalanceDate }
+        val accountIdByName = accounts.associate { it.accountName.trim().lowercase() to it.id }
 
         val startingBalance = accounts.sumOf { it.initialBalance }
         var preRangeNet = 0.0
@@ -132,7 +133,7 @@ class OverallAccountStatsViewModel @Inject constructor(
         records.forEach { record ->
             val date = parseFlexibleDate(record.date) ?: return@forEach
             val recordMonth = YearMonth.from(date)
-            val deltas = accountDeltas(record, asOfDateByAccount)
+            val deltas = accountDeltas(record, asOfDateByAccount, accountIdByName)
             if (deltas.isEmpty()) return@forEach
 
             val netDelta = deltas.sum()
@@ -169,7 +170,8 @@ class OverallAccountStatsViewModel @Inject constructor(
 
     private fun accountDeltas(
         record: ExpenseRecord,
-        asOfDateByAccount: Map<Long, String>
+        asOfDateByAccount: Map<Long, String>,
+        accountIdByName: Map<String, Long>
     ): List<Double> {
         fun isAfterAsOf(accountId: Long?): Boolean {
             if (accountId == null) return false
@@ -196,7 +198,12 @@ class OverallAccountStatsViewModel @Inject constructor(
 
             record.type.equals("Transfer", ignoreCase = true) -> {
                 if (isAfterAsOf(record.fromAccountId)) deltas += -record.amount
-                if (isAfterAsOf(record.toAccountId)) deltas += record.amount
+                if (isAfterAsOf(record.toAccountId)) {
+                    deltas += record.amount
+                } else if (record.toAccountId == null && !record.toAccountName.isNullOrBlank()) {
+                    val fallbackToId = accountIdByName[record.toAccountName.trim().lowercase()]
+                    if (isAfterAsOf(fallbackToId)) deltas += record.amount
+                }
             }
         }
         return deltas

@@ -13,7 +13,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 
 @Database(
     entities = [ExpenseRecord::class, Budget::class, AccountRecord::class, DropdownOption::class],
-    version = 14,
+    version = 15,
     exportSchema = false
 )
 abstract class SheetSyncDatabase : RoomDatabase() {

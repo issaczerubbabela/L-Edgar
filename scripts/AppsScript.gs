@@ -11,6 +11,22 @@ var DROPDOWNS_SHEET = "_dropdowns";
 var BUDGETS_SHEET = "_budgets";
 var ACCOUNTS_SHEET = "_accounts";
 
+var TRANSACTION_HEADERS_V2 = [
+  "Timestamp",
+  "Date",
+  "Type",
+  "Exp Category",
+  "Inc Category",
+  "Description",
+  "Amount",
+  "Account Name",
+  "From Account Name",
+  "To Account Name",
+  "Remarks",
+  "Synced At",
+  "Is Bookmarked",
+];
+
 function jsonOut(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
     ContentService.MimeType.JSON,
@@ -47,6 +63,122 @@ function normalizeTimestampKey(value, timeZone) {
   }
 
   return text;
+}
+
+function boolish(value) {
+  if (value === true || value === false) return true;
+  var text = String(value || "")
+    .trim()
+    .toLowerCase();
+  return text === "true" || text === "false" || text === "1" || text === "0";
+}
+
+function parseTransactionRow(row) {
+  var accountName = String(row[7] || "");
+
+  // New schema row: bookmark is usually in column 13 (index 12)
+  var looksLikeNew = boolish(row[12]);
+  // Legacy row (including expanded range): bookmark in old column 11 (index 10)
+  var looksLikeLegacy = !looksLikeNew && boolish(row[10]);
+
+  var fromAccountName = "";
+  var toAccountName = "";
+  var remarks = "";
+  var syncedAt = "";
+  var isBookmarked = false;
+
+  if (looksLikeNew) {
+    fromAccountName = String(row[8] || "");
+    toAccountName = String(row[9] || "");
+    remarks = String(row[10] || "");
+    syncedAt = row[11] ? String(row[11]) : "";
+    isBookmarked = row[12] ? toBool(row[12]) : false;
+  } else if (looksLikeLegacy) {
+    // Old 11-column format (or old rows in an expanded range)
+    remarks = String(row[8] || "");
+    syncedAt = row[9] ? String(row[9]) : "";
+    isBookmarked = row[10] ? toBool(row[10]) : false;
+  } else {
+    // Last-resort fallback for sparse/partially migrated rows.
+    fromAccountName = String(row[8] || "");
+    toAccountName = String(row[9] || "");
+    remarks = String(row[10] || row[8] || "");
+    syncedAt = row[11] ? String(row[11]) : row[9] ? String(row[9]) : "";
+    isBookmarked = row[12]
+      ? toBool(row[12])
+      : row[10]
+        ? toBool(row[10])
+        : false;
+  }
+
+  if ((!fromAccountName || !toAccountName) && accountName) {
+    var legacySplit = accountName.split("->").map(function (part) {
+      return String(part || "").trim();
+    });
+    if (!fromAccountName) fromAccountName = legacySplit[0] || "";
+    if (!toAccountName) toAccountName = legacySplit[1] || "";
+  }
+
+  return {
+    accountName: accountName,
+    fromAccountName: fromAccountName,
+    toAccountName: toAccountName,
+    remarks: remarks,
+    syncedAt: syncedAt,
+    isBookmarked: isBookmarked,
+  };
+}
+
+function migrateTransactionsSheetToV2() {
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var txSheet = ensureSheet(spreadsheet, TRANSACTIONS_SHEET);
+
+  if (txSheet.getLastRow() === 0) {
+    txSheet
+      .getRange(1, 1, 1, TRANSACTION_HEADERS_V2.length)
+      .setValues([TRANSACTION_HEADERS_V2]);
+    return {
+      status: "ok",
+      action: "migration_initialized",
+      message: "Created v2 headers on empty transactions sheet",
+      rowsAffected: 0,
+    };
+  }
+
+  var header = txSheet
+    .getRange(
+      1,
+      1,
+      1,
+      Math.max(txSheet.getLastColumn(), TRANSACTION_HEADERS_V2.length),
+    )
+    .getDisplayValues()[0]
+    .map(function (v) {
+      return String(v || "").trim();
+    });
+
+  var alreadyV2 =
+    header[8] === "From Account Name" &&
+    header[9] === "To Account Name" &&
+    header[10] === "Remarks";
+
+  if (!alreadyV2) {
+    // Insert between "Account Name" and "Remarks" so old row values shift right safely.
+    txSheet.insertColumnsAfter(8, 2);
+  }
+
+  txSheet
+    .getRange(1, 1, 1, TRANSACTION_HEADERS_V2.length)
+    .setValues([TRANSACTION_HEADERS_V2]);
+
+  return {
+    status: "ok",
+    action: alreadyV2 ? "migration_noop" : "migration_applied",
+    message: alreadyV2
+      ? "Sheet is already using v2 transaction columns"
+      : "Inserted From/To Account Name columns and updated header",
+    rowsAffected: Math.max(txSheet.getLastRow() - 1, 0),
+  };
 }
 
 function doPost(e) {
@@ -213,19 +345,7 @@ function doPost(e) {
     // =============================================================
     var txSheet = ensureSheet(spreadsheet, TRANSACTIONS_SHEET);
     if (txSheet.getLastRow() === 0) {
-      txSheet.appendRow([
-        "Timestamp",
-        "Date",
-        "Type",
-        "Exp Category",
-        "Inc Category",
-        "Description",
-        "Amount",
-        "Account Name",
-        "Remarks",
-        "Synced At",
-        "Is Bookmarked",
-      ]);
+      txSheet.appendRow(TRANSACTION_HEADERS_V2);
     }
 
     if (action === "delete") {
@@ -272,6 +392,19 @@ function doPost(e) {
         timeZone,
       );
 
+      var fromAccountName = String(r.fromAccountName || "").trim();
+      var toAccountName = String(r.toAccountName || "").trim();
+      var combinedAccountName = String(
+        r.accountName || r.paymentMode || "",
+      ).trim();
+      if ((!fromAccountName || !toAccountName) && combinedAccountName) {
+        var legacyParts = combinedAccountName.split("->").map(function (part) {
+          return String(part || "").trim();
+        });
+        if (!fromAccountName) fromAccountName = legacyParts[0] || "";
+        if (!toAccountName) toAccountName = legacyParts[1] || "";
+      }
+
       var rowData = [
         normalizedRecordTimestamp || generatedTimestamp,
         formattedTxDate,
@@ -280,7 +413,9 @@ function doPost(e) {
         r.incCategory || "",
         r.description || "",
         Number(r.amount) || 0,
-        r.accountName || r.paymentMode || "",
+        combinedAccountName,
+        fromAccountName,
+        toAccountName,
         r.remarks || "",
         syncedAtIso,
         toBool(r.isBookmarked),
@@ -388,6 +523,8 @@ function doGet(e) {
     for (var t = 1; t < txData.length; t++) {
       var row = txData[t];
       if (!row[2]) continue;
+      var parsed = parseTransactionRow(row);
+
       txRecords.push({
         timestamp: row[0] ? normalizeTimestampKey(row[0], timeZone) : "",
         date: formatDate(row[1]),
@@ -396,10 +533,12 @@ function doGet(e) {
         incCategory: String(row[4] || ""),
         description: String(row[5] || ""),
         amount: Number(row[6]) || 0,
-        accountName: String(row[7] || ""),
-        remarks: String(row[8] || ""),
-        syncedAt: row[9] ? String(row[9]) : "",
-        isBookmarked: row[10] ? toBool(row[10]) : false,
+        accountName: parsed.accountName,
+        fromAccountName: parsed.fromAccountName,
+        toAccountName: parsed.toAccountName,
+        remarks: parsed.remarks,
+        syncedAt: parsed.syncedAt,
+        isBookmarked: parsed.isBookmarked,
       });
     }
 

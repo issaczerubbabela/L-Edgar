@@ -78,6 +78,18 @@ All writes are committed locally first (Room), then synchronized to Google Sheet
 - Compose + Material 3 navigation with bottom tabs.
 - Light/Dark theme toggle persisted via DataStore.
 
+### Theming & Customization
+
+- Multiple theme options including light, dark, and red themes
+- Responsive text sizing across all screens
+- Custom color schemes and Material 3 design system
+
+## Changelog
+
+For a detailed history of all features, improvements, and bug fixes, please refer to the [CHANGELOG.md](CHANGELOG.md).
+
+Current version: **v1.0.1** (April 10, 2026)
+
 ## Tech Stack
 
 - Kotlin

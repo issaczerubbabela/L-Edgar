@@ -55,6 +55,12 @@ object DatabaseModule {
         }
     }
 
+    private val MIGRATION_14_15 = object : Migration(14, 15) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE expense_records ADD COLUMN toAccountName TEXT")
+        }
+    }
+
     private fun seedDropdownDefaultsIfEmpty(db: SupportSQLiteDatabase) {
         try {
             // Check if dropdown_options table has data
@@ -172,6 +178,7 @@ object DatabaseModule {
             .addMigrations(MIGRATION_11_12)
             .addMigrations(MIGRATION_12_13)
             .addMigrations(MIGRATION_13_14)
+            .addMigrations(MIGRATION_14_15)
             .fallbackToDestructiveMigration()
             .addCallback(callback)
             .build()

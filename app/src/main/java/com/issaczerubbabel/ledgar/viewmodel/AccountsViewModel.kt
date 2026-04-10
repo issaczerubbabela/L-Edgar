@@ -370,10 +370,14 @@ class AccountDetailViewModel @Inject constructor(
 
     private fun accountDelta(record: ExpenseRecord, accountId: Long, asOfDate: String): Double {
         if (!isOnOrAfterAsOf(record.date, asOfDate)) return 0.0
+        val accountName = accountFlow.value?.accountName.orEmpty()
         return when {
             record.type == "Income" && (record.toAccountId == accountId || record.accountId == accountId) -> record.amount
             record.type == "Expense" && (record.fromAccountId == accountId || record.accountId == accountId) -> -record.amount
             record.type == "Transfer" && record.toAccountId == accountId -> record.amount
+            record.type == "Transfer" && record.toAccountId == null &&
+                !record.toAccountName.isNullOrBlank() &&
+                record.toAccountName.equals(accountName, ignoreCase = true) -> record.amount
             record.type == "Transfer" && record.fromAccountId == accountId -> -record.amount
             else -> 0.0
         }

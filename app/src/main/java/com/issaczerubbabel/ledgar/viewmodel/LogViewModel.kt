@@ -147,6 +147,7 @@ class LogViewModel @Inject constructor(
 
         viewModelScope.launch {
             val baseRecord = editingRecordId?.let { repository.getById(it) }
+            val accountNameById = accounts.value.associate { it.id to it.accountName }
 
             val record = ExpenseRecord(
                 id = baseRecord?.id ?: 0,
@@ -166,6 +167,10 @@ class LogViewModel @Inject constructor(
                     "Income" -> selectedAccountId
                     "Transfer" -> selectedToAccountId
                     else -> null
+                },
+                toAccountName = when (selectedType) {
+                    "Transfer" -> selectedToAccountId?.let { accountNameById[it] }
+                    else -> baseRecord?.toAccountName
                 },
                 isBookmarked = baseRecord?.isBookmarked ?: false,
                 isSynced = false,

@@ -18,6 +18,8 @@ data class SyncRecordDto(
     val description: String,
     val amount: Double,
     val accountName: String,
+    val fromAccountName: String? = null,
+    val toAccountName: String? = null,
     val remarks: String,
     val isBookmarked: Boolean
 )

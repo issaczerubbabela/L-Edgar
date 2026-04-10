@@ -182,18 +182,23 @@ class ExpenseRepositoryImpl @Inject constructor(
             }
             val remoteAccountName = dto.accountName?.trim().takeUnless { it.isNullOrBlank() }
                 ?: dto.paymentMode?.trim().takeUnless { it.isNullOrBlank() }
-            val transferParts = remoteAccountName
+            val legacyTransferParts = remoteAccountName
                 ?.split("->")
                 ?.map { it.trim() }
                 ?.filter { it.isNotBlank() }
                 .orEmpty()
 
-            val fromAccountId = transferParts.getOrNull(0)
+            val explicitFromName = dto.fromAccountName?.trim().takeUnless { it.isNullOrBlank() }
+                ?: legacyTransferParts.getOrNull(0)
+            val explicitToName = dto.toAccountName?.trim().takeUnless { it.isNullOrBlank() }
+                ?: legacyTransferParts.getOrNull(1)
+
+            val fromAccountId = explicitFromName
                 ?.let { token ->
                     val key = normalizeAccountKey(token)
                     accountsByName[key]?.id ?: accountsByGroup[key]?.id
                 }
-            val toAccountId = transferParts.getOrNull(1)
+            val toAccountId = explicitToName
                 ?.let { token ->
                     val key = normalizeAccountKey(token)
                     accountsByName[key]?.id ?: accountsByGroup[key]?.id
@@ -243,6 +248,7 @@ class ExpenseRepositoryImpl @Inject constructor(
                         resolvedType.equals("Transfer", ignoreCase = true) -> toAccountId
                         else -> null
                     },
+                    toAccountName = if (resolvedType.equals("Transfer", ignoreCase = true)) explicitToName else null,
                     isSynced = true,
                     remoteTimestamp = timestamp,
                     syncAction = "NONE"
