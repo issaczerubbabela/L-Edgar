@@ -10,6 +10,27 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
+        version = "v1.0.2",
+        date = "2026-04-10",
+        features = listOf(
+            "In-app changelog screen wired into Settings with dedicated navigation route",
+            "Apps Script setup screen now ships the latest backend script template including transaction schema v2",
+            "Transfer sync schema extended with explicit from/to account name support across app and Sheets"
+        ),
+        fixes = listOf(
+            "History transaction rows now hide non-applicable zero amount labels by type (Income/Expense/Transfer)",
+            "Google Sheets transaction parser hardened for mixed legacy and v2 row formats",
+            "Added safe Apps Script migration helper for transaction columns (From/To Account Name)",
+            "Transfer destination account name persistence fixed through Room, DTO mapping, and import/export flows",
+            "Budget import now normalizes legacy month formats to yyyy-MM to prevent missing restored budgets"
+        ),
+        qol = listOf(
+            "Settings icon row alignment refined for cleaner visual consistency",
+            "Instruction policy now enforces changelog update on every change-producing prompt",
+            "Added workspace hook guard to block task completion when ChangelogData is not updated"
+        )
+    ),
+    ChangelogRelease(
         version = "v1.0.1",
         date = "2026-04-10",
         features = listOf(

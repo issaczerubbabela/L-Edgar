@@ -57,3 +57,13 @@ Skills are available as:
 - **Automatic loading**: Triggered when request keywords match skill descriptions
 - **Slash commands**: Type `/` in the chat and search for skill by name
 - **Explicit mentions**: Reference skill name directly in your request
+
+## Mandatory Changelog Policy
+
+For every prompt that results in any repository change (feature, fix, refactor, UI tweak, schema update, sync logic update, docs/instruction updates), the agent MUST:
+
+1. Update `app/src/main/java/com/issaczerubbabel/ledgar/ui/screens/ChangelogData.kt` in the same run.
+2. Add entries under the latest release (`features`, `fixes`, or `qol`) or create a new release when scope is significant.
+3. Perform this before finalizing the response.
+
+If no repository files were changed, changelog update is not required.

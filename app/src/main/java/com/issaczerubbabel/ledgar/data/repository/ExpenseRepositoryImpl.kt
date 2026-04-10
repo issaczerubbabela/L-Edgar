@@ -16,6 +16,10 @@ import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import com.issaczerubbabel.ledgar.util.normalizeTimestampKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import java.time.YearMonth
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
+import java.util.Locale
 import javax.inject.Inject
 
 class ExpenseRepositoryImpl @Inject constructor(
@@ -338,17 +342,26 @@ class ExpenseRepositoryImpl @Inject constructor(
         }
 
         val restoredBudgets = budgetBody?.data.orEmpty().let { remoteBudgets ->
-            val mapped = remoteBudgets.map { dto ->
-                Budget(
-                    id = 0,
-                    monthYear = dto.monthYear,
-                    category = dto.category,
-                    amount = dto.amount
-                )
+            val mapped = remoteBudgets.mapNotNull { dto ->
+                val normalizedMonthYear = normalizeBudgetMonthYear(dto.monthYear)
+                if (normalizedMonthYear == null || dto.category.isBlank()) {
+                    Log.w(importLogTag, "Skipping malformed budget row from Sheets: monthYear='${dto.monthYear}', category='${dto.category}'")
+                    null
+                } else {
+                    Budget(
+                        id = 0,
+                        monthYear = normalizedMonthYear,
+                        category = dto.category,
+                        amount = dto.amount
+                    )
+                }
             }
-            budgetDao.clearAll()
             if (mapped.isNotEmpty()) {
+                budgetDao.clearAll()
                 budgetDao.insertAll(mapped)
+            } else if (remoteBudgets.isNotEmpty()) {
+                // Remote contained only malformed rows; clear stale local data to avoid mixed schemas.
+                budgetDao.clearAll()
             }
             mapped.size
         }
@@ -429,5 +442,32 @@ class ExpenseRepositoryImpl @Inject constructor(
             parseFlexibleDate(ts)?.let { return it.toString() }
         }
         return rawDate.trim()
+    }
+
+    private fun normalizeBudgetMonthYear(rawValue: String): String? {
+        val raw = rawValue.trim()
+        if (raw.isBlank()) return null
+
+        runCatching { YearMonth.parse(raw, MONTH_YEAR_FORMATTER) }
+            .getOrNull()
+            ?.let { return it.format(MONTH_YEAR_FORMATTER) }
+
+        for (pattern in LEGACY_MONTH_YEAR_PATTERNS) {
+            val parsed = try {
+                YearMonth.parse(raw, DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH))
+            } catch (_: DateTimeParseException) {
+                null
+            }
+            if (parsed != null) {
+                return parsed.format(MONTH_YEAR_FORMATTER)
+            }
+        }
+
+        return null
+    }
+
+    companion object {
+        private val MONTH_YEAR_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM")
+        private val LEGACY_MONTH_YEAR_PATTERNS = listOf("MMM yyyy", "MMMM yyyy", "MM/yyyy", "M/yyyy", "yyyy/MM", "yyyy/M")
     }
 }
