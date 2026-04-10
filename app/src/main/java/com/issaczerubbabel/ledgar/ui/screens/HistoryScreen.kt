@@ -1082,6 +1082,8 @@ private fun SummaryColumn(label: String, amount: String, color: Color, modifier:
 
 @Composable
 private fun DayGroupHeader(group: DayGroup) {
+    val dateMetaSpacing = if (group.dayNumber.length >= 2) 10.dp else 8.dp
+
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
     Row(
@@ -1100,6 +1102,7 @@ private fun DayGroupHeader(group: DayGroup) {
             overflow = TextOverflow.Clip,
             modifier = Modifier.widthIn(min = 40.dp, max = 56.dp)
         )
+        Spacer(Modifier.width(dateMetaSpacing))
         Column(modifier = Modifier.widthIn(min = 78.dp, max = 112.dp)) {
             Text(
                 text = group.date.let { "${it.year}/${it.monthValue.toString().padStart(2,'0')}" },
@@ -1166,6 +1169,8 @@ private fun TransactionRow(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val categoryColumnWidth = if (screenWidthDp >= 600) 128.dp else 96.dp
     val isIncome  = record.type == "Income"
     val isExpense = record.type == "Expense"
     val selectedBg = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.32f)
@@ -1181,10 +1186,11 @@ private fun TransactionRow(
         Text(record.category,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.widthIn(min = 64.dp, max = 96.dp),
-            maxLines = 1,
+            modifier = Modifier.width(categoryColumnWidth),
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            softWrap = false)
+            softWrap = true,
+            lineHeight = responsiveTextSize(baseSp = 14f, minSp = 13f, maxSp = 15f))
         Spacer(Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(record.description.ifBlank { record.category },

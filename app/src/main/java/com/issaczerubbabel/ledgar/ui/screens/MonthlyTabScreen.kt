@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,6 +37,12 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
+
+@Composable
+private fun responsiveTextSize(baseSp: Float, minSp: Float = 12f, maxSp: Float = 24f) =
+    (
+        baseSp * (LocalConfiguration.current.screenWidthDp / 411f).coerceIn(0.9f, 1.08f)
+    ).coerceIn(minSp, maxSp).sp
 
 @Composable
 fun MonthlyTabScreen(
@@ -84,7 +91,10 @@ private fun MonthHeaderRow(
                 text = monthName(monthGroup.month),
                 color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Bold,
-                fontSize = 28.sp
+                fontSize = responsiveTextSize(baseSp = 22f, minSp = 18f, maxSp = 24f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false
             )
             Text(
                 text = "${formatMonthDay(monthGroup.startDate)} ~ ${formatMonthDay(monthGroup.endDate)}",
