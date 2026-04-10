@@ -1173,6 +1173,7 @@ private fun TransactionRow(
     val categoryColumnWidth = if (screenWidthDp >= 600) 128.dp else 96.dp
     val isIncome  = record.type == "Income"
     val isExpense = record.type == "Expense"
+    val isTransfer = record.type == "Transfer"
     val selectedBg = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.32f)
 
     Row(
@@ -1205,23 +1206,29 @@ private fun TransactionRow(
                 softWrap = false)
         }
         Spacer(Modifier.width(8.dp))
-        Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(min = 72.dp, max = 96.dp)) {
-            Text(
-                text = if (isIncome) formatMoney(record.amount) else formatMoney(0.0),
-                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                color = if (isIncome) IncomeBlue else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                softWrap = false
-            )
-            Text(
-                text = if (isExpense) formatMoney(record.amount) else formatMoney(0.0),
-                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                color = if (isExpense) ExpenseOrange else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                softWrap = false
-            )
+        if (!isTransfer) {
+            Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(min = 72.dp, max = 96.dp)) {
+                if (isIncome) {
+                    Text(
+                        text = formatMoney(record.amount),
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = IncomeBlue,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false
+                    )
+                }
+                if (isExpense) {
+                    Text(
+                        text = formatMoney(record.amount),
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = ExpenseOrange,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false
+                    )
+                }
+            }
         }
     }
 }
