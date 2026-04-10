@@ -1,6 +1,11 @@
 {
   "version": 1,
   "skills": {
+    "Skill Creator": {
+      "source": "HoangNguyen0403/agent-skills-standard",
+      "sourceType": "github",
+      "computedHash": "d29c64a79a50abbff7a577929bffe13126ea897b3ad8ce37d292faee88482c35"
+    },
     "android-security-skill": {
       "source": "kikoso/android-skills",
       "sourceType": "github",
