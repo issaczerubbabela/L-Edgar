@@ -33,7 +33,10 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Fixed root Log back behavior so back no longer stalls on start destination and now proceeds into app entry flow",
             "Root Log back and Enter App actions now always trigger configured auth when app lock is enabled",
             "System auth failures now show specific diagnostics for missing lock, missing enrollment, and unsupported policy states",
-            "Root Log Enter App and back actions now always require system credential unlock before opening main tabs"
+            "Root Log Enter App and back actions now always require system credential unlock before opening main tabs",
+            "Fixed app-lock toggle stability so enabling or disabling lock in Settings no longer crashes",
+            "Startup routing now respects lock state: Transactions opens first when lock is off; Log gate opens first when lock is on",
+            "Biometric unlock handoff now uses guarded navigation to prevent crash when transitioning from Log gate to Transactions"
         ),
         qol = listOf(
             "Settings icon row alignment refined for cleaner visual consistency",
@@ -45,7 +48,9 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Added Enter App button on Log screen bottom bar for root Log launch so users can enter main tabs directly",
             "Enter App button repositioned above tab region and app-entry route transition now uses smoother fade-slide animation",
             "Added one-tap deep link to system security settings from lock diagnostics dialog",
-            "Bottom tab bar now fades and slides with route transitions so content and tabs appear together when entering the app"
+            "Bottom tab bar now fades and slides with route transitions so content and tabs appear together when entering the app",
+            "Enabling app lock during an active session now applies on next app entry instead of forcing an immediate in-session redirect",
+            "Corrected pager-state call typo in History screen to restore clean Kotlin compilation"
         )
     ),
     ChangelogRelease(

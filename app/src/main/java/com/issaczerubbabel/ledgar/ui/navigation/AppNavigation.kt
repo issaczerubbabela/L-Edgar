@@ -184,9 +184,13 @@ fun AppNavigation() {
     val scope = rememberCoroutineScope()
     val appLockViewModel: AppLockViewModel = androidx.hilt.navigation.compose.hiltViewModel()
     val lockConfig by appLockViewModel.config.collectAsState()
+    if (!lockConfig.isLoaded) return
+
+    val startDestination = if (lockConfig.enabled) LOG_BASE_ROUTE else Screen.Trans.route
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDest = navBackStackEntry?.destination
     var authInProgress by remember { mutableStateOf(false) }
+    var lockRedirectInProgress by remember { mutableStateOf(false) }
     var showPinUnlockDialog by remember { mutableStateOf(false) }
     var pinInput by remember { mutableStateOf("") }
     var pinErrorMessage by remember { mutableStateOf<String?>(null) }
@@ -202,9 +206,23 @@ fun AppNavigation() {
 
     val navigateToTransactionsAfterUnlock = {
         appLockViewModel.markUnlocked()
-        navController.navigate(Screen.Trans.route) {
-            popUpTo(LOG_BASE_ROUTE) { inclusive = true }
-            launchSingleTop = true
+        val navigated = runCatching {
+            navController.navigate(Screen.Trans.route) {
+                if (lockConfig.enabled) {
+                    popUpTo(LOG_BASE_ROUTE) { inclusive = true }
+                } else {
+                    popUpTo(Screen.Trans.route) { inclusive = false }
+                }
+                launchSingleTop = true
+            }
+        }.isSuccess
+
+        if (!navigated) {
+            runCatching {
+                navController.navigate(Screen.Trans.route) {
+                    launchSingleTop = true
+                }
+            }
         }
     }
 
@@ -264,6 +282,10 @@ fun AppNavigation() {
     }
 
     val startUnlockFromLog: () -> Unit = startUnlockFromLog@{
+        if (!lockConfig.enabled) {
+            navigateToTransactionsAfterUnlock()
+            return@startUnlockFromLog
+        }
         if (authInProgress) return@startUnlockFromLog
 
         // Root Log -> main app entry always goes through system credentials.
@@ -274,7 +296,7 @@ fun AppNavigation() {
         startUnlockFromLog()
     }
 
-    DisposableEffect(lifecycleOwner, lockConfig.enabled, lockConfig.timeoutMinutes) {
+    DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_STOP -> appLockViewModel.onAppBackgrounded()
@@ -291,7 +313,16 @@ fun AppNavigation() {
     LaunchedEffect(lockConfig.enabled, appLockViewModel.isUnlocked, currentDest?.route) {
         val route = currentDest?.route ?: return@LaunchedEffect
         val isLogRoute = route.startsWith(LOG_BASE_ROUTE)
-        if (lockConfig.enabled && !appLockViewModel.isUnlocked && !isLogRoute) {
+        val shouldRedirectToLockGate =
+            lockConfig.enabled && !appLockViewModel.isUnlocked && !isLogRoute
+
+        if (!shouldRedirectToLockGate) {
+            lockRedirectInProgress = false
+            return@LaunchedEffect
+        }
+
+        if (!lockRedirectInProgress) {
+            lockRedirectInProgress = true
             navController.navigate(logRoute()) {
                 popUpTo(navController.graph.findStartDestination().id)
                 launchSingleTop = true
@@ -428,7 +459,7 @@ fun AppNavigation() {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = LOG_BASE_ROUTE,
+            startDestination = startDestination,
             enterTransition = {
                 fadeIn(animationSpec = tween(220)) +
                     slideIntoContainer(

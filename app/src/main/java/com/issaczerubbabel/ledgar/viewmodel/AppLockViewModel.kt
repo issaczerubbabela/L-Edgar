@@ -20,7 +20,8 @@ data class AppLockConfig(
     val enabled: Boolean = false,
     val authMode: AppLockAuthMode = AppLockAuthMode.SYSTEM,
     val timeoutMinutes: Int = 5,
-    val hasPinConfigured: Boolean = false
+    val hasPinConfigured: Boolean = false,
+    val isLoaded: Boolean = false
 )
 
 @HiltViewModel
@@ -38,7 +39,8 @@ class AppLockViewModel @Inject constructor(
             enabled = enabled,
             authMode = authMode,
             timeoutMinutes = timeoutMinutes,
-            hasPinConfigured = hasPinConfigured
+            hasPinConfigured = hasPinConfigured,
+            isLoaded = true
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppLockConfig())
 
@@ -46,6 +48,7 @@ class AppLockViewModel @Inject constructor(
         private set
 
     private var lastBackgroundedAtMillis: Long? = null
+    private var lockOnNextForeground = false
 
     init {
         viewModelScope.launch {
@@ -54,9 +57,16 @@ class AppLockViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .collect { enabled ->
                 if (previousEnabled == null) {
+                    // Cold start behavior: locked when app lock is enabled.
                     isUnlocked = !enabled
                 } else if (previousEnabled != enabled) {
-                    isUnlocked = !enabled
+                    if (enabled) {
+                        // Do not hijack the active session when enabling lock from Settings.
+                        lockOnNextForeground = true
+                    } else {
+                        isUnlocked = true
+                        lockOnNextForeground = false
+                    }
                 }
                 previousEnabled = enabled
                 if (!enabled) {
@@ -83,6 +93,12 @@ class AppLockViewModel @Inject constructor(
 
     fun onAppForegrounded(nowMillis: Long = System.currentTimeMillis()) {
         if (!config.value.enabled) return
+        if (lockOnNextForeground) {
+            lockOnNextForeground = false
+            lockNow()
+            lastBackgroundedAtMillis = null
+            return
+        }
         val backgroundedAt = lastBackgroundedAtMillis ?: return
         val elapsed = nowMillis - backgroundedAt
         val timeoutMs = config.value.timeoutMinutes * 60_000L
