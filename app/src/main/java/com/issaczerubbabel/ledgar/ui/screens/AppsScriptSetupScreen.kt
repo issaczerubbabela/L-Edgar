@@ -32,7 +32,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -43,6 +42,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.viewmodel.ConnectionTestState
 import com.issaczerubbabel.ledgar.viewmodel.SettingsViewModel
 
@@ -625,8 +625,8 @@ fun AppsScriptSetupScreen(
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
-    val configuredUrl by vm.scriptUrl.collectAsState()
-    val connectionState by vm.connectionTestState.collectAsState()
+  val configuredUrl by vm.scriptUrl.collectAsStateWithLifecycle()
+  val connectionState by vm.connectionTestState.collectAsStateWithLifecycle()
 
     var urlInput by remember(configuredUrl) { mutableStateOf(configuredUrl.orEmpty()) }
     var showValidationError by remember { mutableStateOf(false) }

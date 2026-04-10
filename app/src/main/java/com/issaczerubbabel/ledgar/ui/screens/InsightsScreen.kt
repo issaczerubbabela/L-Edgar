@@ -23,7 +23,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import com.issaczerubbabel.ledgar.viewmodel.StatsTimeframe
@@ -48,12 +48,12 @@ private fun responsiveTextSize(baseSp: Float, minSp: Float = 12f, maxSp: Float =
 
 @Composable
 fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewModel()) {
-    val filterState by vm.filterState.collectAsState()
-    val accountGroupOptions by vm.accountGroupOptions.collectAsState()
-    val filteredTransactions by vm.filteredTransactions.collectAsState()
-    val expenseByCategory by vm.expenseByCategory.collectAsState()
-    val cashFlowXAxisLabels by vm.cashFlowXAxisLabels.collectAsState()
-    val isLoading by vm.isLoading.collectAsState()
+    val filterState by vm.filterState.collectAsStateWithLifecycle()
+    val accountGroupOptions by vm.accountGroupOptions.collectAsStateWithLifecycle()
+    val filteredTransactions by vm.filteredTransactions.collectAsStateWithLifecycle()
+    val expenseByCategory by vm.expenseByCategory.collectAsStateWithLifecycle()
+    val cashFlowXAxisLabels by vm.cashFlowXAxisLabels.collectAsStateWithLifecycle()
+    val isLoading by vm.isLoading.collectAsStateWithLifecycle()
 
     LazyColumn(
         modifier = Modifier

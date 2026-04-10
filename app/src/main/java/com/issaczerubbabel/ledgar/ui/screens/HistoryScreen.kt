@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.ui.theme.*
@@ -113,11 +114,11 @@ fun HistoryScreen(
     monthlyVm: MonthlyViewModel = hiltViewModel(),
     totalVm: TotalViewModel = hiltViewModel()
 ) {
-    val state      by vm.uiState.collectAsState()
-    val accounts by vm.accounts.collectAsState()
-    val categories by vm.categories.collectAsState()
-    val monthlyState by monthlyVm.uiState.collectAsState()
-    val totalState by totalVm.uiState.collectAsState()
+    val state by vm.uiState.collectAsStateWithLifecycle()
+    val accounts by vm.accounts.collectAsStateWithLifecycle()
+    val categories by vm.categories.collectAsStateWithLifecycle()
+    val monthlyState by monthlyVm.uiState.collectAsStateWithLifecycle()
+    val totalState by totalVm.uiState.collectAsStateWithLifecycle()
     var selectedTab by remember { mutableIntStateOf(0) }
     val pagerState = rememberPagerState(pageCount = { TABS.size })
     var showMonthPicker by remember { mutableStateOf(false) }

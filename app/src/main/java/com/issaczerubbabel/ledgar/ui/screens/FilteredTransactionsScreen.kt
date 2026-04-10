@@ -38,7 +38,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseOrange
 import com.issaczerubbabel.ledgar.ui.theme.HeaderGreen
@@ -74,7 +74,7 @@ fun FilteredTransactionsScreen(
     onNavigateToEditTransaction: (Long) -> Unit,
     vm: FilteredTransactionsViewModel = hiltViewModel()
 ) {
-    val state by vm.uiState.collectAsState()
+    val state by vm.uiState.collectAsStateWithLifecycle()
     var selectedTab by remember { mutableIntStateOf(0) }
 
     val isLight = MaterialTheme.colorScheme.background.luminance() > 0.5f

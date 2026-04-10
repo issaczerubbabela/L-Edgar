@@ -10,6 +10,11 @@
       "source": "kikoso/android-skills",
       "sourceType": "github",
       "computedHash": "3cb20d4079fa9a5980ac34efaf9c0a18920763d53441e8b83ef929bed91fe689"
+    },
+    "android-design-system": {
+      "source": ".github/skills/android-design-system",
+      "sourceType": "local",
+      "computedHash": ""
     }
   }
 }

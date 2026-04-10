@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.ui.theme.AppThemeOption
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseRed
 import com.issaczerubbabel.ledgar.ui.theme.IncomeGreen
@@ -50,15 +51,15 @@ fun SettingsScreen(
     vm: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
-    val sheetsState  by vm.sheetsImportState.collectAsState()
-    val csvState     by vm.csvImportState.collectAsState()
-    val backupState  by vm.backupState.collectAsState()
-    val currentTheme by vm.themeState.collectAsState()
-    val scriptUrl by vm.scriptUrl.collectAsState()
-    val appLockEnabled by vm.appLockEnabled.collectAsState()
-    val appLockAuthMode by vm.appLockAuthMode.collectAsState()
-    val appLockTimeoutMinutes by vm.appLockTimeoutMinutes.collectAsState()
-    val hasAppPinConfigured by vm.hasAppPinConfigured.collectAsState()
+    val sheetsState by vm.sheetsImportState.collectAsStateWithLifecycle()
+    val csvState by vm.csvImportState.collectAsStateWithLifecycle()
+    val backupState by vm.backupState.collectAsStateWithLifecycle()
+    val currentTheme by vm.themeState.collectAsStateWithLifecycle()
+    val scriptUrl by vm.scriptUrl.collectAsStateWithLifecycle()
+    val appLockEnabled by vm.appLockEnabled.collectAsStateWithLifecycle()
+    val appLockAuthMode by vm.appLockAuthMode.collectAsStateWithLifecycle()
+    val appLockTimeoutMinutes by vm.appLockTimeoutMinutes.collectAsStateWithLifecycle()
+    val hasAppPinConfigured by vm.hasAppPinConfigured.collectAsStateWithLifecycle()
     var themeDropdownExpanded by remember { mutableStateOf(false) }
     var authModeDropdownExpanded by remember { mutableStateOf(false) }
     var timeoutDropdownExpanded by remember { mutableStateOf(false) }

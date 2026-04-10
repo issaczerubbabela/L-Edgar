@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.viewmodel.LogViewModel
 import com.issaczerubbabel.ledgar.viewmodel.SyncStatusUi
@@ -37,9 +38,9 @@ fun LogScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var showDatePicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
-    val accounts by vm.accounts.collectAsState()
-    val expenseCategories by vm.expenseCategories.collectAsState()
-    val incomeCategories by vm.incomeCategories.collectAsState()
+    val accounts by vm.accounts.collectAsStateWithLifecycle()
+    val expenseCategories by vm.expenseCategories.collectAsStateWithLifecycle()
+    val incomeCategories by vm.incomeCategories.collectAsStateWithLifecycle()
 
     BackHandler(enabled = !showDatePicker && !showDeleteConfirm, onBack = onBack)
 

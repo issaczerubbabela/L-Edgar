@@ -35,7 +35,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseOrange
 import com.issaczerubbabel.ledgar.ui.theme.IncomeBlue
 import com.issaczerubbabel.ledgar.viewmodel.AddEditAccountViewModel
@@ -65,10 +65,10 @@ fun AccountDetailScreen(
     vm: AccountDetailViewModel = hiltViewModel(),
     formVm: AddEditAccountViewModel = hiltViewModel()
 ) {
-    val state by vm.uiState.collectAsState()
-    val formState by formVm.uiState.collectAsState()
-    val accountGroups by formVm.accountGroups.collectAsState()
-    val allAccounts by formVm.allAccounts.collectAsState()
+    val state by vm.uiState.collectAsStateWithLifecycle()
+    val formState by formVm.uiState.collectAsStateWithLifecycle()
+    val accountGroups by formVm.accountGroups.collectAsStateWithLifecycle()
+    val allAccounts by formVm.allAccounts.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var showEditSheet by remember { mutableStateOf(false) }
     var showPermanentDeleteDialog by remember { mutableStateOf(false) }

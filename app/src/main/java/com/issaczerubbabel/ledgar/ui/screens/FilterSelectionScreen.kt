@@ -32,7 +32,6 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +43,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseOrange
 import com.issaczerubbabel.ledgar.ui.theme.IncomeBlue
 import com.issaczerubbabel.ledgar.viewmodel.AccountFilterOptionItem
@@ -60,7 +60,7 @@ fun FilterSelectionScreen(
     onApplyFilters: (Int, Int, Set<Long>, Set<Long>, Set<Long>) -> Unit,
     vm: FilterSelectionViewModel = hiltViewModel()
 ) {
-    val state by vm.uiState.collectAsState()
+    val state by vm.uiState.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {

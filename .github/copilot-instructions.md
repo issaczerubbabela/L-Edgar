@@ -20,6 +20,7 @@ This workspace includes 17 specialized skills for Android development, architect
 
 ## UI & Compose
 
+- **[android-design-system](./skills/android-design-system/)** — Enforce Material Design 3 and design token usage in Jetpack Compose apps. Use when implementing M3 components, color schemes, or design tokens in Android.
 - **[compose-ui](./skills/compose-ui/)** — Best practices for Jetpack Compose including state hoisting, performance optimization, and theming. Use when building or refactoring Composable functions.
 - **[compose-navigation](./skills/compose-navigation/)** — Navigation Compose implementation with argument passing and deep links. Use when setting up multi-screen navigation or passing data between screens.
 - **[compose-performance-audit](./skills/compose-performance-audit/)** — Diagnose and fix slow rendering, janky scrolling, and excessive recompositions. Use when troubleshooting Compose performance issues.

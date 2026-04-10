@@ -22,7 +22,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -34,6 +33,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
 import com.issaczerubbabel.ledgar.ui.screens.DropdownField
 import com.issaczerubbabel.ledgar.ui.theme.SheetSyncTheme
@@ -50,7 +50,7 @@ class QuickLogActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            val isDark by themeRepository.isDarkTheme.collectAsState(initial = true)
+            val isDark by themeRepository.isDarkTheme.collectAsStateWithLifecycle(initialValue = true)
             SheetSyncTheme(isDarkTheme = isDark) {
                 Surface(color = Color.Transparent) {
                     QuickLogSheet()
@@ -66,7 +66,7 @@ private fun QuickLogSheet(
     vm: QuickLogViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
-    val categories by vm.categories.collectAsState()
+    val categories by vm.categories.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 

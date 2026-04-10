@@ -25,12 +25,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.viewmodel.BookmarksViewModel
 
@@ -42,7 +42,7 @@ fun BookmarksScreen(
     onTransactionClick: (Long) -> Unit,
     vm: BookmarksViewModel = hiltViewModel()
 ) {
-    val transactions by vm.bookmarkedTransactions.collectAsState()
+    val transactions by vm.bookmarkedTransactions.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {

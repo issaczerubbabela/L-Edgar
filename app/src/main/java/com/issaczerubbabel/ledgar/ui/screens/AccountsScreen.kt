@@ -37,7 +37,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +51,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseRed
 import com.issaczerubbabel.ledgar.ui.theme.IncomeBlue
 import com.issaczerubbabel.ledgar.viewmodel.AddEditAccountViewModel
@@ -80,10 +80,10 @@ fun AccountsScreen(
     vm: AccountsViewModel = hiltViewModel(),
     formVm: AddEditAccountViewModel = hiltViewModel()
 ) {
-    val state by vm.uiState.collectAsState()
-    val allAccounts by vm.allAccounts.collectAsState()
-    val formState by formVm.uiState.collectAsState()
-    val accountGroups by formVm.accountGroups.collectAsState()
+    val state by vm.uiState.collectAsStateWithLifecycle()
+    val allAccounts by vm.allAccounts.collectAsStateWithLifecycle()
+    val formState by formVm.uiState.collectAsStateWithLifecycle()
+    val accountGroups by formVm.accountGroups.collectAsStateWithLifecycle()
     var showMenu by remember { mutableStateOf(false) }
     var showAddSheet by remember { mutableStateOf(false) }
     var actionMode by remember { mutableStateOf(AccountActionMode.None) }

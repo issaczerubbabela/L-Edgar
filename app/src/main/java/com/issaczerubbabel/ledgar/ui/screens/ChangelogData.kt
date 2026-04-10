@@ -22,6 +22,9 @@ val changelogReleases: List<ChangelogRelease> = listOf(
         ),
         fixes = listOf(
             "History transaction rows now hide non-applicable zero amount labels by type (Income/Expense/Transfer)",
+            "Accounts, History, and Bookmarks screens now collect ViewModel flows with collectAsStateWithLifecycle for lifecycle-safe reactive updates",
+            "Completed app-wide screen migration from collectAsState to collectAsStateWithLifecycle for consistent lifecycle-aware Flow collection",
+            "MainActivity, QuickLogActivity, and AppNavigation now also use collectAsStateWithLifecycle to align lifecycle-aware collection across app entry and navigation",
             "Google Sheets transaction parser hardened for mixed legacy and v2 row formats",
             "Added safe Apps Script migration helper for transaction columns (From/To Account Name)",
             "Transfer destination account name persistence fixed through Room, DTO mapping, and import/export flows",

@@ -29,7 +29,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottomAxis
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStartAxis
@@ -80,9 +80,9 @@ fun OverallAccountStatsScreen(
     onBack: () -> Unit,
     vm: OverallAccountStatsViewModel = hiltViewModel(),
 ) {
-    val selectedMonth by vm.selectedYearMonth.collectAsState()
-    val historicalBalance by vm.historicalBalance.collectAsState()
-    val monthlyIncomeExpense by vm.monthlyIncomeExpense.collectAsState()
+    val selectedMonth by vm.selectedYearMonth.collectAsStateWithLifecycle()
+    val historicalBalance by vm.historicalBalance.collectAsStateWithLifecycle()
+    val monthlyIncomeExpense by vm.monthlyIncomeExpense.collectAsStateWithLifecycle()
 
     var showMonthPicker by remember { mutableStateOf(false) }
     var pickerMonth by remember(selectedMonth) { mutableIntStateOf(selectedMonth.monthValue) }

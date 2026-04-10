@@ -3,11 +3,11 @@ package com.issaczerubbabel.ledgar
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.ui.navigation.AppNavigation
 import com.issaczerubbabel.ledgar.ui.theme.SheetSyncTheme
 import com.issaczerubbabel.ledgar.viewmodel.SettingsViewModel
@@ -27,7 +27,7 @@ class MainActivity : FragmentActivity() {
 
         setContent {
             val viewModel: SettingsViewModel = hiltViewModel()
-            val currentTheme by viewModel.themeState.collectAsState()
+            val currentTheme by viewModel.themeState.collectAsStateWithLifecycle()
 
             SheetSyncTheme(themeOption = currentTheme) {
                 AppNavigation()

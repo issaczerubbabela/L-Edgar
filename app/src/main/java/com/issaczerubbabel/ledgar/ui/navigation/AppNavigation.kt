@@ -30,6 +30,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -183,7 +184,7 @@ fun AppNavigation() {
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val appLockViewModel: AppLockViewModel = androidx.hilt.navigation.compose.hiltViewModel()
-    val lockConfig by appLockViewModel.config.collectAsState()
+    val lockConfig by appLockViewModel.config.collectAsStateWithLifecycle()
     if (!lockConfig.isLoaded) return
 
     val startDestination = if (lockConfig.enabled) LOG_BASE_ROUTE else Screen.Trans.route
