@@ -15,19 +15,37 @@ val changelogReleases: List<ChangelogRelease> = listOf(
         features = listOf(
             "In-app changelog screen wired into Settings with dedicated navigation route",
             "Apps Script setup screen now ships the latest backend script template including transaction schema v2",
-            "Transfer sync schema extended with explicit from/to account name support across app and Sheets"
+            "Transfer sync schema extended with explicit from/to account name support across app and Sheets",
+            "App now opens directly into Log Transaction for faster first-action entry",
+            "Settings now includes App Lock controls with unlock method selection and configurable re-lock timeout",
+            "Custom in-app PIN unlock added with secure hash and salt storage"
         ),
         fixes = listOf(
             "History transaction rows now hide non-applicable zero amount labels by type (Income/Expense/Transfer)",
             "Google Sheets transaction parser hardened for mixed legacy and v2 row formats",
             "Added safe Apps Script migration helper for transaction columns (From/To Account Name)",
             "Transfer destination account name persistence fixed through Room, DTO mapping, and import/export flows",
-            "Budget import now normalizes legacy month formats to yyyy-MM to prevent missing restored budgets"
+            "Budget import now normalizes legacy month formats to yyyy-MM to prevent missing restored budgets",
+            "Initial Log-screen exit now enforces configured lock method and keeps user on Log when authentication is cancelled",
+            "Added timeout-based re-lock on app foreground transitions after background inactivity",
+            "Back from locked Log screen now directly triggers system biometric or pattern unlock in system-capable modes",
+            "Fixed biometric prompt host mismatch so back-triggered system unlock now opens correctly on the Log screen",
+            "Fixed root Log back behavior so back no longer stalls on start destination and now proceeds into app entry flow",
+            "Root Log back and Enter App actions now always trigger configured auth when app lock is enabled",
+            "System auth failures now show specific diagnostics for missing lock, missing enrollment, and unsupported policy states",
+            "Root Log Enter App and back actions now always require system credential unlock before opening main tabs"
         ),
         qol = listOf(
             "Settings icon row alignment refined for cleaner visual consistency",
             "Instruction policy now enforces changelog update on every change-producing prompt",
-            "Added workspace hook guard to block task completion when ChangelogData is not updated"
+            "Added workspace hook guard to block task completion when ChangelogData is not updated",
+            "Hook runner now uses Windows PowerShell executable to avoid pwsh-not-found failures on Windows",
+            "Log screen now starts non-critical sync status observation after first composition to protect cold-start responsiveness",
+            "Security unlock flow now offers clearer runtime choices when both system authentication and app PIN are enabled",
+            "Added Enter App button on Log screen bottom bar for root Log launch so users can enter main tabs directly",
+            "Enter App button repositioned above tab region and app-entry route transition now uses smoother fade-slide animation",
+            "Added one-tap deep link to system security settings from lock diagnostics dialog",
+            "Bottom tab bar now fades and slides with route transitions so content and tabs appear together when entering the app"
         )
     ),
     ChangelogRelease(

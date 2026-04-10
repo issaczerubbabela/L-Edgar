@@ -72,6 +72,7 @@ class LogViewModel @Inject constructor(
     private var hasObservedInitialWorkerState = false
     private var lastObservedWorkerId: UUID? = null
     private var lastObservedWorkerState: WorkInfo.State? = null
+    private var hasStartedSyncObserver = false
     val isEditMode: Boolean get() = editingRecordId != null
 
     init {
@@ -79,8 +80,6 @@ class LogViewModel @Inject constructor(
         editingRecordId = navId?.takeIf { it > 0L }
         val copyTransactionId = savedStateHandle.get<Long>("copyTransactionId")?.takeIf { it > 0L }
         val copyDateMode = savedStateHandle.get<String>("copyDateMode") ?: "original"
-
-        observeSyncStatus()
 
         if (editingRecordId != null) {
             viewModelScope.launch {
@@ -220,6 +219,12 @@ class LogViewModel @Inject constructor(
     fun retrySync() {
         syncStatus = SyncStatusUi.Syncing
         enqueueSyncWork()
+    }
+
+    fun startSyncStatusObserver() {
+        if (hasStartedSyncObserver) return
+        hasStartedSyncObserver = true
+        observeSyncStatus()
     }
 
     private fun resetForm() {

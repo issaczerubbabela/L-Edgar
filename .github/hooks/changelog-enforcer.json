@@ -3,7 +3,7 @@
     "PreToolUse": [
       {
         "type": "command",
-        "windows": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/enforce-changelog.ps1",
+        "windows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/enforce-changelog.ps1",
         "timeout": 15
       }
     ]

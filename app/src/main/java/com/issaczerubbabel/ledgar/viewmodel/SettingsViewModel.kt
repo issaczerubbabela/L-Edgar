@@ -15,6 +15,7 @@ import androidx.work.workDataOf
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.data.preferences.AppLockAuthMode
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
 import com.issaczerubbabel.ledgar.data.remote.ApiService
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
@@ -78,6 +79,18 @@ class SettingsViewModel @Inject constructor(
     val scriptUrl: StateFlow<String?> = themeRepository.scriptUrl
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    val appLockEnabled: StateFlow<Boolean> = themeRepository.appLockEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val appLockAuthMode: StateFlow<AppLockAuthMode> = themeRepository.appLockAuthMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppLockAuthMode.SYSTEM)
+
+    val appLockTimeoutMinutes: StateFlow<Int> = themeRepository.appLockTimeoutMinutes
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 5)
+
+    val hasAppPinConfigured: StateFlow<Boolean> = themeRepository.hasAppPinConfigured
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     fun updateTheme(option: AppThemeOption) {
         viewModelScope.launch { themeRepository.updateTheme(option) }
     }
@@ -88,6 +101,66 @@ class SettingsViewModel @Inject constructor(
 
     fun updateScriptUrl(newUrl: String) {
         viewModelScope.launch { themeRepository.updateScriptUrl(newUrl) }
+    }
+
+    fun updateAppLockEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            themeRepository.updateAppLockEnabled(enabled)
+            if (enabled) {
+                _uiEvents.emit(SettingsUiEvent.ShowMessage("App lock enabled"))
+            } else {
+                _uiEvents.emit(SettingsUiEvent.ShowMessage("App lock disabled"))
+            }
+        }
+    }
+
+    fun updateAppLockAuthMode(mode: AppLockAuthMode) {
+        viewModelScope.launch {
+            if ((mode == AppLockAuthMode.PIN || mode == AppLockAuthMode.SYSTEM_OR_PIN) && !hasAppPinConfigured.value) {
+                _uiEvents.emit(SettingsUiEvent.ShowMessage("Set an app PIN first"))
+                return@launch
+            }
+            themeRepository.updateAppLockAuthMode(mode)
+            _uiEvents.emit(SettingsUiEvent.ShowMessage("Unlock method updated"))
+        }
+    }
+
+    fun updateAppLockTimeoutMinutes(minutes: Int) {
+        viewModelScope.launch {
+            themeRepository.updateAppLockTimeoutMinutes(minutes)
+            _uiEvents.emit(SettingsUiEvent.ShowMessage("Re-lock timeout updated to $minutes min"))
+        }
+    }
+
+    fun setOrChangeAppPin(pin: String, confirmPin: String) {
+        val normalizedPin = pin.trim()
+        if (!normalizedPin.matches(Regex("^[0-9]{4,8}$"))) {
+            viewModelScope.launch {
+                _uiEvents.emit(SettingsUiEvent.ShowMessage("PIN must be 4 to 8 digits"))
+            }
+            return
+        }
+        if (normalizedPin != confirmPin.trim()) {
+            viewModelScope.launch {
+                _uiEvents.emit(SettingsUiEvent.ShowMessage("PIN and confirmation do not match"))
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            themeRepository.setAppPin(normalizedPin)
+            if (appLockAuthMode.value == AppLockAuthMode.SYSTEM) {
+                themeRepository.updateAppLockAuthMode(AppLockAuthMode.SYSTEM_OR_PIN)
+            }
+            _uiEvents.emit(SettingsUiEvent.ShowMessage("App PIN saved"))
+        }
+    }
+
+    fun removeAppPin() {
+        viewModelScope.launch {
+            themeRepository.clearAppPin()
+            _uiEvents.emit(SettingsUiEvent.ShowMessage("App PIN removed"))
+        }
     }
 
     fun testScriptConnection(url: String) {

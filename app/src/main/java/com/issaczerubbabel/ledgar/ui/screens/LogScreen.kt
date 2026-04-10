@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -11,6 +12,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -26,6 +28,8 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun LogScreen(
     innerPadding: PaddingValues,
+    showEnterAppButton: Boolean = false,
+    onEnterApp: () -> Unit = {},
     onBack: () -> Unit = {},
     onSaved: () -> Unit = {},
     vm: LogViewModel = hiltViewModel()
@@ -36,6 +40,12 @@ fun LogScreen(
     val accounts by vm.accounts.collectAsState()
     val expenseCategories by vm.expenseCategories.collectAsState()
     val incomeCategories by vm.incomeCategories.collectAsState()
+
+    BackHandler(enabled = !showDatePicker && !showDeleteConfirm, onBack = onBack)
+
+    LaunchedEffect(Unit) {
+        vm.startSyncStatusObserver()
+    }
 
     LaunchedEffect(vm.saveSuccess) {
         if (vm.saveSuccess) {
@@ -82,18 +92,21 @@ fun LogScreen(
                     }
                 }
             )
-        },
-        bottomBar = {}
+        }
     ) { scaffoldPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(scaffoldPadding)
-                .padding(bottom = innerPadding.calculateBottomPadding())
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = innerPadding.calculateBottomPadding() + if (showEnterAppButton) 84.dp else 0.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
             // Date picker field
             OutlinedTextField(
                 value = vm.selectedDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),
@@ -205,7 +218,21 @@ fun LogScreen(
                 singleLine = true
             )
 
-            Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(2.dp))
+            }
+
+            if (showEnterAppButton) {
+                Button(
+                    onClick = onEnterApp,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = innerPadding.calculateBottomPadding() + 16.dp)
+                ) {
+                    Text("Enter App")
+                }
+            }
         }
     }
 

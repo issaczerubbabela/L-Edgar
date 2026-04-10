@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -26,6 +28,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.issaczerubbabel.ledgar.ui.theme.AppThemeOption
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseRed
 import com.issaczerubbabel.ledgar.ui.theme.IncomeGreen
+import com.issaczerubbabel.ledgar.data.preferences.AppLockAuthMode
 import com.issaczerubbabel.ledgar.viewmodel.ImportState
 import com.issaczerubbabel.ledgar.viewmodel.SettingsUiEvent
 import com.issaczerubbabel.ledgar.viewmodel.SettingsViewModel
@@ -52,7 +55,17 @@ fun SettingsScreen(
     val backupState  by vm.backupState.collectAsState()
     val currentTheme by vm.themeState.collectAsState()
     val scriptUrl by vm.scriptUrl.collectAsState()
+    val appLockEnabled by vm.appLockEnabled.collectAsState()
+    val appLockAuthMode by vm.appLockAuthMode.collectAsState()
+    val appLockTimeoutMinutes by vm.appLockTimeoutMinutes.collectAsState()
+    val hasAppPinConfigured by vm.hasAppPinConfigured.collectAsState()
     var themeDropdownExpanded by remember { mutableStateOf(false) }
+    var authModeDropdownExpanded by remember { mutableStateOf(false) }
+    var timeoutDropdownExpanded by remember { mutableStateOf(false) }
+    var showPinDialog by remember { mutableStateOf(false) }
+    var showRemovePinDialog by remember { mutableStateOf(false) }
+    var pinInput by remember { mutableStateOf("") }
+    var confirmPinInput by remember { mutableStateOf("") }
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(vm.resetDone) {
@@ -85,6 +98,85 @@ fun SettingsScreen(
                 ) { Text("Delete Everything") }
             },
             dismissButton = { TextButton(onClick = { vm.showResetConfirm = false }) { Text("Cancel") } }
+        )
+    }
+
+    if (showPinDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showPinDialog = false
+                pinInput = ""
+                confirmPinInput = ""
+            },
+            title = { Text(if (hasAppPinConfigured) "Change App PIN" else "Set App PIN") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = pinInput,
+                        onValueChange = { value ->
+                            pinInput = value.filter(Char::isDigit).take(8)
+                        },
+                        label = { Text("PIN (4-8 digits)") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = KeyboardType.NumberPassword
+                        )
+                    )
+                    OutlinedTextField(
+                        value = confirmPinInput,
+                        onValueChange = { value ->
+                            confirmPinInput = value.filter(Char::isDigit).take(8)
+                        },
+                        label = { Text("Confirm PIN") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = KeyboardType.NumberPassword
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.setOrChangeAppPin(pinInput, confirmPinInput)
+                    showPinDialog = false
+                    pinInput = ""
+                    confirmPinInput = ""
+                }) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showPinDialog = false
+                    pinInput = ""
+                    confirmPinInput = ""
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showRemovePinDialog) {
+        AlertDialog(
+            onDismissRequest = { showRemovePinDialog = false },
+            title = { Text("Remove App PIN?") },
+            text = { Text("PIN-based unlock options will be disabled.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.removeAppPin()
+                    showRemovePinDialog = false
+                }) {
+                    Text("Remove")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRemovePinDialog = false }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 
@@ -174,6 +266,135 @@ fun SettingsScreen(
                                 themeDropdownExpanded = false
                             }
                         )
+                    }
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            Text(
+                text = "Security",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false
+            )
+
+            SettingsListItem(
+                title = "Enable App Lock",
+                icon = Icons.Filled.Lock
+            ) {
+                Switch(
+                    checked = appLockEnabled,
+                    onCheckedChange = vm::updateAppLockEnabled
+                )
+            }
+
+            if (appLockEnabled) {
+                SettingsListItem(
+                    title = "Unlock Method",
+                    icon = Icons.Filled.Fingerprint
+                ) {
+                    ExposedDropdownMenuBox(
+                        expanded = authModeDropdownExpanded,
+                        onExpandedChange = { authModeDropdownExpanded = !authModeDropdownExpanded }
+                    ) {
+                        TextField(
+                            value = authModeLabel(appLockAuthMode),
+                            onValueChange = {},
+                            readOnly = true,
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium,
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = authModeDropdownExpanded)
+                            },
+                            colors = ExposedDropdownMenuDefaults.textFieldColors(),
+                            modifier = Modifier
+                                .menuAnchor()
+                                .widthIn(min = 166.dp, max = 220.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = authModeDropdownExpanded,
+                            onDismissRequest = { authModeDropdownExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("System biometric/device") },
+                                onClick = {
+                                    vm.updateAppLockAuthMode(AppLockAuthMode.SYSTEM)
+                                    authModeDropdownExpanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("App PIN") },
+                                onClick = {
+                                    vm.updateAppLockAuthMode(AppLockAuthMode.PIN)
+                                    authModeDropdownExpanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("System or App PIN") },
+                                onClick = {
+                                    vm.updateAppLockAuthMode(AppLockAuthMode.SYSTEM_OR_PIN)
+                                    authModeDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                SettingsListItem(
+                    title = "Re-lock Timeout",
+                    icon = Icons.Filled.Timer
+                ) {
+                    ExposedDropdownMenuBox(
+                        expanded = timeoutDropdownExpanded,
+                        onExpandedChange = { timeoutDropdownExpanded = !timeoutDropdownExpanded }
+                    ) {
+                        TextField(
+                            value = "$appLockTimeoutMinutes min",
+                            onValueChange = {},
+                            readOnly = true,
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium,
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = timeoutDropdownExpanded)
+                            },
+                            colors = ExposedDropdownMenuDefaults.textFieldColors(),
+                            modifier = Modifier
+                                .menuAnchor()
+                                .widthIn(min = 110.dp, max = 160.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = timeoutDropdownExpanded,
+                            onDismissRequest = { timeoutDropdownExpanded = false }
+                        ) {
+                            listOf(1, 2, 5, 10, 15, 30, 60).forEach { timeout ->
+                                DropdownMenuItem(
+                                    text = { Text("$timeout min") },
+                                    onClick = {
+                                        vm.updateAppLockTimeoutMinutes(timeout)
+                                        timeoutDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                SettingsListItem(
+                    title = if (hasAppPinConfigured) "App PIN Configured" else "Set App PIN",
+                    icon = Icons.Filled.Password
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { showPinDialog = true }) {
+                            Text(if (hasAppPinConfigured) "Change" else "Set")
+                        }
+                        if (hasAppPinConfigured) {
+                            TextButton(onClick = { showRemovePinDialog = true }) {
+                                Text("Remove", color = ExpenseRed)
+                            }
+                        }
                     }
                 }
             }
@@ -379,6 +600,12 @@ private fun themeLabel(option: AppThemeOption): String = when (option) {
     AppThemeOption.LAVENDER -> "Lavender"
     AppThemeOption.TEAL -> "Teal"
     AppThemeOption.RED -> "Red"
+}
+
+private fun authModeLabel(mode: AppLockAuthMode): String = when (mode) {
+    AppLockAuthMode.SYSTEM -> "System biometric/device"
+    AppLockAuthMode.PIN -> "App PIN"
+    AppLockAuthMode.SYSTEM_OR_PIN -> "System or App PIN"
 }
 
 private fun shareAppApk(context: Context) {

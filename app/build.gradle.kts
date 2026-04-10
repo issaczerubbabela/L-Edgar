@@ -95,6 +95,7 @@ dependencies {
     implementation(libs.vico.core)
     // DataStore
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.biometric)
 
     testImplementation("junit:junit:4.13.2")
 }
