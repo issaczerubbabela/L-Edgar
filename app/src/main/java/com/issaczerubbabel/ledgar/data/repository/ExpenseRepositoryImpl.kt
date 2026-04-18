@@ -11,6 +11,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
 import com.issaczerubbabel.ledgar.data.remote.ApiService
 import com.issaczerubbabel.ledgar.data.remote.ImportRecordDto
+import com.issaczerubbabel.ledgar.data.remote.SyncRequest
 import com.issaczerubbabel.ledgar.sync.SyncUrlNotConfiguredException
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import com.issaczerubbabel.ledgar.util.normalizeTimestampKey
@@ -112,9 +113,12 @@ class ExpenseRepositoryImpl @Inject constructor(
     override suspend fun isDuplicate(date: String, type: String, category: String, amount: Double): Boolean =
         dao.findDuplicate(date, type, category, amount) != null
 
-    override suspend fun importRemoteRecords(records: List<ImportRecordDto>): Int {
+    override suspend fun importRemoteRecords(records: List<ImportRecordDto>): Int =
+        importRemoteRecordsInternal(records).imported
+
+    private suspend fun importRemoteRecordsInternal(records: List<ImportRecordDto>): ImportRemoteRecordsOutcome {
         repairLegacyRecords()
-        if (records.isEmpty()) return 0
+        if (records.isEmpty()) return ImportRemoteRecordsOutcome(imported = 0, duplicates = emptyList())
 
         val initialAccounts = accountDao.getAllAccountsSnapshot().toMutableList()
         if (initialAccounts.isEmpty()) {
@@ -167,9 +171,10 @@ class ExpenseRepositoryImpl @Inject constructor(
             .toMutableMap()
 
         val toInsert = mutableListOf<ExpenseRecord>()
+        val duplicateCandidates = mutableListOf<SkippedDuplicateCandidate>()
 
         var unexpectedDateLogCount = 0
-        records.forEach { dto ->
+        records.forEachIndexed { index, dto ->
             val resolvedType = canonicalType(dto.type)
             val resolvedDate = normalizeDate(dto.date, dto.timestamp)
             if (parseFlexibleDate(resolvedDate) == null && unexpectedDateLogCount < 5) {
@@ -269,12 +274,12 @@ class ExpenseRepositoryImpl @Inject constructor(
                         localByRemoteTimestamp[timestamp] = updated
                     }
                 }
-                return@forEach
+                return@forEachIndexed
             }
 
             // For non-transfer rows, drop records that cannot be mapped safely.
             if (!resolvedType.equals("Transfer", ignoreCase = true) && mappedAccountId == null) {
-                return@forEach
+                return@forEachIndexed
             }
 
             val remoteComparable = ComparableTx(
@@ -287,51 +292,71 @@ class ExpenseRepositoryImpl @Inject constructor(
 
             val isDuplicate = localComparable.any { local -> isCompositeDuplicate(local, remoteComparable) }
 
+            val mappedRecord = ExpenseRecord(
+                date = resolvedDate,
+                type = resolvedType,
+                category = mappedCategory,
+                description = dto.description,
+                amount = dto.amount,
+                accountId = mappedAccountId,
+                remarks = dto.remarks,
+                isBookmarked = dto.isBookmarked ?: false,
+                fromAccountId = when {
+                    resolvedType.equals("Expense", ignoreCase = true) -> mappedAccountId
+                    resolvedType.equals("Transfer", ignoreCase = true) -> fromAccountId
+                    else -> null
+                },
+                toAccountId = when {
+                    resolvedType.equals("Income", ignoreCase = true) -> mappedAccountId
+                    resolvedType.equals("Transfer", ignoreCase = true) -> toAccountId
+                    else -> null
+                },
+                accountName = when {
+                    resolvedType.equals("Transfer", ignoreCase = true) -> null
+                    else -> fallbackAccountName
+                },
+                fromAccountName = when {
+                    resolvedType.equals("Expense", ignoreCase = true) -> fallbackAccountName
+                    resolvedType.equals("Transfer", ignoreCase = true) -> fallbackFromName
+                    else -> null
+                },
+                toAccountName = when {
+                    resolvedType.equals("Income", ignoreCase = true) -> fallbackAccountName
+                    resolvedType.equals("Transfer", ignoreCase = true) -> fallbackToName
+                    else -> null
+                },
+                isSynced = true,
+                remoteTimestamp = timestamp,
+                syncAction = "NONE"
+            )
+
             if (!isDuplicate) {
-                toInsert += ExpenseRecord(
+                toInsert += mappedRecord
+                localComparable += remoteComparable
+                timestamp?.let { localRemoteTimestamps += it }
+            } else {
+                duplicateCandidates += SkippedDuplicateCandidate(
+                    id = timestamp ?: "idx-$index-${resolvedType.lowercase()}-${dto.amount}",
+                    timestamp = timestamp,
                     date = resolvedDate,
                     type = resolvedType,
                     category = mappedCategory,
                     description = dto.description,
                     amount = dto.amount,
-                    accountId = mappedAccountId,
+                    accountName = fallbackAccountName ?: "",
+                    fromAccountName = fallbackFromName,
+                    toAccountName = fallbackToName,
                     remarks = dto.remarks,
-                    isBookmarked = dto.isBookmarked ?: false,
-                    fromAccountId = when {
-                        resolvedType.equals("Expense", ignoreCase = true) -> mappedAccountId
-                        resolvedType.equals("Transfer", ignoreCase = true) -> fromAccountId
-                        else -> null
-                    },
-                    toAccountId = when {
-                        resolvedType.equals("Income", ignoreCase = true) -> mappedAccountId
-                        resolvedType.equals("Transfer", ignoreCase = true) -> toAccountId
-                        else -> null
-                    },
-                    accountName = when {
-                        resolvedType.equals("Transfer", ignoreCase = true) -> null
-                        else -> fallbackAccountName
-                    },
-                    fromAccountName = when {
-                        resolvedType.equals("Expense", ignoreCase = true) -> fallbackAccountName
-                        resolvedType.equals("Transfer", ignoreCase = true) -> fallbackFromName
-                        else -> null
-                    },
-                    toAccountName = when {
-                        resolvedType.equals("Income", ignoreCase = true) -> fallbackAccountName
-                        resolvedType.equals("Transfer", ignoreCase = true) -> fallbackToName
-                        else -> null
-                    },
-                    isSynced = true,
-                    remoteTimestamp = timestamp,
-                    syncAction = "NONE"
+                    recordToImport = mappedRecord
                 )
-                localComparable += remoteComparable
-                timestamp?.let { localRemoteTimestamps += it }
             }
         }
 
         if (toInsert.isNotEmpty()) dao.insertAll(toInsert)
-        return toInsert.size
+        return ImportRemoteRecordsOutcome(
+            imported = toInsert.size,
+            duplicates = duplicateCandidates
+        )
     }
 
     override suspend fun importFromGoogleSheets(): GoogleSheetsImportResult {
@@ -448,15 +473,78 @@ class ExpenseRepositoryImpl @Inject constructor(
         }
 
         val dtos = txBody?.data.orEmpty()
-        val imported = importRemoteRecords(dtos)
-        val skipped = (dtos.size - imported).coerceAtLeast(0)
+        val importOutcome = importRemoteRecordsInternal(dtos)
+        val imported = importOutcome.imported
+        val skipped = importOutcome.duplicates.size
 
         return GoogleSheetsImportResult(
             imported = imported,
             skipped = skipped,
             restoredDropdowns = restoredDropdowns,
             restoredBudgets = restoredBudgets,
-            restoredAccounts = restoredAccounts
+            restoredAccounts = restoredAccounts,
+            duplicateCandidates = importOutcome.duplicates
+        )
+    }
+
+    override suspend fun resolveSkippedRemoteDuplicates(
+        candidates: List<SkippedDuplicateCandidate>,
+        acceptedCandidateIds: Set<String>
+    ): DuplicateResolutionResult {
+        if (candidates.isEmpty()) {
+            return DuplicateResolutionResult(
+                acceptedImported = 0,
+                skippedDeletedFromSheets = 0,
+                skippedDeleteFailed = 0
+            )
+        }
+
+        val acceptedRecords = candidates
+            .filter { acceptedCandidateIds.contains(it.id) }
+            .map { it.recordToImport.copy(id = 0) }
+
+        if (acceptedRecords.isNotEmpty()) {
+            dao.insertAll(acceptedRecords)
+        }
+
+        val scriptUrl = preferenceRepository.scriptUrl.first()
+            ?: throw SyncUrlNotConfiguredException()
+
+        var deletedFromSheets = 0
+        var deleteFailed = 0
+
+        val skippedCandidates = candidates.filterNot { acceptedCandidateIds.contains(it.id) }
+        for (candidate in skippedCandidates) {
+            val ts = normalizeTimestampKey(candidate.timestamp)
+            if (ts.isNullOrBlank()) {
+                deleteFailed++
+                continue
+            }
+
+            val response = apiService.syncRecords(
+                scriptUrl,
+                SyncRequest(
+                    action = "delete",
+                    target = "transactions",
+                    targetTimestamp = ts
+                )
+            )
+            val body = response.body()
+            val wasDeleted = response.isSuccessful &&
+                body?.status.equals("ok", ignoreCase = true) &&
+                (body?.count ?: 0) > 0
+
+            if (wasDeleted) {
+                deletedFromSheets++
+            } else {
+                deleteFailed++
+            }
+        }
+
+        return DuplicateResolutionResult(
+            acceptedImported = acceptedRecords.size,
+            skippedDeletedFromSheets = deletedFromSheets,
+            skippedDeleteFailed = deleteFailed
         )
     }
 
@@ -466,6 +554,11 @@ class ExpenseRepositoryImpl @Inject constructor(
         val type: String,
         val description: String,
         val accountId: Long?
+    )
+
+    private data class ImportRemoteRecordsOutcome(
+        val imported: Int,
+        val duplicates: List<SkippedDuplicateCandidate>
     )
 
     private fun isCompositeDuplicate(local: ComparableTx, remote: ComparableTx): Boolean {

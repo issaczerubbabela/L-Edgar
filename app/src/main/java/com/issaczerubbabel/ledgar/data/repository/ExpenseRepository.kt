@@ -4,12 +4,34 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.remote.ImportRecordDto
 import kotlinx.coroutines.flow.Flow
 
+data class SkippedDuplicateCandidate(
+    val id: String,
+    val timestamp: String?,
+    val date: String,
+    val type: String,
+    val category: String,
+    val description: String,
+    val amount: Double,
+    val accountName: String,
+    val fromAccountName: String?,
+    val toAccountName: String?,
+    val remarks: String,
+    val recordToImport: ExpenseRecord
+)
+
+data class DuplicateResolutionResult(
+    val acceptedImported: Int,
+    val skippedDeletedFromSheets: Int,
+    val skippedDeleteFailed: Int
+)
+
 data class GoogleSheetsImportResult(
     val imported: Int,
     val skipped: Int,
     val restoredDropdowns: Int,
     val restoredBudgets: Int = 0,
-    val restoredAccounts: Int = 0
+    val restoredAccounts: Int = 0,
+    val duplicateCandidates: List<SkippedDuplicateCandidate> = emptyList()
 )
 
 interface ExpenseRepository {
@@ -49,4 +71,8 @@ interface ExpenseRepository {
     suspend fun isDuplicate(date: String, type: String, category: String, amount: Double): Boolean
     suspend fun importRemoteRecords(records: List<ImportRecordDto>): Int
     suspend fun importFromGoogleSheets(): GoogleSheetsImportResult
+    suspend fun resolveSkippedRemoteDuplicates(
+        candidates: List<SkippedDuplicateCandidate>,
+        acceptedCandidateIds: Set<String>
+    ): DuplicateResolutionResult
 }

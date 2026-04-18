@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.issaczerubbabel.ledgar.data.repository.SkippedDuplicateCandidate
 import com.issaczerubbabel.ledgar.ui.theme.AppThemeOption
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseRed
 import com.issaczerubbabel.ledgar.ui.theme.IncomeGreen
@@ -54,6 +55,8 @@ fun SettingsScreen(
     val sheetsState by vm.sheetsImportState.collectAsStateWithLifecycle()
     val csvState by vm.csvImportState.collectAsStateWithLifecycle()
     val backupState by vm.backupState.collectAsStateWithLifecycle()
+    val duplicateCandidates by vm.duplicateCandidates.collectAsStateWithLifecycle()
+    val duplicateResolutionState by vm.duplicateResolutionState.collectAsStateWithLifecycle()
     val currentTheme by vm.themeState.collectAsStateWithLifecycle()
     val scriptUrl by vm.scriptUrl.collectAsStateWithLifecycle()
     val appLockEnabled by vm.appLockEnabled.collectAsStateWithLifecycle()
@@ -99,6 +102,15 @@ fun SettingsScreen(
                 ) { Text("Delete Everything") }
             },
             dismissButton = { TextButton(onClick = { vm.showResetConfirm = false }) { Text("Cancel") } }
+        )
+    }
+
+    if (duplicateCandidates.isNotEmpty()) {
+        DuplicateReviewDialog(
+            candidates = duplicateCandidates,
+            resolutionState = duplicateResolutionState,
+            onResolve = vm::resolveSkippedDuplicates,
+            onDismiss = vm::dismissDuplicateReview
         )
     }
 
@@ -628,4 +640,111 @@ private fun shareAppApk(context: Context) {
     }.onFailure {
         Toast.makeText(context, "Unable to share APK", Toast.LENGTH_SHORT).show()
     }
+}
+
+@Composable
+private fun DuplicateReviewDialog(
+    candidates: List<SkippedDuplicateCandidate>,
+    resolutionState: ImportState,
+    onResolve: (Set<String>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val accepted = remember(candidates) {
+        mutableStateMapOf<String, Boolean>().apply {
+            candidates.forEach { put(it.id, false) }
+        }
+    }
+
+    val canSubmit = resolutionState !is ImportState.Loading
+
+    AlertDialog(
+        onDismissRequest = {
+            if (canSubmit) onDismiss()
+        },
+        title = { Text("Review Duplicates (${candidates.size})") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "Accept = import and keep. Skip = delete from Sheets permanently.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                candidates.forEach { candidate ->
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "${candidate.type} • ${candidate.date} • ${candidate.amount}",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(
+                                text = candidate.description.ifBlank { "(No description)" },
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Text(
+                                text = "Account: ${candidate.accountName.ifBlank { "-" }}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (!candidate.timestamp.isNullOrBlank()) {
+                                Text(
+                                    text = "Timestamp: ${candidate.timestamp}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(
+                                    checked = accepted[candidate.id] == true,
+                                    onCheckedChange = { checked -> accepted[candidate.id] = checked },
+                                    enabled = canSubmit
+                                )
+                                Text(
+                                    text = "Accept this row",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val acceptedIds = accepted
+                        .filterValues { it }
+                        .keys
+                        .toSet()
+                    onResolve(acceptedIds)
+                },
+                enabled = canSubmit
+            ) {
+                if (resolutionState is ImportState.Loading) {
+                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("Apply")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = canSubmit) {
+                Text("Close")
+            }
+        }
+    )
 }

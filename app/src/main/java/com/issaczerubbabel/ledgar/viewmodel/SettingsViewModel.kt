@@ -19,6 +19,7 @@ import com.issaczerubbabel.ledgar.data.preferences.AppLockAuthMode
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
 import com.issaczerubbabel.ledgar.data.remote.ApiService
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
+import com.issaczerubbabel.ledgar.data.repository.SkippedDuplicateCandidate
 import com.issaczerubbabel.ledgar.sync.SyncWorker
 import com.issaczerubbabel.ledgar.ui.theme.AppThemeOption
 import com.issaczerubbabel.ledgar.util.CsvParser
@@ -231,6 +232,12 @@ class SettingsViewModel @Inject constructor(
     private val _backupState = MutableStateFlow<ImportState>(ImportState.Idle)
     val backupState: StateFlow<ImportState> = _backupState
 
+    private val _duplicateCandidates = MutableStateFlow<List<SkippedDuplicateCandidate>>(emptyList())
+    val duplicateCandidates: StateFlow<List<SkippedDuplicateCandidate>> = _duplicateCandidates
+
+    private val _duplicateResolutionState = MutableStateFlow<ImportState>(ImportState.Idle)
+    val duplicateResolutionState: StateFlow<ImportState> = _duplicateResolutionState
+
     private val _connectionTestState = MutableStateFlow<ConnectionTestState>(ConnectionTestState.Idle)
     val connectionTestState: StateFlow<ConnectionTestState> = _connectionTestState
 
@@ -245,18 +252,61 @@ class SettingsViewModel @Inject constructor(
         if (_sheetsState.value is ImportState.Loading) return
         viewModelScope.launch {
             _sheetsState.value = ImportState.Loading
+            _duplicateResolutionState.value = ImportState.Idle
             try {
                 val result = repository.importFromGoogleSheets()
                 _sheetsState.value = ImportState.Success(result.imported, result.skipped)
+                _duplicateCandidates.value = result.duplicateCandidates
                 _uiEvents.emit(
                     SettingsUiEvent.ShowMessage(
                         "Sync complete. ${result.restoredDropdowns} dropdown options restored, ${result.restoredAccounts} accounts restored, ${result.restoredBudgets} budget rows restored, and ${result.imported} new transactions imported (${result.skipped} duplicates skipped)."
                     )
                 )
+                if (result.duplicateCandidates.isNotEmpty()) {
+                    _uiEvents.emit(
+                        SettingsUiEvent.ShowMessage(
+                            "${result.duplicateCandidates.size} duplicate rows need review: Accept to import, or Skip to delete from Sheets."
+                        )
+                    )
+                }
             } catch (e: Exception) {
                 _sheetsState.value = ImportState.Error(e.message ?: "Unknown error")
             }
         }
+    }
+
+    fun resolveSkippedDuplicates(acceptedCandidateIds: Set<String>) {
+        val candidates = _duplicateCandidates.value
+        if (candidates.isEmpty() || _duplicateResolutionState.value is ImportState.Loading) return
+
+        viewModelScope.launch {
+            _duplicateResolutionState.value = ImportState.Loading
+            try {
+                val outcome = repository.resolveSkippedRemoteDuplicates(candidates, acceptedCandidateIds)
+                _duplicateCandidates.value = emptyList()
+                _duplicateResolutionState.value = ImportState.Success(
+                    imported = outcome.acceptedImported,
+                    skipped = outcome.skippedDeletedFromSheets
+                )
+                val failureSuffix = if (outcome.skippedDeleteFailed > 0) {
+                    " ${outcome.skippedDeleteFailed} skipped rows could not be deleted from Sheets."
+                } else {
+                    ""
+                }
+                _uiEvents.emit(
+                    SettingsUiEvent.ShowMessage(
+                        "Duplicate resolution done. ${outcome.acceptedImported} accepted/imported, ${outcome.skippedDeletedFromSheets} skipped/deleted from Sheets.${failureSuffix}"
+                    )
+                )
+            } catch (e: Exception) {
+                _duplicateResolutionState.value = ImportState.Error(e.message ?: "Duplicate resolution failed")
+            }
+        }
+    }
+
+    fun dismissDuplicateReview() {
+        _duplicateCandidates.value = emptyList()
+        _duplicateResolutionState.value = ImportState.Idle
     }
 
     // ── CSV import ───────────────────────────────────────────────────────────
