@@ -1185,6 +1185,11 @@ private fun TransactionRow(
     val isIncome  = record.type == "Income"
     val isExpense = record.type == "Expense"
     val isTransfer = record.type == "Transfer"
+    val amountColor = when {
+        isIncome -> IncomeBlue
+        isExpense -> ExpenseOrange
+        else -> TransferGray
+    }
     val selectedBg = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.32f)
 
     Row(
@@ -1217,29 +1222,15 @@ private fun TransactionRow(
                 softWrap = false)
         }
         Spacer(Modifier.width(8.dp))
-        if (!isTransfer) {
-            Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(min = 72.dp, max = 96.dp)) {
-                if (isIncome) {
-                    Text(
-                        text = formatMoney(record.amount),
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = IncomeBlue,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        softWrap = false
-                    )
-                }
-                if (isExpense) {
-                    Text(
-                        text = formatMoney(record.amount),
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = ExpenseOrange,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        softWrap = false
-                    )
-                }
-            }
+        Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(min = 72.dp, max = 96.dp)) {
+            Text(
+                text = formatMoney(record.amount),
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                color = amountColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false
+            )
         }
     }
 }
