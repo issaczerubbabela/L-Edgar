@@ -65,6 +65,23 @@ function normalizeTimestampKey(value, timeZone) {
   return text;
 }
 
+function normalizeBudgetMonthYearValue(value, timeZone) {
+  if (value === null || value === undefined) return "";
+  var text = String(value).trim();
+  if (!text) return "";
+
+  if (/^\d{4}-\d{2}$/.test(text)) {
+    return text;
+  }
+
+  var parsed = new Date(text);
+  if (!isNaN(parsed.getTime())) {
+    return Utilities.formatDate(parsed, timeZone, "yyyy-MM");
+  }
+
+  return text;
+}
+
 function boolish(value) {
   if (value === true || value === false) return true;
   var text = String(value || "")
@@ -484,7 +501,7 @@ function doPost(e) {
         } else {
           rows.push([
             r.id,
-            r.monthYear,
+            normalizeBudgetMonthYearValue(r.monthYear, timeZone),
             r.category,
             Number(r.amount) || 0,
             backupAt,
@@ -671,7 +688,7 @@ function doGet(e) {
       for (var b = 1; b < budgetData.length; b++) {
         budgets.push({
           id: Number(budgetData[b][0]) || 0,
-          monthYear: String(budgetData[b][1] || ""),
+          monthYear: normalizeBudgetMonthYearValue(budgetData[b][1], timeZone),
           category: String(budgetData[b][2] || ""),
           amount: Number(budgetData[b][3]) || 0,
         });

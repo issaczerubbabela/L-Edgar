@@ -32,6 +32,7 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Apps Script migration now auto-creates a timestamped backup sheet and rewrites transaction rows into canonical v2 columns to fix shifted From/To/Remarks/Synced/Bookmark data",
             "Apps Script transaction fetch parser now defensively reads previously shifted rows and normalizes non-transfer account fields for stable Trans tab rendering",
             "Google Sheets import now refreshes existing local records by remote timestamp so migrated account-name fields are reflected in Trans tab without duplicate inserts",
+            "Budget sync from Sheets now normalizes MonthYear values to yyyy-MM in Apps Script and app import, fixing dropped budget rows caused by JavaScript Date-string formats",
             "Transfer destination account name persistence fixed through Room, DTO mapping, and import/export flows",
             "Budget import now normalizes legacy month formats to yyyy-MM to prevent missing restored budgets",
             "Initial Log-screen exit now enforces configured lock method and keeps user on Log when authentication is cancelled",

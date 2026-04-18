@@ -531,6 +531,10 @@ class ExpenseRepositoryImpl @Inject constructor(
             }
         }
 
+        parseFlexibleDate(raw)?.let { parsedDate ->
+            return YearMonth.from(parsedDate).format(MONTH_YEAR_FORMATTER)
+        }
+
         return null
     }
 
