@@ -29,6 +29,9 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "MainActivity, QuickLogActivity, and AppNavigation now also use collectAsStateWithLifecycle to align lifecycle-aware collection across app entry and navigation",
             "Google Sheets transaction parser hardened for mixed legacy and v2 row formats",
             "Added safe Apps Script migration helper for transaction columns (From/To Account Name)",
+            "Apps Script migration now auto-creates a timestamped backup sheet and rewrites transaction rows into canonical v2 columns to fix shifted From/To/Remarks/Synced/Bookmark data",
+            "Apps Script transaction fetch parser now defensively reads previously shifted rows and normalizes non-transfer account fields for stable Trans tab rendering",
+            "Google Sheets import now refreshes existing local records by remote timestamp so migrated account-name fields are reflected in Trans tab without duplicate inserts",
             "Transfer destination account name persistence fixed through Room, DTO mapping, and import/export flows",
             "Budget import now normalizes legacy month formats to yyyy-MM to prevent missing restored budgets",
             "Initial Log-screen exit now enforces configured lock method and keeps user on Log when authentication is cancelled",
@@ -43,7 +46,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Startup routing now respects lock state: Transactions opens first when lock is off; Log gate opens first when lock is on",
             "Biometric unlock handoff now uses guarded navigation to prevent crash when transitioning from Log gate to Transactions",
             "Sheets transaction import now reads both legacy 11-column and v2 13-column schemas correctly, preventing missing account labels in Trans tab",
-            "Trans tab account label rendering now falls back to imported account-name text when account ID resolution is unavailable"
+            "Trans tab account label rendering now falls back to imported account-name text when account ID resolution is unavailable",
+            "One-time transaction-sheet migration now backfills historical transfer rows into From/To Account Name using legacy Account Name splits"
         ),
         qol = listOf(
             "Settings icon row alignment refined for cleaner visual consistency",

@@ -144,7 +144,9 @@ class ExpenseRepositoryImpl @Inject constructor(
             ?.id
             ?: initialAccounts.firstOrNull()?.id
 
-        val localComparable = dao.getAllRecordsSnapshot().map { local ->
+        val localSnapshot = dao.getAllRecordsSnapshot()
+
+        val localComparable = localSnapshot.map { local ->
             ComparableTx(
                 date = normalizeDate(local.date, local.remoteTimestamp),
                 amount = local.amount,
@@ -156,6 +158,13 @@ class ExpenseRepositoryImpl @Inject constructor(
         val localRemoteTimestamps = dao.getAllRemoteTimestamps()
             .mapNotNull(::normalizeTimestampKey)
             .toMutableSet()
+        val localByRemoteTimestamp = localSnapshot
+            .filter { !it.remoteTimestamp.isNullOrBlank() && it.syncAction != "DELETE" }
+            .mapNotNull { record ->
+                normalizeTimestampKey(record.remoteTimestamp)?.let { normalizedTs -> normalizedTs to record }
+            }
+            .toMap()
+            .toMutableMap()
 
         val toInsert = mutableListOf<ExpenseRecord>()
 
@@ -180,10 +189,6 @@ class ExpenseRepositoryImpl @Inject constructor(
                 ?.takeUnless { it.isBlank() }
                 ?: if (resolvedType.equals("Transfer", ignoreCase = true)) "Transfer" else ""
 
-            val timestamp = normalizeTimestampKey(dto.timestamp)
-            if (timestamp != null && localRemoteTimestamps.contains(timestamp)) {
-                return@forEach
-            }
             val remoteAccountName = dto.accountName?.trim().takeUnless { it.isNullOrBlank() }
                 ?: dto.paymentMode?.trim().takeUnless { it.isNullOrBlank() }
             val legacyTransferParts = remoteAccountName
@@ -220,6 +225,52 @@ class ExpenseRepositoryImpl @Inject constructor(
             val fallbackAccountName = remoteAccountName?.trim().takeUnless { it.isNullOrBlank() }
             val fallbackFromName = explicitFromName?.trim().takeUnless { it.isNullOrBlank() }
             val fallbackToName = explicitToName?.trim().takeUnless { it.isNullOrBlank() }
+            val timestamp = normalizeTimestampKey(dto.timestamp)
+
+            if (timestamp != null && localRemoteTimestamps.contains(timestamp)) {
+                val existing = localByRemoteTimestamp[timestamp]
+                if (existing != null) {
+                    val updated = existing.copy(
+                        accountId = when {
+                            resolvedType.equals("Transfer", ignoreCase = true) -> existing.accountId
+                            else -> mappedAccountId ?: existing.accountId
+                        },
+                        fromAccountId = when {
+                            resolvedType.equals("Expense", ignoreCase = true) -> mappedAccountId ?: existing.fromAccountId
+                            resolvedType.equals("Transfer", ignoreCase = true) -> fromAccountId ?: existing.fromAccountId
+                            else -> null
+                        },
+                        toAccountId = when {
+                            resolvedType.equals("Income", ignoreCase = true) -> mappedAccountId ?: existing.toAccountId
+                            resolvedType.equals("Transfer", ignoreCase = true) -> toAccountId ?: existing.toAccountId
+                            else -> null
+                        },
+                        accountName = when {
+                            resolvedType.equals("Transfer", ignoreCase = true) -> existing.accountName
+                            else -> fallbackAccountName ?: existing.accountName
+                        },
+                        fromAccountName = when {
+                            resolvedType.equals("Expense", ignoreCase = true) -> fallbackAccountName ?: existing.fromAccountName
+                            resolvedType.equals("Transfer", ignoreCase = true) -> fallbackFromName ?: existing.fromAccountName
+                            else -> null
+                        },
+                        toAccountName = when {
+                            resolvedType.equals("Income", ignoreCase = true) -> fallbackAccountName ?: existing.toAccountName
+                            resolvedType.equals("Transfer", ignoreCase = true) -> fallbackToName ?: existing.toAccountName
+                            else -> null
+                        },
+                        remarks = dto.remarks.ifBlank { existing.remarks },
+                        isBookmarked = dto.isBookmarked ?: existing.isBookmarked,
+                        isSynced = true,
+                        syncAction = "NONE"
+                    )
+                    if (updated != existing) {
+                        dao.update(updated)
+                        localByRemoteTimestamp[timestamp] = updated
+                    }
+                }
+                return@forEach
+            }
 
             // For non-transfer rows, drop records that cannot be mapped safely.
             if (!resolvedType.equals("Transfer", ignoreCase = true) && mappedAccountId == null) {

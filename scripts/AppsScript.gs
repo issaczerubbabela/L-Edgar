@@ -105,6 +105,24 @@ function parseTransactionRow(row, schemaMode) {
     remarks = String(row[10] || "");
     syncedAt = row[11] ? String(row[11]) : "";
     isBookmarked = row[12] ? toBool(row[12]) : false;
+
+    // Defensive read for rows that were previously shifted by two columns.
+    var looksShiftedByTwo =
+      row.length >= 15 &&
+      !String(row[8] || "").trim() &&
+      !String(row[9] || "").trim() &&
+      (String(row[10] || "").trim() ||
+        String(row[11] || "").trim() ||
+        String(row[12] || "").trim() ||
+        String(row[13] || "").trim() ||
+        String(row[14] || "").trim());
+    if (looksShiftedByTwo) {
+      fromAccountName = String(row[10] || "");
+      toAccountName = String(row[11] || "");
+      remarks = String(row[12] || "");
+      syncedAt = row[13] ? String(row[13]) : "";
+      isBookmarked = row[14] ? toBool(row[14]) : false;
+    }
   } else {
     // Legacy 11-column format.
     remarks = String(row[8] || "");
@@ -124,6 +142,15 @@ function parseTransactionRow(row, schemaMode) {
     if (!toAccountName) toAccountName = legacySplit[1] || "";
   }
 
+  // Normalize non-transfer rows so app import uses Account Name only.
+  if (type !== "transfer") {
+    if (!accountName && fromAccountName) {
+      accountName = String(fromAccountName || "").trim();
+    }
+    fromAccountName = "";
+    toAccountName = "";
+  }
+
   return {
     accountName: accountName,
     fromAccountName: fromAccountName,
@@ -131,6 +158,120 @@ function parseTransactionRow(row, schemaMode) {
     remarks: remarks,
     syncedAt: syncedAt,
     isBookmarked: isBookmarked,
+  };
+}
+
+function splitTransferAccounts(accountName) {
+  var combined = String(accountName || "").trim();
+  if (!combined) {
+    return { fromAccountName: "", toAccountName: "" };
+  }
+
+  var parts = combined.split("->").map(function (part) {
+    return String(part || "").trim();
+  });
+
+  return {
+    fromAccountName: parts[0] || "",
+    toAccountName: parts[1] || "",
+  };
+}
+
+function createTransactionsBackupSheet(spreadsheet, txSheet) {
+  var stamp = Utilities.formatDate(
+    new Date(),
+    Session.getScriptTimeZone(),
+    "yyyyMMdd_HHmmss",
+  );
+  var baseName = TRANSACTIONS_SHEET + "_backup_" + stamp;
+  var backupName = baseName;
+  var suffix = 1;
+  while (spreadsheet.getSheetByName(backupName)) {
+    backupName = baseName + "_" + suffix;
+    suffix++;
+  }
+
+  txSheet.copyTo(spreadsheet).setName(backupName);
+  return backupName;
+}
+
+function normalizeTransactionRowToV2(row) {
+  var rawType = String(row[2] || "").trim();
+  var type = rawType.toLowerCase();
+
+  var timestamp = String(row[0] || "");
+  var date = String(row[1] || "");
+  var expCategory = String(row[3] || "");
+  var incCategory = String(row[4] || "");
+  var description = String(row[5] || "");
+  var amount = Number(row[6]) || 0;
+  var accountName = String(row[7] || "").trim();
+
+  var fromAccountName = String(row[8] || "").trim();
+  var toAccountName = String(row[9] || "").trim();
+  var remarks = String(row[10] || "");
+  var syncedAt = row[11] ? String(row[11]) : "";
+  var isBookmarkedRaw = row[12];
+
+  var looksShiftedByTwo =
+    row.length >= 15 &&
+    !String(row[8] || "").trim() &&
+    !String(row[9] || "").trim() &&
+    (String(row[10] || "").trim() ||
+      String(row[11] || "").trim() ||
+      String(row[12] || "").trim() ||
+      String(row[13] || "").trim() ||
+      String(row[14] || "").trim());
+
+  if (looksShiftedByTwo) {
+    fromAccountName = String(row[10] || "").trim();
+    toAccountName = String(row[11] || "").trim();
+    remarks = String(row[12] || "");
+    syncedAt = row[13] ? String(row[13]) : "";
+    isBookmarkedRaw = row[14];
+  }
+
+  if (type === "transfer") {
+    if (!fromAccountName || !toAccountName) {
+      var split = splitTransferAccounts(accountName);
+      if (!fromAccountName) fromAccountName = split.fromAccountName;
+      if (!toAccountName) toAccountName = split.toAccountName;
+    }
+  } else {
+    if (!accountName && fromAccountName) {
+      accountName = fromAccountName;
+    }
+    fromAccountName = "";
+    toAccountName = "";
+  }
+
+  var isBookmarked =
+    isBookmarkedRaw === null ||
+    isBookmarkedRaw === undefined ||
+    String(isBookmarkedRaw).trim() === ""
+      ? false
+      : toBool(isBookmarkedRaw);
+
+  return {
+    row: [
+      timestamp,
+      date,
+      rawType,
+      expCategory,
+      incCategory,
+      description,
+      amount,
+      accountName,
+      fromAccountName,
+      toAccountName,
+      remarks,
+      syncedAt,
+      isBookmarked,
+    ],
+    wasShiftedByTwo: looksShiftedByTwo,
+    transferBackfilled:
+      type === "transfer" && (fromAccountName !== "" || toAccountName !== ""),
+    clearedNonTransferFromTo: type !== "transfer",
   };
 }
 
@@ -147,42 +288,59 @@ function migrateTransactionsSheetToV2() {
       action: "migration_initialized",
       message: "Created v2 headers on empty transactions sheet",
       rowsAffected: 0,
+      backupSheet: null,
     };
   }
+  var lastRow = txSheet.getLastRow();
+  var lastColumn = txSheet.getLastColumn();
+  var backupSheet = createTransactionsBackupSheet(spreadsheet, txSheet);
 
-  var header = txSheet
-    .getRange(
-      1,
-      1,
-      1,
-      Math.max(txSheet.getLastColumn(), TRANSACTION_HEADERS_V2.length),
-    )
-    .getDisplayValues()[0]
-    .map(function (v) {
-      return String(v || "").trim();
-    });
+  var sourceRows = txSheet
+    .getRange(1, 1, lastRow, Math.max(lastColumn, TRANSACTION_HEADERS_V2.length))
+    .getDisplayValues();
 
-  var alreadyV2 =
-    header[8] === "From Account Name" &&
-    header[9] === "To Account Name" &&
-    header[10] === "Remarks";
+  var normalizedRows = [TRANSACTION_HEADERS_V2];
+  var shiftedRowsFixed = 0;
+  var transferRowsBackfilled = 0;
+  var nonTransferRowsCleared = 0;
 
-  if (!alreadyV2) {
-    // Insert between "Account Name" and "Remarks" so old row values shift right safely.
-    txSheet.insertColumnsAfter(8, 2);
+  for (var i = 1; i < sourceRows.length; i++) {
+    var source = sourceRows[i];
+    var type = String(source[2] || "").trim();
+    if (!type) continue;
+
+    var normalized = normalizeTransactionRowToV2(source);
+    normalizedRows.push(normalized.row);
+    if (normalized.wasShiftedByTwo) shiftedRowsFixed++;
+    if (normalized.transferBackfilled) transferRowsBackfilled++;
+    if (normalized.clearedNonTransferFromTo) nonTransferRowsCleared++;
   }
 
+  var maxColumns = txSheet.getMaxColumns();
+  if (maxColumns < TRANSACTION_HEADERS_V2.length) {
+    txSheet.insertColumnsAfter(maxColumns, TRANSACTION_HEADERS_V2.length - maxColumns);
+  } else if (maxColumns > TRANSACTION_HEADERS_V2.length) {
+    txSheet.deleteColumns(
+      TRANSACTION_HEADERS_V2.length + 1,
+      maxColumns - TRANSACTION_HEADERS_V2.length,
+    );
+  }
+
+  txSheet.clearContents();
   txSheet
-    .getRange(1, 1, 1, TRANSACTION_HEADERS_V2.length)
-    .setValues([TRANSACTION_HEADERS_V2]);
+    .getRange(1, 1, normalizedRows.length, TRANSACTION_HEADERS_V2.length)
+    .setValues(normalizedRows);
 
   return {
     status: "ok",
-    action: alreadyV2 ? "migration_noop" : "migration_applied",
-    message: alreadyV2
-      ? "Sheet is already using v2 transaction columns"
-      : "Inserted From/To Account Name columns and updated header",
-    rowsAffected: Math.max(txSheet.getLastRow() - 1, 0),
+    action: "migration_rewritten",
+    message:
+      "Created backup sheet and rewrote transactions into canonical v2 columns",
+    rowsAffected: Math.max(normalizedRows.length - 1, 0),
+    transferRowsBackfilled: transferRowsBackfilled,
+    shiftedRowsFixed: shiftedRowsFixed,
+    nonTransferRowsCleared: nonTransferRowsCleared,
+    backupSheet: backupSheet,
   };
 }
 
