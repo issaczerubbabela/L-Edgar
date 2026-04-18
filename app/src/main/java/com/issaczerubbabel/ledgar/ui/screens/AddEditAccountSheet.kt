@@ -31,9 +31,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.issaczerubbabel.ledgar.util.formatAsOfDateTime
+import com.issaczerubbabel.ledgar.util.nowAsOfDateTime
+import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import com.issaczerubbabel.ledgar.viewmodel.AddEditAccountUiState
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -112,6 +116,10 @@ fun AddEditAccountSheet(
                     .clickable { showDatePicker = true }
             )
 
+            TextButton(onClick = { onInitialBalanceDateChange(nowAsOfDateTime()) }) {
+                Text("Set to Now")
+            }
+
             OutlinedTextField(
                 value = state.description,
                 onValueChange = onDescriptionChange,
@@ -171,7 +179,7 @@ fun AddEditAccountSheet(
         if (showDatePicker) {
             val initialMillis = remember(state.initialBalanceDate) {
                 runCatching {
-                    LocalDate.parse(state.initialBalanceDate)
+                    (parseFlexibleDate(state.initialBalanceDate) ?: LocalDate.now())
                         .atStartOfDay(ZoneId.systemDefault())
                         .toInstant()
                         .toEpochMilli()
@@ -185,11 +193,11 @@ fun AddEditAccountSheet(
                     TextButton(onClick = {
                         val selectedMillis = datePickerState.selectedDateMillis
                         if (selectedMillis != null) {
-                            val selectedDate = Instant.ofEpochMilli(selectedMillis)
+                            val selectedDateTime = Instant.ofEpochMilli(selectedMillis)
                                 .atZone(ZoneId.systemDefault())
                                 .toLocalDate()
-                                .toString()
-                            onInitialBalanceDateChange(selectedDate)
+                                .atStartOfDay()
+                            onInitialBalanceDateChange(formatAsOfDateTime(selectedDateTime))
                         }
                         showDatePicker = false
                     }) {
@@ -199,7 +207,7 @@ fun AddEditAccountSheet(
                 dismissButton = {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         TextButton(onClick = {
-                            onInitialBalanceDateChange(LocalDate.now().toString())
+                            onInitialBalanceDateChange(formatAsOfDateTime(LocalDateTime.now().toLocalDate().atStartOfDay()))
                             showDatePicker = false
                         }) {
                             Text("Today")

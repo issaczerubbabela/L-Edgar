@@ -5,7 +5,9 @@ import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import androidx.room.withTransaction
-import com.issaczerubbabel.ledgar.util.parseFlexibleDate
+import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.util.parseAsOfDateTime
+import com.issaczerubbabel.ledgar.util.parseTransactionDateTime
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -26,20 +28,20 @@ class AccountRepositoryImpl @Inject constructor(
             val totalsByAccount = mutableMapOf<Long, Double>()
             val asOfDateByAccount = accounts.associate { it.id to it.initialBalanceDate }
 
-            fun addDelta(accountId: Long?, delta: Double, txDate: String) {
+            fun addDelta(accountId: Long?, delta: Double, txn: ExpenseRecord) {
                 if (accountId == null) return
                 val asOfDate = asOfDateByAccount[accountId] ?: "1970-01-01"
-                if (!isOnOrAfterAsOf(txDate, asOfDate)) return
+                if (!isAfterAsOf(txn, asOfDate)) return
                 totalsByAccount[accountId] = (totalsByAccount[accountId] ?: 0.0) + delta
             }
 
             records.forEach { txn ->
                 when (txn.type) {
-                    "Income" -> addDelta(txn.toAccountId ?: txn.accountId, txn.amount, txn.date)
-                    "Expense" -> addDelta(txn.fromAccountId ?: txn.accountId, -txn.amount, txn.date)
+                    "Income" -> addDelta(txn.toAccountId ?: txn.accountId, txn.amount, txn)
+                    "Expense" -> addDelta(txn.fromAccountId ?: txn.accountId, -txn.amount, txn)
                     "Transfer" -> {
-                        addDelta(txn.fromAccountId, -txn.amount, txn.date)
-                        addDelta(txn.toAccountId, txn.amount, txn.date)
+                        addDelta(txn.fromAccountId, -txn.amount, txn)
+                        addDelta(txn.toAccountId, txn.amount, txn)
                     }
                 }
             }
@@ -50,12 +52,12 @@ class AccountRepositoryImpl @Inject constructor(
             }
         }
 
-    private fun isOnOrAfterAsOf(txDate: String, asOfDate: String): Boolean {
-        val tx = parseFlexibleDate(txDate)
-        val asOf = parseFlexibleDate(asOfDate)
+    private fun isAfterAsOf(record: ExpenseRecord, asOfDate: String): Boolean {
+        val tx = parseTransactionDateTime(dateRaw = record.date, timestampRaw = record.remoteTimestamp)
+        val asOf = parseAsOfDateTime(asOfDate)
         return when {
-            tx != null && asOf != null -> !tx.isBefore(asOf)
-            else -> txDate >= asOfDate
+            tx != null && asOf != null -> tx.isAfter(asOf)
+            else -> false
         }
     }
 

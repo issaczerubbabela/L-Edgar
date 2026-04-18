@@ -263,7 +263,7 @@ interface ExpenseDao {
                 INNER JOIN account_records a ON a.id = :accountId
                 WHERE (e.accountId = :accountId OR e.fromAccountId = :accountId OR e.toAccountId = :accountId)
                     AND e.date < :beforeDate
-                    AND e.date >= a.initialBalanceDate
+                    AND e.date >= substr(a.initialBalanceDate, 1, 10)
                     AND e.syncAction != 'DELETE'
         """
     )
@@ -282,7 +282,7 @@ interface ExpenseDao {
         LEFT JOIN expense_records e
             ON e.accountId = a.id
            AND e.syncAction != 'DELETE'
-              AND e.date >= a.initialBalanceDate
+                  AND e.date >= substr(a.initialBalanceDate, 1, 10)
            AND e.date <= :endDate
         WHERE a.id = :accountId
         """
@@ -304,7 +304,7 @@ interface ExpenseDao {
         LEFT JOIN expense_records e
             ON (e.fromAccountId = a.id OR e.toAccountId = a.id)
            AND e.syncAction != 'DELETE'
-           AND e.date >= a.initialBalanceDate
+           AND e.date >= substr(a.initialBalanceDate, 1, 10)
         WHERE a.id = :accountId
         """
     )

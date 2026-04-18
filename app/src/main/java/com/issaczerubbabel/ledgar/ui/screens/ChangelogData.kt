@@ -10,6 +10,36 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
+        version = "v1.0.3",
+        date = "2026-04-18",
+        features = listOf(
+            "Insights screen now supports flexible period scopes (Weekly, Monthly, Yearly, Select Period) with period navigation and custom date-range selection",
+            "Expense Breakdown now includes tabbed Expense and Income category views with the same interactive donut experience",
+            "Cash Flow now supports category filtering with an explicit All Categories option and time bucketing controls for Daily, Weekly, Monthly, and Yearly views",
+            "Account Balance As-Of now supports precise timestamp values with a Set to Now shortcut in add/edit account flows"
+        ),
+        fixes = listOf(
+            "Cash Flow chart now refreshes plotted series correctly when switching top period months, preventing stale bars/lines and stale Y-axis scale carryover",
+            "Cash Flow income visibility improved by switching bar mode to grouped columns and hardening transaction type matching for imported data with extra whitespace",
+            "Cash Flow marker tooltip now prioritizes spent amount first, followed by income and guide-line values for clearer per-bucket amount reading",
+            "Cash Flow marker content now includes Income, Expense, Avg/day, and Max/day values for each highlighted bucket",
+            "Account balance math now compares transaction timestamps against precise As-Of values, including same-day hour/minute boundaries"
+        ),
+        qol = listOf(
+            "Quick Settings tile click now stays in quick-entry flow and updates tile state without opening the main app tabs",
+            "Apps Script setup URL field now has a one-tap Paste action with clipboard fill and immediate keyboard hide",
+            "Insights breakdown tabs now restore the selected-tab accent underline while keeping the gray card-matched background",
+            "Insights cash-flow card now shows a small Graph mode hint (Bars/Lines) under the controls",
+            "More tab Appearance now includes a Cash Flow Graph style selector with Bars and Lines options",
+            "Breakdown tab indicator contrast improved on the gray card-matched tab row background",
+            "Monthly cash-flow granularity now shows all available months instead of being constrained by the selected top-month period",
+            "Insights breakdown tab selector now uses a card-matching gray surface instead of a dark background",
+            "Cash Flow chart now renders thicker stacked bars and overlays average-per-day plus budget-aware max-per-day guide lines",
+            "Insights card visuals refined: removed redundant chart titles, aligned chart background with card surface, simplified daily x-axis labels, and removed chart grid guidelines",
+            "Added .tmp and .tmp_vico_src to gitignore for local artifact cleanup"
+        )
+    ),
+    ChangelogRelease(
         version = "v1.0.2",
         date = "2026-04-10",
         features = listOf(

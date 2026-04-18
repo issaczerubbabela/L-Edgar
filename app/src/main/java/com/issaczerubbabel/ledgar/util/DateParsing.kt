@@ -2,12 +2,16 @@ package com.issaczerubbabel.ledgar.util
 
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeFormatterBuilder
 import java.time.temporal.ChronoField
 import java.util.Locale
+
+private val asOfDateTimeFormatter: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ENGLISH)
 
 /** Parses common sheet/app date formats into LocalDate. */
 fun parseFlexibleDate(raw: String): LocalDate? {
@@ -80,4 +84,43 @@ private fun parseShortDate(input: String): LocalDate? {
     if (month !in 1..12 || day !in 1..31) return null
 
     return runCatching { LocalDate.of(year, month, day) }.getOrNull()
+}
+
+fun formatAsOfDateTime(value: LocalDateTime): String = value.format(asOfDateTimeFormatter)
+
+fun nowAsOfDateTime(): String = formatAsOfDateTime(LocalDateTime.now())
+
+fun parseAsOfDateTime(raw: String): LocalDateTime? {
+    runCatching { return LocalDateTime.parse(raw, asOfDateTimeFormatter) }
+    runCatching { return LocalDateTime.parse(raw) }
+
+    val normalized = normalizeTimestampKey(raw)
+    if (normalized != null) {
+        runCatching {
+            return LocalDateTime.parse(
+                normalized,
+                DateTimeFormatter.ofPattern("M/d/yyyy HH:mm:ss", Locale.ENGLISH)
+            )
+        }
+    }
+
+    parseFlexibleDate(raw)?.let { return it.atStartOfDay() }
+    return null
+}
+
+fun parseTransactionDateTime(dateRaw: String, timestampRaw: String?): LocalDateTime? {
+    val normalized = normalizeTimestampKey(timestampRaw)
+    if (normalized != null) {
+        runCatching {
+            return LocalDateTime.parse(
+                normalized,
+                DateTimeFormatter.ofPattern("M/d/yyyy HH:mm:ss", Locale.ENGLISH)
+            )
+        }
+    }
+
+    // For legacy rows that only have day precision, treat the transaction as end-of-day
+    // to preserve previous day-inclusive balance behavior.
+    parseFlexibleDate(dateRaw)?.let { return it.atTime(23, 59, 59) }
+    return null
 }

@@ -10,7 +10,7 @@ class QuickLogTileService : TileService() {
     override fun onClick() {
         super.onClick()
 
-        val intent = Intent(this, QuickLogActivity::class.java).apply {
+        val quickLogIntent = Intent(this, QuickLogActivity::class.java).apply {
             action = Intent.ACTION_VIEW
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
@@ -18,23 +18,28 @@ class QuickLogTileService : TileService() {
         val pendingIntent = PendingIntent.getActivity(
             this,
             1001,
-            intent,
+            quickLogIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val launchAction = {
+        val launchQuickLogAction = {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 startActivityAndCollapse(pendingIntent)
             } else {
                 @Suppress("DEPRECATION")
-                startActivityAndCollapse(intent)
+                startActivityAndCollapse(quickLogIntent)
             }
         }
 
         if (isLocked) {
-            unlockAndRun(launchAction)
+            unlockAndRun(launchQuickLogAction)
         } else {
-            launchAction()
+            launchQuickLogAction()
+        }
+
+        qsTile?.let { tile ->
+            tile.state = android.service.quicksettings.Tile.STATE_INACTIVE
+            tile.updateTile()
         }
     }
 }

@@ -43,9 +43,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.issaczerubbabel.ledgar.util.formatAsOfDateTime
+import com.issaczerubbabel.ledgar.util.nowAsOfDateTime
+import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import com.issaczerubbabel.ledgar.viewmodel.AddAccountViewModel
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -174,6 +178,13 @@ fun AddAccountScreen(
                     .padding(top = 12.dp)
                     .clickable { showDatePicker = true }
             )
+
+            TextButton(
+                onClick = { vm.updateInitialBalanceDate(nowAsOfDateTime()) },
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                Text("Set to Now")
+            }
         }
     }
 
@@ -219,7 +230,7 @@ fun AddAccountScreen(
     if (showDatePicker) {
         val initialMillis = remember(state.initialBalanceDate) {
             runCatching {
-                LocalDate.parse(state.initialBalanceDate)
+                (parseFlexibleDate(state.initialBalanceDate) ?: LocalDate.now())
                     .atStartOfDay(ZoneId.systemDefault())
                     .toInstant()
                     .toEpochMilli()
@@ -233,11 +244,11 @@ fun AddAccountScreen(
                 TextButton(onClick = {
                     val selectedMillis = datePickerState.selectedDateMillis
                     if (selectedMillis != null) {
-                        val selectedDate = Instant.ofEpochMilli(selectedMillis)
+                        val selectedDateTime = Instant.ofEpochMilli(selectedMillis)
                             .atZone(ZoneId.systemDefault())
                             .toLocalDate()
-                            .toString()
-                        vm.updateInitialBalanceDate(selectedDate)
+                            .atStartOfDay()
+                        vm.updateInitialBalanceDate(formatAsOfDateTime(selectedDateTime))
                     }
                     showDatePicker = false
                 }) {
@@ -247,7 +258,7 @@ fun AddAccountScreen(
             dismissButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(onClick = {
-                        vm.updateInitialBalanceDate(LocalDate.now().toString())
+                        vm.updateInitialBalanceDate(formatAsOfDateTime(LocalDateTime.now().toLocalDate().atStartOfDay()))
                         showDatePicker = false
                     }) {
                         Text("Today")

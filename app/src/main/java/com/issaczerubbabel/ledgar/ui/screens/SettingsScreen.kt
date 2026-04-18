@@ -27,6 +27,7 @@ import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.repository.SkippedDuplicateCandidate
+import com.issaczerubbabel.ledgar.data.preferences.CashFlowChartStyle
 import com.issaczerubbabel.ledgar.ui.theme.AppThemeOption
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseRed
 import com.issaczerubbabel.ledgar.ui.theme.IncomeGreen
@@ -63,7 +64,9 @@ fun SettingsScreen(
     val appLockAuthMode by vm.appLockAuthMode.collectAsStateWithLifecycle()
     val appLockTimeoutMinutes by vm.appLockTimeoutMinutes.collectAsStateWithLifecycle()
     val hasAppPinConfigured by vm.hasAppPinConfigured.collectAsStateWithLifecycle()
+    val cashFlowChartStyle by vm.cashFlowChartStyle.collectAsStateWithLifecycle()
     var themeDropdownExpanded by remember { mutableStateOf(false) }
+    var chartStyleDropdownExpanded by remember { mutableStateOf(false) }
     var authModeDropdownExpanded by remember { mutableStateOf(false) }
     var timeoutDropdownExpanded by remember { mutableStateOf(false) }
     var showPinDialog by remember { mutableStateOf(false) }
@@ -277,6 +280,48 @@ fun SettingsScreen(
                             onClick = {
                                 vm.updateTheme(AppThemeOption.RED)
                                 themeDropdownExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            SettingsListItem(title = "Cash Flow Graph", icon = Icons.Filled.ShowChart) {
+                ExposedDropdownMenuBox(
+                    expanded = chartStyleDropdownExpanded,
+                    onExpandedChange = { chartStyleDropdownExpanded = !chartStyleDropdownExpanded }
+                ) {
+                    TextField(
+                        value = cashFlowChartStyleLabel(cashFlowChartStyle),
+                        onValueChange = {},
+                        readOnly = true,
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium,
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = chartStyleDropdownExpanded)
+                        },
+                        colors = ExposedDropdownMenuDefaults.textFieldColors(),
+                        modifier = Modifier
+                            .menuAnchor()
+                            .widthIn(min = 132.dp, max = 188.dp)
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = chartStyleDropdownExpanded,
+                        onDismissRequest = { chartStyleDropdownExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Bars") },
+                            onClick = {
+                                vm.updateCashFlowChartStyle(CashFlowChartStyle.BAR)
+                                chartStyleDropdownExpanded = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Lines") },
+                            onClick = {
+                                vm.updateCashFlowChartStyle(CashFlowChartStyle.LINE)
+                                chartStyleDropdownExpanded = false
                             }
                         )
                     }
@@ -613,6 +658,11 @@ private fun themeLabel(option: AppThemeOption): String = when (option) {
     AppThemeOption.LAVENDER -> "Lavender"
     AppThemeOption.TEAL -> "Teal"
     AppThemeOption.RED -> "Red"
+}
+
+private fun cashFlowChartStyleLabel(style: CashFlowChartStyle): String = when (style) {
+    CashFlowChartStyle.BAR -> "Bars"
+    CashFlowChartStyle.LINE -> "Lines"
 }
 
 private fun authModeLabel(mode: AppLockAuthMode): String = when (mode) {
