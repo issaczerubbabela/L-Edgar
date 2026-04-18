@@ -79,7 +79,21 @@ class AccountRepositoryImpl @Inject constructor(
 
     override suspend fun getAccountById(accountId: Long): AccountRecord? = dao.getAccountById(accountId)
 
-    override suspend fun save(record: AccountRecord): Long = dao.insert(record)
+    override suspend fun save(record: AccountRecord): Long {
+        if (record.id == 0L) {
+            return dao.insert(record)
+        }
+
+        val existing = dao.getAccountById(record.id)
+        return if (existing != null) {
+            // Avoid INSERT OR REPLACE for edits because REPLACE deletes then reinserts,
+            // which can null linked transaction foreign keys.
+            dao.update(record)
+            record.id
+        } else {
+            dao.insert(record)
+        }
+    }
 
     override suspend fun toggleHidden(accountId: Long) {
         val account = dao.getAccountById(accountId) ?: return
