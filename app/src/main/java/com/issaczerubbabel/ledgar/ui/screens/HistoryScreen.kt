@@ -61,15 +61,25 @@ private fun accountLabelForTransaction(record: ExpenseRecord, accountsById: Map<
     return when (record.type) {
         "Income" -> {
             val accountId = record.toAccountId ?: record.accountId
-            accountId?.let { accountsById[it] } ?: ""
+            accountId?.let { accountsById[it] }
+                ?: record.toAccountName
+                ?: record.accountName
+                ?: ""
         }
         "Expense" -> {
             val accountId = record.fromAccountId ?: record.accountId
-            accountId?.let { accountsById[it] } ?: ""
+            accountId?.let { accountsById[it] }
+                ?: record.fromAccountName
+                ?: record.accountName
+                ?: ""
         }
         "Transfer" -> {
-            val from = record.fromAccountId?.let { accountsById[it] }.orEmpty()
-            val to = record.toAccountId?.let { accountsById[it] }.orEmpty()
+            val from = record.fromAccountId?.let { accountsById[it] }
+                ?: record.fromAccountName
+                ?: ""
+            val to = record.toAccountId?.let { accountsById[it] }
+                ?: record.toAccountName
+                ?: ""
             when {
                 from.isNotBlank() && to.isNotBlank() -> "$from -> $to"
                 from.isNotBlank() -> from

@@ -41,6 +41,8 @@ data class ExpenseRecord(
     val remarks: String,
     val fromAccountId: Long? = null,
     val toAccountId: Long? = null,
+    val accountName: String? = null,
+    val fromAccountName: String? = null,
     val toAccountName: String? = null,
     val isBookmarked: Boolean = false,
     val isSynced: Boolean = false,

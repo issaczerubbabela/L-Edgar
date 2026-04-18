@@ -124,13 +124,23 @@ function boolish(value) {
   return text === "true" || text === "false" || text === "1" || text === "0";
 }
 
-function parseTransactionRow(row) {
-  var accountName = String(row[7] || "");
+function detectTransactionSchemaMode(headerRow) {
+  if (!headerRow || !headerRow.length) return "legacy";
+  var h = headerRow.map(function (v) {
+    return String(v || "").trim();
+  });
+  var isV2Header =
+    h[8] === "From Account Name" &&
+    h[9] === "To Account Name" &&
+    h[10] === "Remarks";
+  return isV2Header ? "v2" : "legacy";
+}
 
-  // New schema row: bookmark is usually in column 13 (index 12)
-  var looksLikeNew = boolish(row[12]);
-  // Legacy row (including expanded range): bookmark in old column 11 (index 10)
-  var looksLikeLegacy = !looksLikeNew && boolish(row[10]);
+function parseTransactionRow(row, schemaMode) {
+  var accountName = String(row[7] || "");
+  var type = String(row[2] || "").trim().toLowerCase();
+
+  var normalizedMode = schemaMode || "legacy";
 
   var fromAccountName = "";
   var toAccountName = "";
@@ -138,31 +148,20 @@ function parseTransactionRow(row) {
   var syncedAt = "";
   var isBookmarked = false;
 
-  if (looksLikeNew) {
+  if (normalizedMode === "v2") {
     fromAccountName = String(row[8] || "");
     toAccountName = String(row[9] || "");
     remarks = String(row[10] || "");
     syncedAt = row[11] ? String(row[11]) : "";
     isBookmarked = row[12] ? toBool(row[12]) : false;
-  } else if (looksLikeLegacy) {
-    // Old 11-column format (or old rows in an expanded range)
+  } else {
+    // Legacy 11-column format.
     remarks = String(row[8] || "");
     syncedAt = row[9] ? String(row[9]) : "";
     isBookmarked = row[10] ? toBool(row[10]) : false;
-  } else {
-    // Last-resort fallback for sparse/partially migrated rows.
-    fromAccountName = String(row[8] || "");
-    toAccountName = String(row[9] || "");
-    remarks = String(row[10] || row[8] || "");
-    syncedAt = row[11] ? String(row[11]) : row[9] ? String(row[9]) : "";
-    isBookmarked = row[12]
-      ? toBool(row[12])
-      : row[10]
-        ? toBool(row[10])
-        : false;
   }
 
-  if ((!fromAccountName || !toAccountName) && accountName) {
+  if (type === "transfer" && (!fromAccountName || !toAccountName) && accountName) {
     var legacySplit = accountName.split("->").map(function (part) {
       return String(part || "").trim();
     });
@@ -567,12 +566,17 @@ function doGet(e) {
     var txSheet = spreadsheet.getSheetByName(TRANSACTIONS_SHEET);
     if (!txSheet) return jsonOut({ status: "ok", count: 0, data: [] });
 
+    var headerRow = txSheet
+      .getRange(1, 1, 1, Math.max(txSheet.getLastColumn(), TRANSACTION_HEADERS_V2.length))
+      .getDisplayValues()[0];
+    var schemaMode = detectTransactionSchemaMode(headerRow);
+
     var txData = txSheet.getDataRange().getValues();
     var txRecords = [];
     for (var t = 1; t < txData.length; t++) {
       var row = txData[t];
       if (!row[2]) continue;
-      var parsed = parseTransactionRow(row);
+      var parsed = parseTransactionRow(row, schemaMode);
 
       txRecords.push({
         timestamp: row[0] ? normalizeTimestampKey(row[0], timeZone) : "",

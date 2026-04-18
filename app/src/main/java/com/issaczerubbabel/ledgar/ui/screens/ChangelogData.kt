@@ -39,7 +39,9 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Root Log Enter App and back actions now always require system credential unlock before opening main tabs",
             "Fixed app-lock toggle stability so enabling or disabling lock in Settings no longer crashes",
             "Startup routing now respects lock state: Transactions opens first when lock is off; Log gate opens first when lock is on",
-            "Biometric unlock handoff now uses guarded navigation to prevent crash when transitioning from Log gate to Transactions"
+            "Biometric unlock handoff now uses guarded navigation to prevent crash when transitioning from Log gate to Transactions",
+            "Sheets transaction import now reads both legacy 11-column and v2 13-column schemas correctly, preventing missing account labels in Trans tab",
+            "Trans tab account label rendering now falls back to imported account-name text when account ID resolution is unavailable"
         ),
         qol = listOf(
             "Settings icon row alignment refined for cleaner visual consistency",
@@ -53,7 +55,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Added one-tap deep link to system security settings from lock diagnostics dialog",
             "Bottom tab bar now fades and slides with route transitions so content and tabs appear together when entering the app",
             "Enabling app lock during an active session now applies on next app entry instead of forcing an immediate in-session redirect",
-            "Corrected pager-state call typo in History screen to restore clean Kotlin compilation"
+            "Corrected pager-state call typo in History screen to restore clean Kotlin compilation",
+            "Google Apps Script deployment template is now aligned with runtime script for deterministic legacy/v2 transaction-row parsing"
         )
     ),
     ChangelogRelease(

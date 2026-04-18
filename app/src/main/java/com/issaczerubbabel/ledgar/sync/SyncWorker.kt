@@ -120,10 +120,15 @@ class SyncWorker @AssistedInject constructor(
         }
 
         val dtos = timestampedRecords.map { (r, resolvedTimestamp) ->
-            val fromAccountName = r.fromAccountId?.let { accountNameById[it] }
+            val fromAccountName = r.fromAccountId?.let { accountNameById[it] } ?: r.fromAccountName
             val toAccountName = r.toAccountId?.let { accountNameById[it] } ?: r.toAccountName
             val resolvedAccountName = when (r.type) {
-                "Expense", "Income" -> r.accountId?.let { accountNameById[it] }.orEmpty()
+                "Expense", "Income" ->
+                    r.accountId?.let { accountNameById[it] }
+                        ?: r.accountName
+                        ?: r.fromAccountName
+                        ?: r.toAccountName
+                        ?: ""
                 "Transfer" -> {
                     val from = fromAccountName.orEmpty()
                     val to = toAccountName.orEmpty()

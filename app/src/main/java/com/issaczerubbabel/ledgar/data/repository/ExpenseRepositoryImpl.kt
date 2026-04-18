@@ -217,6 +217,10 @@ class ExpenseRepositoryImpl @Inject constructor(
                 }
             }
 
+            val fallbackAccountName = remoteAccountName?.trim().takeUnless { it.isNullOrBlank() }
+            val fallbackFromName = explicitFromName?.trim().takeUnless { it.isNullOrBlank() }
+            val fallbackToName = explicitToName?.trim().takeUnless { it.isNullOrBlank() }
+
             // For non-transfer rows, drop records that cannot be mapped safely.
             if (!resolvedType.equals("Transfer", ignoreCase = true) && mappedAccountId == null) {
                 return@forEach
@@ -252,7 +256,20 @@ class ExpenseRepositoryImpl @Inject constructor(
                         resolvedType.equals("Transfer", ignoreCase = true) -> toAccountId
                         else -> null
                     },
-                    toAccountName = if (resolvedType.equals("Transfer", ignoreCase = true)) explicitToName else null,
+                    accountName = when {
+                        resolvedType.equals("Transfer", ignoreCase = true) -> null
+                        else -> fallbackAccountName
+                    },
+                    fromAccountName = when {
+                        resolvedType.equals("Expense", ignoreCase = true) -> fallbackAccountName
+                        resolvedType.equals("Transfer", ignoreCase = true) -> fallbackFromName
+                        else -> null
+                    },
+                    toAccountName = when {
+                        resolvedType.equals("Income", ignoreCase = true) -> fallbackAccountName
+                        resolvedType.equals("Transfer", ignoreCase = true) -> fallbackToName
+                        else -> null
+                    },
                     isSynced = true,
                     remoteTimestamp = timestamp,
                     syncAction = "NONE"
