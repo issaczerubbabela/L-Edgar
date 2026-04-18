@@ -738,7 +738,7 @@ private fun SyncResolutionSheet(
                     .heightIn(max = 520.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                itemsIndexed(conflicts, key = { _, conflict -> "${conflict.localTx.id}:${normalizeTimestampKey(conflict.sheetTx.timestamp).orEmpty()}" }) { index, conflict ->
+                itemsIndexed(conflicts) { index, conflict ->
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceContainerHighest,
                         shape = MaterialTheme.shapes.large,
