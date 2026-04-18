@@ -241,6 +241,10 @@ function doPost(e) {
     var allowEmptyBackup = toBool(payload.allowEmptyBackup);
     var timeZone = Session.getScriptTimeZone();
 
+    if (target === "transactions" && action === "migrate") {
+      return jsonOut(migrateTransactionsSheetToV2());
+    }
+
     if (
       action === "backup" &&
       (target === "accounts" ||

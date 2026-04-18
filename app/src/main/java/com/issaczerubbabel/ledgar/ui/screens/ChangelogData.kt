@@ -18,9 +18,11 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Transfer sync schema extended with explicit from/to account name support across app and Sheets",
             "App now opens directly into Log Transaction for faster first-action entry",
             "Settings now includes App Lock controls with unlock method selection and configurable re-lock timeout",
-            "Custom in-app PIN unlock added with secure hash and salt storage"
+            "Custom in-app PIN unlock added with secure hash and salt storage",
+            "Added one-time Apps Script endpoint action (target=transactions, action=migrate) to force historical transaction-sheet migration to v2 layout"
         ),
         fixes = listOf(
+            "Editing an existing account now preserves linked transaction account references so Account Details no longer goes blank after save",
             "History transaction rows now hide non-applicable zero amount labels by type (Income/Expense/Transfer)",
             "Accounts, History, and Bookmarks screens now collect ViewModel flows with collectAsStateWithLifecycle for lifecycle-safe reactive updates",
             "Completed app-wide screen migration from collectAsState to collectAsStateWithLifecycle for consistent lifecycle-aware Flow collection",
