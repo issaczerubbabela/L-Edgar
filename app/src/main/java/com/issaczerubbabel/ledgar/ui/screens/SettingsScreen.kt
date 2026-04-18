@@ -649,13 +649,14 @@ private fun DuplicateReviewDialog(
     onResolve: (Set<String>) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val accepted = remember(candidates) {
+    val skipSelections = remember(candidates) {
         mutableStateMapOf<String, Boolean>().apply {
             candidates.forEach { put(it.id, false) }
         }
     }
 
     val canSubmit = resolutionState !is ImportState.Loading
+    val selectedCount = skipSelections.values.count { it }
 
     AlertDialog(
         onDismissRequest = {
@@ -671,10 +672,43 @@ private fun DuplicateReviewDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "Accept = import and keep. Skip = delete from Sheets permanently.",
+                    text = "Check rows to skip from future imports. Unchecked rows stay in Sheets for later review. Nothing is deleted.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(
+                            onClick = {
+                                candidates.forEach { candidate ->
+                                    skipSelections[candidate.id] = true
+                                }
+                            },
+                            enabled = canSubmit
+                        ) {
+                            Text("Skip All")
+                        }
+                        TextButton(
+                            onClick = {
+                                candidates.forEach { candidate ->
+                                    skipSelections[candidate.id] = false
+                                }
+                            },
+                            enabled = canSubmit
+                        ) {
+                            Text("Clear")
+                        }
+                    }
+                    Text(
+                        text = "$selectedCount selected",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 candidates.forEach { candidate ->
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -688,6 +722,11 @@ private fun DuplicateReviewDialog(
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
+                                text = "Incoming sheet row",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
                                 text = "${candidate.type} • ${candidate.date} • ${candidate.amount}",
                                 style = MaterialTheme.typography.titleSmall
                             )
@@ -700,6 +739,11 @@ private fun DuplicateReviewDialog(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            Text(
+                                text = "Category: ${candidate.category.ifBlank { "-" }}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                             if (!candidate.timestamp.isNullOrBlank()) {
                                 Text(
                                     text = "Timestamp: ${candidate.timestamp}",
@@ -707,14 +751,58 @@ private fun DuplicateReviewDialog(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                            Text(
+                                text = "Conflicting local record",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            val conflict = candidate.conflictingLocalRecord
+                            if (conflict != null) {
+                                Text(
+                                    text = "${conflict.type} • ${conflict.date} • ${conflict.amount}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    text = conflict.description.ifBlank { "(No description)" },
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    text = "Category: ${conflict.category.ifBlank { "-" }}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "Account: ${conflict.accountName.ifBlank { "-" }}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (!conflict.timestamp.isNullOrBlank()) {
+                                    Text(
+                                        text = "Timestamp: ${conflict.timestamp}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = "No local-row details available for this conflict.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Checkbox(
-                                    checked = accepted[candidate.id] == true,
-                                    onCheckedChange = { checked -> accepted[candidate.id] = checked },
+                                    checked = skipSelections[candidate.id] == true,
+                                    onCheckedChange = { checked -> skipSelections[candidate.id] = checked },
                                     enabled = canSubmit
                                 )
                                 Text(
-                                    text = "Accept this row",
+                                    text = "Skip this row",
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
@@ -726,11 +814,11 @@ private fun DuplicateReviewDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val acceptedIds = accepted
+                    val skippedIds = skipSelections
                         .filterValues { it }
                         .keys
                         .toSet()
-                    onResolve(acceptedIds)
+                    onResolve(skippedIds)
                 },
                 enabled = canSubmit
             ) {

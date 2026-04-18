@@ -4,6 +4,20 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.remote.ImportRecordDto
 import kotlinx.coroutines.flow.Flow
 
+data class DuplicateConflictRecord(
+    val id: Long,
+    val timestamp: String?,
+    val date: String,
+    val type: String,
+    val category: String,
+    val description: String,
+    val amount: Double,
+    val accountName: String,
+    val fromAccountName: String?,
+    val toAccountName: String?,
+    val remarks: String
+)
+
 data class SkippedDuplicateCandidate(
     val id: String,
     val timestamp: String?,
@@ -16,13 +30,14 @@ data class SkippedDuplicateCandidate(
     val fromAccountName: String?,
     val toAccountName: String?,
     val remarks: String,
+    val conflictingLocalRecord: DuplicateConflictRecord?,
     val recordToImport: ExpenseRecord
 )
 
 data class DuplicateResolutionResult(
-    val acceptedImported: Int,
-    val skippedDeletedFromSheets: Int,
-    val skippedDeleteFailed: Int
+    val skippedMarked: Int,
+    val skipMarkFailed: Int,
+    val keptForLater: Int
 )
 
 data class GoogleSheetsImportResult(
@@ -71,8 +86,8 @@ interface ExpenseRepository {
     suspend fun isDuplicate(date: String, type: String, category: String, amount: Double): Boolean
     suspend fun importRemoteRecords(records: List<ImportRecordDto>): Int
     suspend fun importFromGoogleSheets(): GoogleSheetsImportResult
-    suspend fun resolveSkippedRemoteDuplicates(
+    suspend fun applyDuplicateSkipDecisions(
         candidates: List<SkippedDuplicateCandidate>,
-        acceptedCandidateIds: Set<String>
+        skippedCandidateIds: Set<String>
     ): DuplicateResolutionResult
 }

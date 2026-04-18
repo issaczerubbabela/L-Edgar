@@ -156,7 +156,8 @@ class ExpenseRepositoryImpl @Inject constructor(
                 amount = local.amount,
                 type = canonicalType(local.type),
                 description = local.description,
-                accountId = local.accountId
+                accountId = local.accountId,
+                sourceRecord = local
             )
         }.toMutableList()
         val localRemoteTimestamps = dao.getAllRemoteTimestamps()
@@ -290,7 +291,13 @@ class ExpenseRepositoryImpl @Inject constructor(
                 accountId = mappedAccountId
             )
 
-            val isDuplicate = localComparable.any { local -> isCompositeDuplicate(local, remoteComparable) }
+            val duplicateMatches = localComparable.filter { local ->
+                isCompositeDuplicate(local, remoteComparable)
+            }
+            val isDuplicate = duplicateMatches.isNotEmpty()
+            val conflictingLocalRecord = duplicateMatches
+                .firstOrNull { it.sourceRecord != null }
+                ?.sourceRecord
 
             val mappedRecord = ExpenseRecord(
                 date = resolvedDate,
@@ -336,7 +343,7 @@ class ExpenseRepositoryImpl @Inject constructor(
                 timestamp?.let { localRemoteTimestamps += it }
             } else {
                 duplicateCandidates += SkippedDuplicateCandidate(
-                    id = timestamp ?: "idx-$index-${resolvedType.lowercase()}-${dto.amount}",
+                    id = "${timestamp ?: "no-ts"}#$index",
                     timestamp = timestamp,
                     date = resolvedDate,
                     type = resolvedType,
@@ -347,6 +354,7 @@ class ExpenseRepositoryImpl @Inject constructor(
                     fromAccountName = fallbackFromName,
                     toAccountName = fallbackToName,
                     remarks = dto.remarks,
+                    conflictingLocalRecord = conflictingLocalRecord?.let(::toDuplicateConflictRecord),
                     recordToImport = mappedRecord
                 )
             }
@@ -487,64 +495,66 @@ class ExpenseRepositoryImpl @Inject constructor(
         )
     }
 
-    override suspend fun resolveSkippedRemoteDuplicates(
+    override suspend fun applyDuplicateSkipDecisions(
         candidates: List<SkippedDuplicateCandidate>,
-        acceptedCandidateIds: Set<String>
+        skippedCandidateIds: Set<String>
     ): DuplicateResolutionResult {
         if (candidates.isEmpty()) {
             return DuplicateResolutionResult(
-                acceptedImported = 0,
-                skippedDeletedFromSheets = 0,
-                skippedDeleteFailed = 0
+                skippedMarked = 0,
+                skipMarkFailed = 0,
+                keptForLater = 0
             )
         }
 
-        val acceptedRecords = candidates
-            .filter { acceptedCandidateIds.contains(it.id) }
-            .map { it.recordToImport.copy(id = 0) }
-
-        if (acceptedRecords.isNotEmpty()) {
-            dao.insertAll(acceptedRecords)
+        val selectedToSkip = candidates.filter { skippedCandidateIds.contains(it.id) }
+        if (selectedToSkip.isEmpty()) {
+            return DuplicateResolutionResult(
+                skippedMarked = 0,
+                skipMarkFailed = 0,
+                keptForLater = candidates.size
+            )
         }
 
         val scriptUrl = preferenceRepository.scriptUrl.first()
             ?: throw SyncUrlNotConfiguredException()
 
-        var deletedFromSheets = 0
-        var deleteFailed = 0
-
-        val skippedCandidates = candidates.filterNot { acceptedCandidateIds.contains(it.id) }
-        for (candidate in skippedCandidates) {
-            val ts = normalizeTimestampKey(candidate.timestamp)
-            if (ts.isNullOrBlank()) {
-                deleteFailed++
-                continue
+        var skipMarkFailed = 0
+        val decisionRecords = selectedToSkip.mapNotNull { candidate ->
+            normalizeTimestampKey(candidate.timestamp)?.let { normalizedTs ->
+                mapOf(
+                    "timestamp" to normalizedTs,
+                    "decision" to "SKIP"
+                )
             }
+        }
+        skipMarkFailed += (selectedToSkip.size - decisionRecords.size)
 
+        var skippedMarked = 0
+        if (decisionRecords.isNotEmpty()) {
             val response = apiService.syncRecords(
                 scriptUrl,
                 SyncRequest(
-                    action = "delete",
+                    action = "mark_skipped_duplicates",
                     target = "transactions",
-                    targetTimestamp = ts
+                    records = decisionRecords
                 )
             )
             val body = response.body()
-            val wasDeleted = response.isSuccessful &&
-                body?.status.equals("ok", ignoreCase = true) &&
-                (body?.count ?: 0) > 0
 
-            if (wasDeleted) {
-                deletedFromSheets++
+            if (response.isSuccessful && body?.status.equals("ok", ignoreCase = true)) {
+                val reported = body?.count ?: decisionRecords.size
+                skippedMarked = reported.coerceIn(0, decisionRecords.size)
+                skipMarkFailed += (decisionRecords.size - skippedMarked)
             } else {
-                deleteFailed++
+                skipMarkFailed += decisionRecords.size
             }
         }
 
         return DuplicateResolutionResult(
-            acceptedImported = acceptedRecords.size,
-            skippedDeletedFromSheets = deletedFromSheets,
-            skippedDeleteFailed = deleteFailed
+            skippedMarked = skippedMarked,
+            skipMarkFailed = skipMarkFailed,
+            keptForLater = (candidates.size - skippedMarked).coerceAtLeast(0)
         )
     }
 
@@ -553,7 +563,8 @@ class ExpenseRepositoryImpl @Inject constructor(
         val amount: Double,
         val type: String,
         val description: String,
-        val accountId: Long?
+        val accountId: Long?,
+        val sourceRecord: ExpenseRecord? = null
     )
 
     private data class ImportRemoteRecordsOutcome(
@@ -571,6 +582,43 @@ class ExpenseRepositoryImpl @Inject constructor(
     private fun amountsEqual(a: Double, b: Double): Boolean = kotlin.math.abs(a - b) < 0.000001
 
     private fun normalizeAccountKey(raw: String): String = raw.trim().lowercase()
+
+    private fun toDuplicateConflictRecord(record: ExpenseRecord): DuplicateConflictRecord {
+        return DuplicateConflictRecord(
+            id = record.id,
+            timestamp = normalizeTimestampKey(record.remoteTimestamp),
+            date = normalizeDate(record.date, record.remoteTimestamp),
+            type = canonicalType(record.type),
+            category = record.category,
+            description = record.description,
+            amount = record.amount,
+            accountName = resolveConflictAccountLabel(record),
+            fromAccountName = record.fromAccountName?.trim().takeUnless { it.isNullOrBlank() },
+            toAccountName = record.toAccountName?.trim().takeUnless { it.isNullOrBlank() },
+            remarks = record.remarks
+        )
+    }
+
+    private fun resolveConflictAccountLabel(record: ExpenseRecord): String {
+        val normalizedType = canonicalType(record.type)
+        val directAccount = record.accountName?.trim().orEmpty()
+        val from = record.fromAccountName?.trim().orEmpty()
+        val to = record.toAccountName?.trim().orEmpty()
+
+        if (normalizedType.equals("Transfer", ignoreCase = true)) {
+            val transferLabel = listOf(from, to)
+                .filter { it.isNotBlank() }
+                .joinToString(" -> ")
+            if (transferLabel.isNotBlank()) return transferLabel
+        }
+
+        return when {
+            directAccount.isNotBlank() -> directAccount
+            from.isNotBlank() -> from
+            to.isNotBlank() -> to
+            else -> ""
+        }
+    }
 
     private suspend fun repairLegacyRecords() {
         val snapshot = dao.getAllRecordsSnapshot()

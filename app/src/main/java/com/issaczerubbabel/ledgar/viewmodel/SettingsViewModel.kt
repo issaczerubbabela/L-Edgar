@@ -265,7 +265,7 @@ class SettingsViewModel @Inject constructor(
                 if (result.duplicateCandidates.isNotEmpty()) {
                     _uiEvents.emit(
                         SettingsUiEvent.ShowMessage(
-                            "${result.duplicateCandidates.size} duplicate rows need review: Accept to import, or Skip to delete from Sheets."
+                            "${result.duplicateCandidates.size} duplicate rows need review. Check rows to skip from future imports; unchecked rows stay for later review."
                         )
                     )
                 }
@@ -275,27 +275,27 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun resolveSkippedDuplicates(acceptedCandidateIds: Set<String>) {
+    fun resolveSkippedDuplicates(skippedCandidateIds: Set<String>) {
         val candidates = _duplicateCandidates.value
         if (candidates.isEmpty() || _duplicateResolutionState.value is ImportState.Loading) return
 
         viewModelScope.launch {
             _duplicateResolutionState.value = ImportState.Loading
             try {
-                val outcome = repository.resolveSkippedRemoteDuplicates(candidates, acceptedCandidateIds)
+                val outcome = repository.applyDuplicateSkipDecisions(candidates, skippedCandidateIds)
                 _duplicateCandidates.value = emptyList()
                 _duplicateResolutionState.value = ImportState.Success(
-                    imported = outcome.acceptedImported,
-                    skipped = outcome.skippedDeletedFromSheets
+                    imported = outcome.skippedMarked,
+                    skipped = outcome.keptForLater
                 )
-                val failureSuffix = if (outcome.skippedDeleteFailed > 0) {
-                    " ${outcome.skippedDeleteFailed} skipped rows could not be deleted from Sheets."
+                val failureSuffix = if (outcome.skipMarkFailed > 0) {
+                    " ${outcome.skipMarkFailed} selected rows could not be marked (missing or invalid timestamps)."
                 } else {
                     ""
                 }
                 _uiEvents.emit(
                     SettingsUiEvent.ShowMessage(
-                        "Duplicate resolution done. ${outcome.acceptedImported} accepted/imported, ${outcome.skippedDeletedFromSheets} skipped/deleted from Sheets.${failureSuffix}"
+                        "Duplicate decisions applied. ${outcome.skippedMarked} rows are now skipped across devices; ${outcome.keptForLater} kept for later review.${failureSuffix}"
                     )
                 )
             } catch (e: Exception) {
