@@ -12,7 +12,12 @@ class QuickLogTileService : TileService() {
 
         val quickLogIntent = Intent(this, QuickLogActivity::class.java).apply {
             action = Intent.ACTION_VIEW
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
+                    Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                    Intent.FLAG_ACTIVITY_NO_HISTORY
+            )
         }
 
         val pendingIntent = PendingIntent.getActivity(

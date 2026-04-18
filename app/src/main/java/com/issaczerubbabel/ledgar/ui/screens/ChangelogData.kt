@@ -23,7 +23,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Cash Flow income visibility improved by switching bar mode to grouped columns and hardening transaction type matching for imported data with extra whitespace",
             "Cash Flow marker tooltip now prioritizes spent amount first, followed by income and guide-line values for clearer per-bucket amount reading",
             "Cash Flow marker content now includes Income, Expense, Avg/day, and Max/day values for each highlighted bucket",
-            "Account balance math now compares transaction timestamps against precise As-Of values, including same-day hour/minute boundaries"
+            "Account balance math now compares transaction timestamps against precise As-Of values, including same-day hour/minute boundaries",
+            "Quick Settings quick-add now runs in an isolated transient task, so dismissing the sheet no longer reveals the main app behind it"
         ),
         qol = listOf(
             "Quick Settings tile click now stays in quick-entry flow and updates tile state without opening the main app tabs",

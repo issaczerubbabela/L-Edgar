@@ -1,6 +1,7 @@
 package com.issaczerubbabel.ledgar
 
 import android.app.Activity
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -72,7 +73,7 @@ private fun QuickLogSheet(
 
     LaunchedEffect(Unit) {
         vm.saveSuccess.collect {
-            (context as Activity).finish()
+            closeQuickLog(context)
         }
     }
 
@@ -84,7 +85,7 @@ private fun QuickLogSheet(
     }
 
     ModalBottomSheet(
-        onDismissRequest = { (context as Activity).finish() },
+        onDismissRequest = { closeQuickLog(context) },
         sheetState = sheetState
     ) {
         Scaffold(
@@ -135,4 +136,9 @@ private fun QuickLogSheet(
             }
         }
     }
+}
+
+private fun closeQuickLog(context: Context) {
+    val activity = context as? Activity ?: return
+    activity.finishAndRemoveTask()
 }
