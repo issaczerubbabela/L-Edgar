@@ -62,3 +62,6 @@ Thumbs.db
 .idea/assetWizardSettings.xml
 
 app/build/
+
+.tmp
+.tmp_vico_src

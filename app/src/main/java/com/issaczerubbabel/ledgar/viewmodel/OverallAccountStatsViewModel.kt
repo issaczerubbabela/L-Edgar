@@ -9,7 +9,9 @@ import com.issaczerubbabel.ledgar.data.local.dao.AccountDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.util.parseAsOfDateTime
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
+import com.issaczerubbabel.ledgar.util.parseTransactionDateTime
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -176,11 +178,11 @@ class OverallAccountStatsViewModel @Inject constructor(
         fun isAfterAsOf(accountId: Long?): Boolean {
             if (accountId == null) return false
             val asOf = asOfDateByAccount[accountId] ?: "1970-01-01"
-            val txDate = parseFlexibleDate(record.date)
-            val asOfDate = parseFlexibleDate(asOf)
+            val txDate = parseTransactionDateTime(dateRaw = record.date, timestampRaw = record.remoteTimestamp)
+            val asOfDate = parseAsOfDateTime(asOf)
             return when {
-                txDate != null && asOfDate != null -> !txDate.isBefore(asOfDate)
-                else -> record.date >= asOf
+                txDate != null && asOfDate != null -> txDate.isAfter(asOfDate)
+                else -> false
             }
         }
 

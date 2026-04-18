@@ -41,18 +41,26 @@ import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottomAxis
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStartAxis
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberColumnCartesianLayer
+import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLine
+import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
+import com.patrykandpatrick.vico.compose.cartesian.layer.rememberPoint
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
+import com.patrykandpatrick.vico.compose.common.fill
+import com.patrykandpatrick.vico.compose.common.component.rememberLineComponent
 import com.patrykandpatrick.vico.compose.common.component.rememberShapeComponent
 import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
 import com.patrykandpatrick.vico.core.cartesian.axis.Axis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.core.cartesian.data.ChartValues
+import com.patrykandpatrick.vico.core.cartesian.layer.ColumnCartesianLayer
+import com.patrykandpatrick.vico.core.cartesian.layer.LineCartesianLayer
 import com.patrykandpatrick.vico.core.cartesian.marker.CartesianMarkerValueFormatter
 import com.patrykandpatrick.vico.core.common.Dimensions
 import com.patrykandpatrick.vico.core.common.shape.Shape
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseRed
 import com.issaczerubbabel.ledgar.ui.theme.IncomeGreen
+import com.issaczerubbabel.ledgar.data.preferences.CashFlowChartStyle
 import com.issaczerubbabel.ledgar.viewmodel.CategoryTotal
 import java.text.NumberFormat
 import java.util.Locale
@@ -66,6 +74,8 @@ import kotlin.math.sin
 @Composable
 fun ExpenseDonutChart(
     categoryTotals: List<CategoryTotal>,
+    centerLabel: String = "Total Spent",
+    emptyLabel: String = "No expense data",
     modifier: Modifier = Modifier
 ) {
     var hiddenCategories by remember { mutableStateOf(emptySet<String>()) }
@@ -90,7 +100,7 @@ fun ExpenseDonutChart(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "No expense data",
+                text = emptyLabel,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -216,7 +226,7 @@ fun ExpenseDonutChart(
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "Total Spent",
+                        text = centerLabel,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -296,6 +306,9 @@ fun CashFlowBarChart(
     xAxisLabels: List<String>,
     markerValueFormatter: CartesianMarkerValueFormatter,
     formatRupee: (Double) -> String,
+    chartValueToAmount: (Double) -> Double,
+    chartStyle: CashFlowChartStyle,
+    useCompressedScale: Boolean,
     modifier: Modifier = Modifier
 ) {
     if (xAxisLabels.isEmpty()) {
@@ -326,14 +339,14 @@ fun CashFlowBarChart(
         }
     }
 
-    val startAxisFormatter = remember(formatRupee) {
+    val startAxisFormatter = remember(formatRupee, chartValueToAmount, useCompressedScale) {
         object : CartesianValueFormatter {
             override fun format(
                 value: Double,
                 chartValues: ChartValues,
                 verticalAxisPosition: Axis.Position.Vertical?
             ): CharSequence {
-                return formatRupee(value)
+                return formatRupee(chartValueToAmount(value))
             }
         }
     }
@@ -360,16 +373,114 @@ fun CashFlowBarChart(
     }
 
     Column(
-        modifier = modifier.background(MaterialTheme.colorScheme.surface),
+        modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        CartesianChartHost(
-            chart = rememberCartesianChart(
-                rememberColumnCartesianLayer(),
-                startAxis = rememberStartAxis(valueFormatter = startAxisFormatter),
-                bottomAxis = rememberBottomAxis(valueFormatter = bottomAxisFormatter),
+        val avgLineColor = MaterialTheme.colorScheme.primary
+        val maxLineColor = MaterialTheme.colorScheme.error
+
+        val incomeColumn = rememberLineComponent(
+            color = IncomeGreen,
+            thickness = 20.dp,
+            shape = Shape.Companion.rounded(8f)
+        )
+        val expenseColumn = rememberLineComponent(
+            color = ExpenseRed,
+            thickness = 20.dp,
+            shape = Shape.Companion.rounded(8f)
+        )
+
+        val columnLayer = rememberColumnCartesianLayer(
+            columnProvider = ColumnCartesianLayer.ColumnProvider.series(incomeColumn, expenseColumn),
+            columnCollectionSpacing = 10.dp
+        )
+
+        val incomeTrendLine = rememberLine(
+            fill = LineCartesianLayer.LineFill.single(fill(IncomeGreen)),
+            thickness = 3.dp,
+            pointProvider = LineCartesianLayer.PointProvider.single(
+                rememberPoint(
+                    component = rememberShapeComponent(color = IncomeGreen, shape = Shape.Companion.rounded(50f)),
+                    size = 5.dp
+                )
+            )
+        )
+
+        val expenseTrendLine = rememberLine(
+            fill = LineCartesianLayer.LineFill.single(fill(ExpenseRed)),
+            thickness = 3.dp,
+            pointProvider = LineCartesianLayer.PointProvider.single(
+                rememberPoint(
+                    component = rememberShapeComponent(color = ExpenseRed, shape = Shape.Companion.rounded(2f)),
+                    size = 5.dp
+                )
+            )
+        )
+
+        val mainLineLayer = rememberLineCartesianLayer(
+            lineProvider = LineCartesianLayer.LineProvider.series(incomeTrendLine, expenseTrendLine),
+            pointSpacing = 0.dp
+        )
+
+        val avgLine = rememberLine(
+            fill = LineCartesianLayer.LineFill.single(fill(avgLineColor)),
+            thickness = 3.dp,
+            pointProvider = LineCartesianLayer.PointProvider.single(
+                rememberPoint(
+                    component = rememberShapeComponent(color = avgLineColor, shape = Shape.Companion.rounded(50f)),
+                    size = 5.dp
+                )
+            )
+        )
+
+        val maxLine = rememberLine(
+            fill = LineCartesianLayer.LineFill.single(fill(maxLineColor)),
+            thickness = 3.dp,
+            pointProvider = LineCartesianLayer.PointProvider.single(
+                rememberPoint(
+                    component = rememberShapeComponent(color = maxLineColor, shape = Shape.Companion.rounded(2f)),
+                    size = 5.dp
+                )
+            )
+        )
+
+        val guideLineLayer = rememberLineCartesianLayer(
+            lineProvider = LineCartesianLayer.LineProvider.series(avgLine, maxLine),
+            pointSpacing = 0.dp
+        )
+
+        val chart = when (chartStyle) {
+            CashFlowChartStyle.BAR -> rememberCartesianChart(
+                columnLayer,
+                guideLineLayer,
+                startAxis = rememberStartAxis(
+                    valueFormatter = startAxisFormatter,
+                    guideline = null
+                ),
+                bottomAxis = rememberBottomAxis(
+                    valueFormatter = bottomAxisFormatter,
+                    guideline = null
+                ),
                 marker = marker
-            ),
+            )
+
+            CashFlowChartStyle.LINE -> rememberCartesianChart(
+                mainLineLayer,
+                guideLineLayer,
+                startAxis = rememberStartAxis(
+                    valueFormatter = startAxisFormatter,
+                    guideline = null
+                ),
+                bottomAxis = rememberBottomAxis(
+                    valueFormatter = bottomAxisFormatter,
+                    guideline = null
+                ),
+                marker = marker
+            )
+        }
+
+        CartesianChartHost(
+            chart = chart,
             modelProducer = modelProducer,
             modifier = Modifier
                 .fillMaxWidth()
@@ -379,10 +490,12 @@ fun CashFlowBarChart(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            LegendBadge(text = "Income", color = IncomeGreen)
-            LegendBadge(text = "Expense", color = ExpenseRed)
+            LegendBadge(text = if (chartStyle == CashFlowChartStyle.LINE) "Income Line" else "Income", color = IncomeGreen)
+            LegendBadge(text = if (chartStyle == CashFlowChartStyle.LINE) "Expense Line" else "Expense", color = ExpenseRed)
+            LegendBadge(text = "Avg/Day Guide", color = avgLineColor)
+            LegendBadge(text = "Max/Day Budget", color = maxLineColor)
         }
     }
 }

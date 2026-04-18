@@ -25,6 +25,11 @@ enum class AppLockAuthMode {
     SYSTEM_OR_PIN
 }
 
+enum class CashFlowChartStyle {
+    BAR,
+    LINE
+}
+
 @Singleton
 class ThemePreferenceRepository @Inject constructor(
     @ApplicationContext private val context: Context
@@ -37,6 +42,7 @@ class ThemePreferenceRepository @Inject constructor(
     private val APP_LOCK_TIMEOUT_MINUTES = intPreferencesKey("app_lock_timeout_minutes")
     private val APP_PIN_HASH = stringPreferencesKey("app_pin_hash")
     private val APP_PIN_SALT = stringPreferencesKey("app_pin_salt")
+    private val CASH_FLOW_CHART_STYLE = stringPreferencesKey("cash_flow_chart_style")
 
     val themePreference: Flow<AppThemeOption> = context.dataStore.data.map { prefs ->
         val raw = (prefs[THEME_PREFERENCE] ?: AppThemeOption.SYSTEM.name).uppercase()
@@ -69,6 +75,12 @@ class ThemePreferenceRepository @Inject constructor(
     val hasAppPinConfigured: Flow<Boolean> = context.dataStore.data
         .map { prefs ->
             !prefs[APP_PIN_HASH].isNullOrBlank() && !prefs[APP_PIN_SALT].isNullOrBlank()
+        }
+
+    val cashFlowChartStyle: Flow<CashFlowChartStyle> = context.dataStore.data
+        .map { prefs ->
+            val raw = (prefs[CASH_FLOW_CHART_STYLE] ?: CashFlowChartStyle.BAR.name).uppercase()
+            CashFlowChartStyle.entries.firstOrNull { it.name == raw } ?: CashFlowChartStyle.BAR
         }
 
     suspend fun updateTheme(option: AppThemeOption) {
@@ -142,5 +154,11 @@ class ThemePreferenceRepository @Inject constructor(
         val storedHash = prefs[APP_PIN_HASH] ?: return false
         val storedSalt = prefs[APP_PIN_SALT] ?: return false
         return PinSecurity.verifyPin(rawPin, storedSalt, storedHash)
+    }
+
+    suspend fun updateCashFlowChartStyle(style: CashFlowChartStyle) {
+        context.dataStore.edit { prefs ->
+            prefs[CASH_FLOW_CHART_STYLE] = style.name
+        }
     }
 }

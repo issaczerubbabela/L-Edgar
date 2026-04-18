@@ -1,25 +1,40 @@
 package com.issaczerubbabel.ledgar.viewmodel
 
 import androidx.compose.ui.graphics.Color
+import java.time.LocalDate
 
-enum class StatsTimeframe {
-    THIS_MONTH,
-    LAST_MONTH,
-    LAST_3_MONTHS,
-    YTD,
-    ALL_TIME
+enum class StatsScope {
+    WEEKLY,
+    MONTHLY,
+    YEARLY,
+    SELECT_PERIOD
 }
 
-enum class StatsTransactionType {
+enum class StatsBreakdownTab {
     EXPENSE,
-    INCOME,
-    BOTH
+    INCOME
+}
+
+enum class CashFlowGranularity {
+    DAILY,
+    WEEKLY,
+    MONTHLY,
+    YEARLY
 }
 
 data class StatsFilterState(
-    val timeframe: StatsTimeframe = StatsTimeframe.THIS_MONTH,
-    val accountGroupId: String? = null,
-    val transactionType: StatsTransactionType = StatsTransactionType.BOTH
+    val scope: StatsScope = StatsScope.MONTHLY,
+    val anchorDate: LocalDate = LocalDate.now(),
+    val customStartDate: LocalDate? = null,
+    val customEndDate: LocalDate? = null,
+    val breakdownTab: StatsBreakdownTab = StatsBreakdownTab.EXPENSE,
+    val cashFlowCategory: String? = null,
+    val cashFlowGranularity: CashFlowGranularity = CashFlowGranularity.DAILY
+)
+
+data class StatsDateRange(
+    val start: LocalDate,
+    val end: LocalDate
 )
 
 data class CategoryTotal(

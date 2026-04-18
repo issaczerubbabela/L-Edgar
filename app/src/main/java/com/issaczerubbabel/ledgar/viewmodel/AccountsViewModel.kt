@@ -10,7 +10,9 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.PermanentDeleteStrategy
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
+import com.issaczerubbabel.ledgar.util.parseAsOfDateTime
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
+import com.issaczerubbabel.ledgar.util.parseTransactionDateTime
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -280,7 +282,7 @@ class AccountDetailViewModel @Inject constructor(
         val beforeDate = ym.atDay(1).toString()
         val asOfDate = account?.initialBalanceDate ?: "1970-01-01"
         records
-            .filter { isOnOrAfterAsOf(it.date, asOfDate) && it.date < beforeDate }
+            .filter { isAfterAsOf(it, asOfDate) && it.date < beforeDate }
             .sumOf { accountDelta(it, accountId, asOfDate) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
@@ -369,7 +371,7 @@ class AccountDetailViewModel @Inject constructor(
     }
 
     private fun accountDelta(record: ExpenseRecord, accountId: Long, asOfDate: String): Double {
-        if (!isOnOrAfterAsOf(record.date, asOfDate)) return 0.0
+        if (!isAfterAsOf(record, asOfDate)) return 0.0
         val accountName = accountFlow.value?.accountName.orEmpty()
         return when {
             record.type == "Income" && (record.toAccountId == accountId || record.accountId == accountId) -> record.amount
@@ -406,12 +408,12 @@ class AccountDetailViewModel @Inject constructor(
         return xValues to yValues
     }
 
-    private fun isOnOrAfterAsOf(txDate: String, asOfDate: String): Boolean {
-        val tx = parseFlexibleDate(txDate)
-        val asOf = parseFlexibleDate(asOfDate)
+    private fun isAfterAsOf(record: ExpenseRecord, asOfDate: String): Boolean {
+        val tx = parseTransactionDateTime(dateRaw = record.date, timestampRaw = record.remoteTimestamp)
+        val asOf = parseAsOfDateTime(asOfDate)
         return when {
-            tx != null && asOf != null -> !tx.isBefore(asOf)
-            else -> txDate >= asOfDate
+            tx != null && asOf != null -> tx.isAfter(asOf)
+            else -> false
         }
     }
 }

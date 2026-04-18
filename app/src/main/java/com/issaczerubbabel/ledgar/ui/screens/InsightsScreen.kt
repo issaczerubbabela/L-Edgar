@@ -10,18 +10,29 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,10 +46,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
-import com.issaczerubbabel.ledgar.viewmodel.StatsTimeframe
+import com.issaczerubbabel.ledgar.data.preferences.CashFlowChartStyle
+import com.issaczerubbabel.ledgar.viewmodel.CashFlowGranularity
+import com.issaczerubbabel.ledgar.viewmodel.StatsBreakdownTab
+import com.issaczerubbabel.ledgar.viewmodel.StatsDateRange
+import com.issaczerubbabel.ledgar.viewmodel.StatsScope
 import com.issaczerubbabel.ledgar.viewmodel.StatsViewModel
+import java.time.Instant
+import java.time.LocalDate
+import java.time.YearMonth
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @Composable
 private fun responsiveTextSize(baseSp: Float, minSp: Float = 12f, maxSp: Float = 28f) =
@@ -46,14 +65,22 @@ private fun responsiveTextSize(baseSp: Float, minSp: Float = 12f, maxSp: Float =
         baseSp * (LocalConfiguration.current.screenWidthDp / 411f).coerceIn(0.9f, 1.08f)
     ).coerceIn(minSp, maxSp).sp
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewModel()) {
     val filterState by vm.filterState.collectAsStateWithLifecycle()
-    val accountGroupOptions by vm.accountGroupOptions.collectAsStateWithLifecycle()
+    val resolvedDateRange by vm.resolvedDateRange.collectAsStateWithLifecycle()
     val filteredTransactions by vm.filteredTransactions.collectAsStateWithLifecycle()
-    val expenseByCategory by vm.expenseByCategory.collectAsStateWithLifecycle()
+    val breakdownTotals by vm.breakdownCategoryTotals.collectAsStateWithLifecycle()
+    val cashFlowCategoryOptions by vm.cashFlowCategoryOptions.collectAsStateWithLifecycle()
     val cashFlowXAxisLabels by vm.cashFlowXAxisLabels.collectAsStateWithLifecycle()
+    val cashFlowChartStyle by vm.cashFlowChartStyle.collectAsStateWithLifecycle()
+    val useCompressedScale by vm.useCompressedScale.collectAsStateWithLifecycle()
     val isLoading by vm.isLoading.collectAsStateWithLifecycle()
+
+    var showAnchorDatePicker by remember { mutableStateOf(false) }
+    var showCustomStartPicker by remember { mutableStateOf(false) }
+    var showCustomEndPicker by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier
@@ -80,27 +107,61 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TopRightFilterDropdown(
-                        selectedLabel = filterState.timeframe.label(),
-                        options = StatsTimeframe.entries.map { it.label() },
-                        modifier = Modifier.weight(1f),
-                        onSelect = { selectedLabel ->
-                            StatsTimeframe.entries
-                                .firstOrNull { it.label() == selectedLabel }
-                                ?.let(vm::updateTimeframe)
-                        }
+                    PeriodNavigator(
+                        label = filterState.scope.periodLabel(
+                            range = resolvedDateRange,
+                            anchorDate = filterState.anchorDate
+                        ),
+                        modifier = Modifier.weight(1.5f),
+                        onPrevious = vm::moveToPreviousPeriod,
+                        onNext = vm::moveToNextPeriod,
+                        onLabelClick = { showAnchorDatePicker = true }
                     )
 
                     TopRightFilterDropdown(
-                        selectedLabel = filterState.accountGroupId ?: "All Accounts",
-                        options = listOf("All Accounts") + accountGroupOptions,
+                        selectedLabel = filterState.scope.label(),
+                        options = StatsScope.entries.map { it.label() },
                         modifier = Modifier.weight(1f),
                         onSelect = { selected ->
-                            vm.updateAccountGroup(if (selected == "All Accounts") null else selected)
+                            StatsScope.entries
+                                .firstOrNull { it.label() == selected }
+                                ?.let(vm::updateScope)
                         }
                     )
+                }
+
+                if (filterState.scope == StatsScope.SELECT_PERIOD) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            modifier = Modifier.weight(1f),
+                            onClick = { showCustomStartPicker = true }
+                        ) {
+                            Text(
+                                text = "Start: ${formatIsoDate(filterState.customStartDate ?: resolvedDateRange.start)}",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+
+                        OutlinedButton(
+                            modifier = Modifier.weight(1f),
+                            onClick = { showCustomEndPicker = true }
+                        ) {
+                            Text(
+                                text = "End: ${formatIsoDate(filterState.customEndDate ?: resolvedDateRange.end)}",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -142,15 +203,38 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text(
-                            text = "Expense Breakdown",
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            softWrap = false
-                        )
+                        TabRow(
+                            selectedTabIndex = filterState.breakdownTab.ordinal,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ) {
+                            StatsBreakdownTab.entries.forEach { tab ->
+                                Tab(
+                                    selected = tab == filterState.breakdownTab,
+                                    onClick = { vm.updateBreakdownTab(tab) },
+                                    text = {
+                                        Text(
+                                            text = tab.label(),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                )
+                            }
+                        }
+
                         ExpenseDonutChart(
-                            categoryTotals = expenseByCategory,
+                            categoryTotals = breakdownTotals,
+                            centerLabel = if (filterState.breakdownTab == StatsBreakdownTab.EXPENSE) {
+                                "Total Spent"
+                            } else {
+                                "Total Income"
+                            },
+                            emptyLabel = if (filterState.breakdownTab == StatsBreakdownTab.EXPENSE) {
+                                "No expense data"
+                            } else {
+                                "No income data"
+                            },
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -166,18 +250,52 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TopRightFilterDropdown(
+                                selectedLabel = filterState.cashFlowCategory
+                                    ?: StatsViewModel.ALL_CATEGORIES_OPTION,
+                                options = cashFlowCategoryOptions,
+                                modifier = Modifier.weight(1f),
+                                onSelect = { selected ->
+                                    vm.updateCashFlowCategory(
+                                        if (selected == StatsViewModel.ALL_CATEGORIES_OPTION) {
+                                            null
+                                        } else {
+                                            selected
+                                        }
+                                    )
+                                }
+                            )
+
+                            TopRightFilterDropdown(
+                                selectedLabel = filterState.cashFlowGranularity.label(),
+                                options = CashFlowGranularity.entries.map { it.label() },
+                                modifier = Modifier.weight(1f),
+                                onSelect = { selected ->
+                                    CashFlowGranularity.entries
+                                        .firstOrNull { it.label() == selected }
+                                        ?.let(vm::updateCashFlowGranularity)
+                                }
+                            )
+                        }
+
                         Text(
-                            text = "Cash Flow",
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            softWrap = false
+                            text = "Graph mode: ${cashFlowChartStyle.hintLabel()}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+
                         CashFlowBarChart(
                             modelProducer = vm.cashFlowChartModelProducer,
                             xAxisLabels = cashFlowXAxisLabels,
                             markerValueFormatter = vm.cashFlowMarkerValueFormatter,
                             formatRupee = vm::formatRupee,
+                            chartValueToAmount = vm::chartValueToAmount,
+                            chartStyle = cashFlowChartStyle,
+                            useCompressedScale = useCompressedScale,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -185,6 +303,73 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
             }
 
             item { Spacer(Modifier.height(72.dp)) }
+        }
+    }
+
+    if (showAnchorDatePicker) {
+        SingleDatePickerDialog(
+            initialDate = filterState.anchorDate,
+            onDismiss = { showAnchorDatePicker = false },
+            onConfirm = { selectedDate ->
+                vm.updateAnchorDate(selectedDate)
+                showAnchorDatePicker = false
+            }
+        )
+    }
+
+    if (showCustomStartPicker) {
+        SingleDatePickerDialog(
+            initialDate = filterState.customStartDate ?: resolvedDateRange.start,
+            onDismiss = { showCustomStartPicker = false },
+            onConfirm = { selectedDate ->
+                vm.updateCustomPeriodStart(selectedDate)
+                showCustomStartPicker = false
+            }
+        )
+    }
+
+    if (showCustomEndPicker) {
+        SingleDatePickerDialog(
+            initialDate = filterState.customEndDate ?: resolvedDateRange.end,
+            onDismiss = { showCustomEndPicker = false },
+            onConfirm = { selectedDate ->
+                vm.updateCustomPeriodEnd(selectedDate)
+                showCustomEndPicker = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun PeriodNavigator(
+    label: String,
+    modifier: Modifier = Modifier,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onLabelClick: () -> Unit
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        IconButton(onClick = onPrevious) {
+            Icon(Icons.Filled.ChevronLeft, contentDescription = "Previous")
+        }
+        OutlinedButton(
+            onClick = onLabelClick,
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(
+                text = label,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+        IconButton(onClick = onNext) {
+            Icon(Icons.Filled.ChevronRight, contentDescription = "Next")
         }
     }
 }
@@ -240,12 +425,92 @@ private fun TopRightFilterDropdown(
     }
 }
 
-private fun StatsTimeframe.label(): String {
-    return when (this) {
-        StatsTimeframe.THIS_MONTH -> "This Month"
-        StatsTimeframe.LAST_MONTH -> "Last Month"
-        StatsTimeframe.LAST_3_MONTHS -> "Last 3 Months"
-        StatsTimeframe.YTD -> "YTD"
-        StatsTimeframe.ALL_TIME -> "All Time"
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SingleDatePickerDialog(
+    initialDate: LocalDate,
+    onDismiss: () -> Unit,
+    onConfirm: (LocalDate) -> Unit
+) {
+    val initialMillis = remember(initialDate) {
+        initialDate
+            .atStartOfDay(ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli()
+    }
+    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
+
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val selectedMillis = datePickerState.selectedDateMillis
+                    if (selectedMillis != null) {
+                        onConfirm(selectedMillis.toLocalDate())
+                    }
+                }
+            ) {
+                Text("OK")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    ) {
+        DatePicker(state = datePickerState)
     }
 }
+
+private fun StatsScope.label(): String {
+    return when (this) {
+        StatsScope.WEEKLY -> "Weekly"
+        StatsScope.MONTHLY -> "Monthly"
+        StatsScope.YEARLY -> "Yearly"
+        StatsScope.SELECT_PERIOD -> "Select Period"
+    }
+}
+
+private fun StatsScope.periodLabel(range: StatsDateRange, anchorDate: LocalDate): String {
+    val weeklyFormatter = DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH)
+    val monthlyFormatter = DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)
+    return when (this) {
+        StatsScope.WEEKLY -> "${range.start.format(weeklyFormatter)} - ${range.end.format(weeklyFormatter)}"
+        StatsScope.MONTHLY -> YearMonth.from(anchorDate).format(monthlyFormatter)
+        StatsScope.YEARLY -> anchorDate.year.toString()
+        StatsScope.SELECT_PERIOD -> "${formatIsoDate(range.start)} - ${formatIsoDate(range.end)}"
+    }
+}
+
+private fun StatsBreakdownTab.label(): String {
+    return when (this) {
+        StatsBreakdownTab.EXPENSE -> "Expense"
+        StatsBreakdownTab.INCOME -> "Income"
+    }
+}
+
+private fun CashFlowGranularity.label(): String {
+    return when (this) {
+        CashFlowGranularity.DAILY -> "Daily"
+        CashFlowGranularity.WEEKLY -> "Weekly"
+        CashFlowGranularity.MONTHLY -> "Monthly"
+        CashFlowGranularity.YEARLY -> "Yearly"
+    }
+}
+
+private fun CashFlowChartStyle.hintLabel(): String {
+    return when (this) {
+        CashFlowChartStyle.BAR -> "Bars"
+        CashFlowChartStyle.LINE -> "Lines"
+    }
+}
+
+private fun Long.toLocalDate(): LocalDate {
+    return Instant.ofEpochMilli(this)
+        .atZone(ZoneId.systemDefault())
+        .toLocalDate()
+}
+
+private fun formatIsoDate(date: LocalDate): String = date.toString()
