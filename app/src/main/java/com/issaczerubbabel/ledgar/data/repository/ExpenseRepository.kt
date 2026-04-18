@@ -4,40 +4,9 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.remote.ImportRecordDto
 import kotlinx.coroutines.flow.Flow
 
-data class DuplicateConflictRecord(
-    val id: Long,
-    val timestamp: String?,
-    val date: String,
-    val type: String,
-    val category: String,
-    val description: String,
-    val amount: Double,
-    val accountName: String,
-    val fromAccountName: String?,
-    val toAccountName: String?,
-    val remarks: String
-)
-
-data class SkippedDuplicateCandidate(
-    val id: String,
-    val timestamp: String?,
-    val date: String,
-    val type: String,
-    val category: String,
-    val description: String,
-    val amount: Double,
-    val accountName: String,
-    val fromAccountName: String?,
-    val toAccountName: String?,
-    val remarks: String,
-    val conflictingLocalRecord: DuplicateConflictRecord?,
-    val recordToImport: ExpenseRecord
-)
-
-data class DuplicateResolutionResult(
-    val skippedMarked: Int,
-    val skipMarkFailed: Int,
-    val keptForLater: Int
+data class SyncConflict(
+    val localTx: ExpenseRecord,
+    val sheetTx: ImportRecordDto
 )
 
 data class GoogleSheetsImportResult(
@@ -46,7 +15,7 @@ data class GoogleSheetsImportResult(
     val restoredDropdowns: Int,
     val restoredBudgets: Int = 0,
     val restoredAccounts: Int = 0,
-    val duplicateCandidates: List<SkippedDuplicateCandidate> = emptyList()
+    val conflicts: List<SyncConflict> = emptyList()
 )
 
 interface ExpenseRepository {
@@ -86,8 +55,7 @@ interface ExpenseRepository {
     suspend fun isDuplicate(date: String, type: String, category: String, amount: Double): Boolean
     suspend fun importRemoteRecords(records: List<ImportRecordDto>): Int
     suspend fun importFromGoogleSheets(): GoogleSheetsImportResult
-    suspend fun applyDuplicateSkipDecisions(
-        candidates: List<SkippedDuplicateCandidate>,
-        skippedCandidateIds: Set<String>
-    ): DuplicateResolutionResult
+    suspend fun updateLocalTransactionFromSheet(conflict: SyncConflict)
+    suspend fun insertSheetTransactionAsDuplicate(conflict: SyncConflict)
+    suspend fun deleteTransactionFromSheet(timestamp: String)
 }

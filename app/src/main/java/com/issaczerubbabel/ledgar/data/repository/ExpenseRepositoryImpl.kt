@@ -10,13 +10,16 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
 import com.issaczerubbabel.ledgar.data.remote.ApiService
+import com.issaczerubbabel.ledgar.data.remote.DeletePayload
 import com.issaczerubbabel.ledgar.data.remote.ImportRecordDto
 import com.issaczerubbabel.ledgar.data.remote.SyncRequest
 import com.issaczerubbabel.ledgar.sync.SyncUrlNotConfiguredException
+import com.issaczerubbabel.ledgar.util.generateTimestampKey
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import com.issaczerubbabel.ledgar.util.normalizeTimestampKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import java.time.LocalDateTime
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
@@ -118,51 +121,17 @@ class ExpenseRepositoryImpl @Inject constructor(
 
     private suspend fun importRemoteRecordsInternal(records: List<ImportRecordDto>): ImportRemoteRecordsOutcome {
         repairLegacyRecords()
-        if (records.isEmpty()) return ImportRemoteRecordsOutcome(imported = 0, duplicates = emptyList())
-
-        val initialAccounts = accountDao.getAllAccountsSnapshot().toMutableList()
-        if (initialAccounts.isEmpty()) {
-            val fallbackId = accountDao.insert(
-                com.issaczerubbabel.ledgar.data.local.entity.AccountRecord(
-                    groupName = "Cash",
-                    accountName = "Cash",
-                    initialBalance = 0.0,
-                    initialBalanceDate = "1970-01-01",
-                    isHidden = false
-                )
-            )
-            initialAccounts += com.issaczerubbabel.ledgar.data.local.entity.AccountRecord(
-                id = fallbackId,
-                groupName = "Cash",
-                accountName = "Cash",
-                initialBalance = 0.0,
-                initialBalanceDate = "1970-01-01",
-                isHidden = false
+        if (records.isEmpty()) {
+            return ImportRemoteRecordsOutcome(
+                imported = 0,
+                identicalSkipped = 0,
+                conflicts = emptyList()
             )
         }
 
-        val accountsByName = initialAccounts.associateBy { normalizeAccountKey(it.accountName) }
-        val accountsByGroup = initialAccounts.associateBy { normalizeAccountKey(it.groupName) }
-        val fallbackAccountId = initialAccounts
-            .firstOrNull { it.accountName.equals("Cash", ignoreCase = true) || it.groupName.equals("Cash", ignoreCase = true) }
-            ?.id
-            ?: initialAccounts.firstOrNull()?.id
+        val accountContext = resolveAccountContext()
 
         val localSnapshot = dao.getAllRecordsSnapshot()
-
-        val localComparable = localSnapshot.map { local ->
-            ComparableTx(
-                date = normalizeDate(local.date, local.remoteTimestamp),
-                amount = local.amount,
-                type = canonicalType(local.type),
-                description = local.description,
-                accountId = local.accountId,
-                sourceRecord = local
-            )
-        }.toMutableList()
-        val localRemoteTimestamps = dao.getAllRemoteTimestamps()
-            .mapNotNull(::normalizeTimestampKey)
-            .toMutableSet()
         val localByRemoteTimestamp = localSnapshot
             .filter { !it.remoteTimestamp.isNullOrBlank() && it.syncAction != "DELETE" }
             .mapNotNull { record ->
@@ -172,12 +141,19 @@ class ExpenseRepositoryImpl @Inject constructor(
             .toMutableMap()
 
         val toInsert = mutableListOf<ExpenseRecord>()
-        val duplicateCandidates = mutableListOf<SkippedDuplicateCandidate>()
+        val conflicts = mutableListOf<SyncConflict>()
+        var identicalSkipped = 0
 
         var unexpectedDateLogCount = 0
-        records.forEachIndexed { index, dto ->
-            val resolvedType = canonicalType(dto.type)
-            val resolvedDate = normalizeDate(dto.date, dto.timestamp)
+        records.forEach { dto ->
+            val mapped = mapImportRecord(
+                dto = dto,
+                accountsByName = accountContext.accountsByName,
+                accountsByGroup = accountContext.accountsByGroup,
+                fallbackAccountId = accountContext.fallbackAccountId
+            )
+
+            val resolvedDate = mapped.record.date
             if (parseFlexibleDate(resolvedDate) == null && unexpectedDateLogCount < 5) {
                 Log.w(
                     importLogTag,
@@ -185,185 +161,34 @@ class ExpenseRepositoryImpl @Inject constructor(
                 )
                 unexpectedDateLogCount++
             }
-            val mappedCategoryRaw = when {
-                resolvedType.equals("Expense", ignoreCase = true) -> dto.expCategory
-                resolvedType.equals("Income", ignoreCase = true) -> dto.incCategory
-                else -> dto.expCategory ?: dto.incCategory
-            }
-            val mappedCategory = mappedCategoryRaw
-                ?.trim()
-                ?.takeUnless { it.isBlank() }
-                ?: if (resolvedType.equals("Transfer", ignoreCase = true)) "Transfer" else ""
+            val timestamp = mapped.normalizedTimestamp
 
-            val remoteAccountName = dto.accountName?.trim().takeUnless { it.isNullOrBlank() }
-                ?: dto.paymentMode?.trim().takeUnless { it.isNullOrBlank() }
-            val legacyTransferParts = remoteAccountName
-                ?.split("->")
-                ?.map { it.trim() }
-                ?.filter { it.isNotBlank() }
-                .orEmpty()
-
-            val explicitFromName = dto.fromAccountName?.trim().takeUnless { it.isNullOrBlank() }
-                ?: legacyTransferParts.getOrNull(0)
-            val explicitToName = dto.toAccountName?.trim().takeUnless { it.isNullOrBlank() }
-                ?: legacyTransferParts.getOrNull(1)
-
-            val fromAccountId = explicitFromName
-                ?.let { token ->
-                    val key = normalizeAccountKey(token)
-                    accountsByName[key]?.id ?: accountsByGroup[key]?.id
-                }
-            val toAccountId = explicitToName
-                ?.let { token ->
-                    val key = normalizeAccountKey(token)
-                    accountsByName[key]?.id ?: accountsByGroup[key]?.id
-                }
-
-            val mappedAccountId = when {
-                resolvedType.equals("Transfer", ignoreCase = true) -> null
-                remoteAccountName == null -> fallbackAccountId
-                else -> {
-                    val key = normalizeAccountKey(remoteAccountName)
-                    accountsByName[key]?.id ?: accountsByGroup[key]?.id ?: fallbackAccountId
-                }
-            }
-
-            val fallbackAccountName = remoteAccountName?.trim().takeUnless { it.isNullOrBlank() }
-            val fallbackFromName = explicitFromName?.trim().takeUnless { it.isNullOrBlank() }
-            val fallbackToName = explicitToName?.trim().takeUnless { it.isNullOrBlank() }
-            val timestamp = normalizeTimestampKey(dto.timestamp)
-
-            if (timestamp != null && localRemoteTimestamps.contains(timestamp)) {
+            if (timestamp != null) {
                 val existing = localByRemoteTimestamp[timestamp]
                 if (existing != null) {
-                    val updated = existing.copy(
-                        accountId = when {
-                            resolvedType.equals("Transfer", ignoreCase = true) -> existing.accountId
-                            else -> mappedAccountId ?: existing.accountId
-                        },
-                        fromAccountId = when {
-                            resolvedType.equals("Expense", ignoreCase = true) -> mappedAccountId ?: existing.fromAccountId
-                            resolvedType.equals("Transfer", ignoreCase = true) -> fromAccountId ?: existing.fromAccountId
-                            else -> null
-                        },
-                        toAccountId = when {
-                            resolvedType.equals("Income", ignoreCase = true) -> mappedAccountId ?: existing.toAccountId
-                            resolvedType.equals("Transfer", ignoreCase = true) -> toAccountId ?: existing.toAccountId
-                            else -> null
-                        },
-                        accountName = when {
-                            resolvedType.equals("Transfer", ignoreCase = true) -> existing.accountName
-                            else -> fallbackAccountName ?: existing.accountName
-                        },
-                        fromAccountName = when {
-                            resolvedType.equals("Expense", ignoreCase = true) -> fallbackAccountName ?: existing.fromAccountName
-                            resolvedType.equals("Transfer", ignoreCase = true) -> fallbackFromName ?: existing.fromAccountName
-                            else -> null
-                        },
-                        toAccountName = when {
-                            resolvedType.equals("Income", ignoreCase = true) -> fallbackAccountName ?: existing.toAccountName
-                            resolvedType.equals("Transfer", ignoreCase = true) -> fallbackToName ?: existing.toAccountName
-                            else -> null
-                        },
-                        remarks = dto.remarks.ifBlank { existing.remarks },
-                        isBookmarked = dto.isBookmarked ?: existing.isBookmarked,
-                        isSynced = true,
-                        syncAction = "NONE"
-                    )
-                    if (updated != existing) {
-                        dao.update(updated)
-                        localByRemoteTimestamp[timestamp] = updated
+                    val normalizedSheetTx = dto.copy(timestamp = timestamp)
+                    if (isTimestampConflict(existing, mapped.record)) {
+                        conflicts += SyncConflict(localTx = existing, sheetTx = normalizedSheetTx)
+                    } else {
+                        identicalSkipped++
                     }
+                    return@forEach
                 }
-                return@forEachIndexed
             }
 
-            // For non-transfer rows, drop records that cannot be mapped safely.
-            if (!resolvedType.equals("Transfer", ignoreCase = true) && mappedAccountId == null) {
-                return@forEachIndexed
+            if (mapped.discarded) {
+                return@forEach
             }
 
-            val remoteComparable = ComparableTx(
-                date = resolvedDate,
-                amount = dto.amount,
-                type = resolvedType,
-                description = dto.description,
-                accountId = mappedAccountId
-            )
-
-            val duplicateMatches = localComparable.filter { local ->
-                isCompositeDuplicate(local, remoteComparable)
-            }
-            val isDuplicate = duplicateMatches.isNotEmpty()
-            val conflictingLocalRecord = duplicateMatches
-                .firstOrNull { it.sourceRecord != null }
-                ?.sourceRecord
-
-            val mappedRecord = ExpenseRecord(
-                date = resolvedDate,
-                type = resolvedType,
-                category = mappedCategory,
-                description = dto.description,
-                amount = dto.amount,
-                accountId = mappedAccountId,
-                remarks = dto.remarks,
-                isBookmarked = dto.isBookmarked ?: false,
-                fromAccountId = when {
-                    resolvedType.equals("Expense", ignoreCase = true) -> mappedAccountId
-                    resolvedType.equals("Transfer", ignoreCase = true) -> fromAccountId
-                    else -> null
-                },
-                toAccountId = when {
-                    resolvedType.equals("Income", ignoreCase = true) -> mappedAccountId
-                    resolvedType.equals("Transfer", ignoreCase = true) -> toAccountId
-                    else -> null
-                },
-                accountName = when {
-                    resolvedType.equals("Transfer", ignoreCase = true) -> null
-                    else -> fallbackAccountName
-                },
-                fromAccountName = when {
-                    resolvedType.equals("Expense", ignoreCase = true) -> fallbackAccountName
-                    resolvedType.equals("Transfer", ignoreCase = true) -> fallbackFromName
-                    else -> null
-                },
-                toAccountName = when {
-                    resolvedType.equals("Income", ignoreCase = true) -> fallbackAccountName
-                    resolvedType.equals("Transfer", ignoreCase = true) -> fallbackToName
-                    else -> null
-                },
-                isSynced = true,
-                remoteTimestamp = timestamp,
-                syncAction = "NONE"
-            )
-
-            if (!isDuplicate) {
-                toInsert += mappedRecord
-                localComparable += remoteComparable
-                timestamp?.let { localRemoteTimestamps += it }
-            } else {
-                duplicateCandidates += SkippedDuplicateCandidate(
-                    id = "${timestamp ?: "no-ts"}#$index",
-                    timestamp = timestamp,
-                    date = resolvedDate,
-                    type = resolvedType,
-                    category = mappedCategory,
-                    description = dto.description,
-                    amount = dto.amount,
-                    accountName = fallbackAccountName ?: "",
-                    fromAccountName = fallbackFromName,
-                    toAccountName = fallbackToName,
-                    remarks = dto.remarks,
-                    conflictingLocalRecord = conflictingLocalRecord?.let(::toDuplicateConflictRecord),
-                    recordToImport = mappedRecord
-                )
-            }
+            toInsert += mapped.record
+            timestamp?.let { localByRemoteTimestamp[it] = mapped.record }
         }
 
         if (toInsert.isNotEmpty()) dao.insertAll(toInsert)
         return ImportRemoteRecordsOutcome(
             imported = toInsert.size,
-            duplicates = duplicateCandidates
+            identicalSkipped = identicalSkipped,
+            conflicts = conflicts
         )
     }
 
@@ -483,7 +308,7 @@ class ExpenseRepositoryImpl @Inject constructor(
         val dtos = txBody?.data.orEmpty()
         val importOutcome = importRemoteRecordsInternal(dtos)
         val imported = importOutcome.imported
-        val skipped = importOutcome.duplicates.size
+        val skipped = importOutcome.identicalSkipped
 
         return GoogleSheetsImportResult(
             imported = imported,
@@ -491,134 +316,268 @@ class ExpenseRepositoryImpl @Inject constructor(
             restoredDropdowns = restoredDropdowns,
             restoredBudgets = restoredBudgets,
             restoredAccounts = restoredAccounts,
-            duplicateCandidates = importOutcome.duplicates
+            conflicts = importOutcome.conflicts
         )
     }
 
-    override suspend fun applyDuplicateSkipDecisions(
-        candidates: List<SkippedDuplicateCandidate>,
-        skippedCandidateIds: Set<String>
-    ): DuplicateResolutionResult {
-        if (candidates.isEmpty()) {
-            return DuplicateResolutionResult(
-                skippedMarked = 0,
-                skipMarkFailed = 0,
-                keptForLater = 0
-            )
-        }
+    override suspend fun updateLocalTransactionFromSheet(conflict: SyncConflict) {
+        val accountContext = resolveAccountContext()
+        val mapped = mapImportRecord(
+            dto = conflict.sheetTx,
+            accountsByName = accountContext.accountsByName,
+            accountsByGroup = accountContext.accountsByGroup,
+            fallbackAccountId = accountContext.fallbackAccountId
+        )
+        if (mapped.discarded) return
 
-        val selectedToSkip = candidates.filter { skippedCandidateIds.contains(it.id) }
-        if (selectedToSkip.isEmpty()) {
-            return DuplicateResolutionResult(
-                skippedMarked = 0,
-                skipMarkFailed = 0,
-                keptForLater = candidates.size
-            )
-        }
+        val current = dao.getById(conflict.localTx.id) ?: return
+        val normalizedTimestamp = normalizeTimestampKey(conflict.sheetTx.timestamp) ?: normalizeTimestampKey(current.remoteTimestamp)
+        val updated = current.copy(
+            date = mapped.record.date,
+            type = mapped.record.type,
+            category = mapped.record.category,
+            description = mapped.record.description,
+            amount = mapped.record.amount,
+            accountId = mapped.record.accountId,
+            remarks = mapped.record.remarks,
+            fromAccountId = mapped.record.fromAccountId,
+            toAccountId = mapped.record.toAccountId,
+            accountName = mapped.record.accountName,
+            fromAccountName = mapped.record.fromAccountName,
+            toAccountName = mapped.record.toAccountName,
+            isBookmarked = mapped.record.isBookmarked,
+            isSynced = true,
+            remoteTimestamp = normalizedTimestamp,
+            syncAction = "NONE"
+        )
+        dao.update(updated)
+    }
 
+    override suspend fun insertSheetTransactionAsDuplicate(conflict: SyncConflict) {
+        val accountContext = resolveAccountContext()
+        val mapped = mapImportRecord(
+            dto = conflict.sheetTx,
+            accountsByName = accountContext.accountsByName,
+            accountsByGroup = accountContext.accountsByGroup,
+            fallbackAccountId = accountContext.fallbackAccountId
+        )
+        if (mapped.discarded) return
+
+        val duplicateTimestamp = generateTimestampKey(LocalDateTime.now())
+        dao.insert(
+            mapped.record.copy(
+                id = 0,
+                isSynced = false,
+                syncAction = "INSERT",
+                remoteTimestamp = duplicateTimestamp
+            )
+        )
+    }
+
+    override suspend fun deleteTransactionFromSheet(timestamp: String) {
+        val normalizedTimestamp = normalizeTimestampKey(timestamp)
+            ?: throw IllegalArgumentException("A valid sheet timestamp is required for cloud delete")
         val scriptUrl = preferenceRepository.scriptUrl.first()
             ?: throw SyncUrlNotConfiguredException()
 
-        var skipMarkFailed = 0
-        val decisionRecords = selectedToSkip.mapNotNull { candidate ->
-            normalizeTimestampKey(candidate.timestamp)?.let { normalizedTs ->
-                mapOf(
-                    "timestamp" to normalizedTs,
-                    "decision" to "SKIP"
-                )
-            }
+        val payload = DeletePayload(targetTimestamp = normalizedTimestamp)
+        val response = apiService.syncRecords(
+            scriptUrl,
+            SyncRequest(
+                action = payload.action,
+                target = payload.target,
+                targetTimestamp = payload.targetTimestamp
+            )
+        )
+        val body = response.body()
+        if (!response.isSuccessful || !body?.status.equals("ok", ignoreCase = true)) {
+            throw IllegalStateException(body?.message ?: "Delete from cloud failed: HTTP ${response.code()}")
         }
-        skipMarkFailed += (selectedToSkip.size - decisionRecords.size)
+    }
 
-        var skippedMarked = 0
-        if (decisionRecords.isNotEmpty()) {
-            val response = apiService.syncRecords(
-                scriptUrl,
-                SyncRequest(
-                    action = "mark_skipped_duplicates",
-                    target = "transactions",
-                    records = decisionRecords
+    private data class AccountContext(
+        val accountsByName: Map<String, AccountRecord>,
+        val accountsByGroup: Map<String, AccountRecord>,
+        val fallbackAccountId: Long?
+    )
+
+    private data class MappedImportRecord(
+        val record: ExpenseRecord,
+        val normalizedTimestamp: String?,
+        val discarded: Boolean
+    )
+
+    private suspend fun resolveAccountContext(): AccountContext {
+        val initialAccounts = accountDao.getAllAccountsSnapshot().toMutableList()
+        if (initialAccounts.isEmpty()) {
+            val fallbackId = accountDao.insert(
+                AccountRecord(
+                    groupName = "Cash",
+                    accountName = "Cash",
+                    initialBalance = 0.0,
+                    initialBalanceDate = "1970-01-01",
+                    isHidden = false
                 )
             )
-            val body = response.body()
-
-            if (response.isSuccessful && body?.status.equals("ok", ignoreCase = true)) {
-                val reported = body?.count ?: decisionRecords.size
-                skippedMarked = reported.coerceIn(0, decisionRecords.size)
-                skipMarkFailed += (decisionRecords.size - skippedMarked)
-            } else {
-                skipMarkFailed += decisionRecords.size
-            }
+            initialAccounts += AccountRecord(
+                id = fallbackId,
+                groupName = "Cash",
+                accountName = "Cash",
+                initialBalance = 0.0,
+                initialBalanceDate = "1970-01-01",
+                isHidden = false
+            )
         }
 
-        return DuplicateResolutionResult(
-            skippedMarked = skippedMarked,
-            skipMarkFailed = skipMarkFailed,
-            keptForLater = (candidates.size - skippedMarked).coerceAtLeast(0)
+        val accountsByName = initialAccounts.associateBy { normalizeAccountKey(it.accountName) }
+        val accountsByGroup = initialAccounts.associateBy { normalizeAccountKey(it.groupName) }
+        val fallbackAccountId = initialAccounts
+            .firstOrNull { it.accountName.equals("Cash", ignoreCase = true) || it.groupName.equals("Cash", ignoreCase = true) }
+            ?.id
+            ?: initialAccounts.firstOrNull()?.id
+
+        return AccountContext(
+            accountsByName = accountsByName,
+            accountsByGroup = accountsByGroup,
+            fallbackAccountId = fallbackAccountId
         )
     }
 
-    private data class ComparableTx(
-        val date: String,
-        val amount: Double,
-        val type: String,
-        val description: String,
-        val accountId: Long?,
-        val sourceRecord: ExpenseRecord? = null
-    )
+    private fun mapImportRecord(
+        dto: ImportRecordDto,
+        accountsByName: Map<String, AccountRecord>,
+        accountsByGroup: Map<String, AccountRecord>,
+        fallbackAccountId: Long?
+    ): MappedImportRecord {
+        val resolvedType = canonicalType(dto.type)
+        val resolvedDate = normalizeDate(dto.date, dto.timestamp)
+        val mappedCategoryRaw = when {
+            resolvedType.equals("Expense", ignoreCase = true) -> dto.expCategory
+            resolvedType.equals("Income", ignoreCase = true) -> dto.incCategory
+            else -> dto.expCategory ?: dto.incCategory
+        }
+        val mappedCategory = mappedCategoryRaw
+            ?.trim()
+            ?.takeUnless { it.isBlank() }
+            ?: if (resolvedType.equals("Transfer", ignoreCase = true)) "Transfer" else ""
+
+        val remoteAccountName = dto.accountName?.trim().takeUnless { it.isNullOrBlank() }
+            ?: dto.paymentMode?.trim().takeUnless { it.isNullOrBlank() }
+        val legacyTransferParts = remoteAccountName
+            ?.split("->")
+            ?.map { it.trim() }
+            ?.filter { it.isNotBlank() }
+            .orEmpty()
+
+        val explicitFromName = dto.fromAccountName?.trim().takeUnless { it.isNullOrBlank() }
+            ?: legacyTransferParts.getOrNull(0)
+        val explicitToName = dto.toAccountName?.trim().takeUnless { it.isNullOrBlank() }
+            ?: legacyTransferParts.getOrNull(1)
+
+        val fromAccountId = explicitFromName
+            ?.let { token ->
+                val key = normalizeAccountKey(token)
+                accountsByName[key]?.id ?: accountsByGroup[key]?.id
+            }
+        val toAccountId = explicitToName
+            ?.let { token ->
+                val key = normalizeAccountKey(token)
+                accountsByName[key]?.id ?: accountsByGroup[key]?.id
+            }
+
+        val mappedAccountId = when {
+            resolvedType.equals("Transfer", ignoreCase = true) -> null
+            remoteAccountName == null -> fallbackAccountId
+            else -> {
+                val key = normalizeAccountKey(remoteAccountName)
+                accountsByName[key]?.id ?: accountsByGroup[key]?.id ?: fallbackAccountId
+            }
+        }
+
+        if (!resolvedType.equals("Transfer", ignoreCase = true) && mappedAccountId == null) {
+            return MappedImportRecord(
+                record = ExpenseRecord(
+                    date = resolvedDate,
+                    type = resolvedType,
+                    category = mappedCategory,
+                    description = dto.description,
+                    amount = dto.amount,
+                    accountId = null,
+                    remarks = dto.remarks,
+                    isBookmarked = dto.isBookmarked ?: false,
+                    isSynced = true,
+                    remoteTimestamp = normalizeTimestampKey(dto.timestamp),
+                    syncAction = "NONE"
+                ),
+                normalizedTimestamp = normalizeTimestampKey(dto.timestamp),
+                discarded = true
+            )
+        }
+
+        val fallbackAccountName = remoteAccountName?.trim().takeUnless { it.isNullOrBlank() }
+        val fallbackFromName = explicitFromName?.trim().takeUnless { it.isNullOrBlank() }
+        val fallbackToName = explicitToName?.trim().takeUnless { it.isNullOrBlank() }
+        val timestamp = normalizeTimestampKey(dto.timestamp)
+
+        return MappedImportRecord(
+            record = ExpenseRecord(
+                date = resolvedDate,
+                type = resolvedType,
+                category = mappedCategory,
+                description = dto.description,
+                amount = dto.amount,
+                accountId = mappedAccountId,
+                remarks = dto.remarks,
+                isBookmarked = dto.isBookmarked ?: false,
+                fromAccountId = when {
+                    resolvedType.equals("Expense", ignoreCase = true) -> mappedAccountId
+                    resolvedType.equals("Transfer", ignoreCase = true) -> fromAccountId
+                    else -> null
+                },
+                toAccountId = when {
+                    resolvedType.equals("Income", ignoreCase = true) -> mappedAccountId
+                    resolvedType.equals("Transfer", ignoreCase = true) -> toAccountId
+                    else -> null
+                },
+                accountName = when {
+                    resolvedType.equals("Transfer", ignoreCase = true) -> null
+                    else -> fallbackAccountName
+                },
+                fromAccountName = when {
+                    resolvedType.equals("Expense", ignoreCase = true) -> fallbackAccountName
+                    resolvedType.equals("Transfer", ignoreCase = true) -> fallbackFromName
+                    else -> null
+                },
+                toAccountName = when {
+                    resolvedType.equals("Income", ignoreCase = true) -> fallbackAccountName
+                    resolvedType.equals("Transfer", ignoreCase = true) -> fallbackToName
+                    else -> null
+                },
+                isSynced = true,
+                remoteTimestamp = timestamp,
+                syncAction = "NONE"
+            ),
+            normalizedTimestamp = timestamp,
+            discarded = false
+        )
+    }
+
+    private fun isTimestampConflict(local: ExpenseRecord, sheetMapped: ExpenseRecord): Boolean {
+        return !amountsEqual(local.amount, sheetMapped.amount) ||
+            !local.category.trim().equals(sheetMapped.category.trim(), ignoreCase = true) ||
+            !local.description.trim().equals(sheetMapped.description.trim(), ignoreCase = true)
+    }
 
     private data class ImportRemoteRecordsOutcome(
         val imported: Int,
-        val duplicates: List<SkippedDuplicateCandidate>
+        val identicalSkipped: Int,
+        val conflicts: List<SyncConflict>
     )
-
-    private fun isCompositeDuplicate(local: ComparableTx, remote: ComparableTx): Boolean {
-        return local.date == remote.date &&
-            amountsEqual(local.amount, remote.amount) &&
-            local.description.trim().equals(remote.description.trim(), ignoreCase = true) &&
-            local.accountId == remote.accountId
-    }
 
     private fun amountsEqual(a: Double, b: Double): Boolean = kotlin.math.abs(a - b) < 0.000001
 
     private fun normalizeAccountKey(raw: String): String = raw.trim().lowercase()
 
-    private fun toDuplicateConflictRecord(record: ExpenseRecord): DuplicateConflictRecord {
-        return DuplicateConflictRecord(
-            id = record.id,
-            timestamp = normalizeTimestampKey(record.remoteTimestamp),
-            date = normalizeDate(record.date, record.remoteTimestamp),
-            type = canonicalType(record.type),
-            category = record.category,
-            description = record.description,
-            amount = record.amount,
-            accountName = resolveConflictAccountLabel(record),
-            fromAccountName = record.fromAccountName?.trim().takeUnless { it.isNullOrBlank() },
-            toAccountName = record.toAccountName?.trim().takeUnless { it.isNullOrBlank() },
-            remarks = record.remarks
-        )
-    }
-
-    private fun resolveConflictAccountLabel(record: ExpenseRecord): String {
-        val normalizedType = canonicalType(record.type)
-        val directAccount = record.accountName?.trim().orEmpty()
-        val from = record.fromAccountName?.trim().orEmpty()
-        val to = record.toAccountName?.trim().orEmpty()
-
-        if (normalizedType.equals("Transfer", ignoreCase = true)) {
-            val transferLabel = listOf(from, to)
-                .filter { it.isNotBlank() }
-                .joinToString(" -> ")
-            if (transferLabel.isNotBlank()) return transferLabel
-        }
-
-        return when {
-            directAccount.isNotBlank() -> directAccount
-            from.isNotBlank() -> from
-            to.isNotBlank() -> to
-            else -> ""
-        }
-    }
 
     private suspend fun repairLegacyRecords() {
         val snapshot = dao.getAllRecordsSnapshot()

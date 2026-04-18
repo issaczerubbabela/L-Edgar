@@ -16,7 +16,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Insights screen now supports flexible period scopes (Weekly, Monthly, Yearly, Select Period) with period navigation and custom date-range selection",
             "Expense Breakdown now includes tabbed Expense and Income category views with the same interactive donut experience",
             "Cash Flow now supports category filtering with an explicit All Categories option and time bucketing controls for Daily, Weekly, Monthly, and Yearly views",
-            "Account Balance As-Of now supports precise timestamp values with a Set to Now shortcut in add/edit account flows"
+            "Account Balance As-Of now supports precise timestamp values with a Set to Now shortcut in add/edit account flows",
+            "Added advanced Sheets sync conflict resolution UI"
         ),
         fixes = listOf(
             "Cash Flow chart now refreshes plotted series correctly when switching top period months, preventing stale bars/lines and stale Y-axis scale carryover",
@@ -24,7 +25,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Cash Flow marker tooltip now prioritizes spent amount first, followed by income and guide-line values for clearer per-bucket amount reading",
             "Cash Flow marker content now includes Income, Expense, Avg/day, and Max/day values for each highlighted bucket",
             "Account balance math now compares transaction timestamps against precise As-Of values, including same-day hour/minute boundaries",
-            "Quick Settings quick-add now runs in an isolated transient task, so dismissing the sheet no longer reveals the main app behind it"
+            "Quick Settings quick-add now runs in an isolated transient task, so dismissing the sheet no longer reveals the main app behind it",
+            "Removed legacy duplicate-skip resolution plumbing and standardized Sheets conflict handling on timestamp-based conflict flow"
         ),
         qol = listOf(
             "Quick Settings tile click now stays in quick-entry flow and updates tile state without opening the main app tabs",
@@ -37,7 +39,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Insights breakdown tab selector now uses a card-matching gray surface instead of a dark background",
             "Cash Flow chart now renders thicker stacked bars and overlays average-per-day plus budget-aware max-per-day guide lines",
             "Insights card visuals refined: removed redundant chart titles, aligned chart background with card surface, simplified daily x-axis labels, and removed chart grid guidelines",
-            "Added .tmp and .tmp_vico_src to gitignore for local artifact cleanup"
+            "Added .tmp and .tmp_vico_src to gitignore for local artifact cleanup",
+            "Conflict resolution now emits per-action audit snackbars with exact resolved and remaining counts"
         )
     ),
     ChangelogRelease(

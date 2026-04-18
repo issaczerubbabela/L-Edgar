@@ -6,6 +6,8 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -26,8 +28,9 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.issaczerubbabel.ledgar.data.repository.SkippedDuplicateCandidate
 import com.issaczerubbabel.ledgar.data.preferences.CashFlowChartStyle
+import com.issaczerubbabel.ledgar.data.remote.ImportRecordDto
+import com.issaczerubbabel.ledgar.data.repository.SyncConflict
 import com.issaczerubbabel.ledgar.ui.theme.AppThemeOption
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseRed
 import com.issaczerubbabel.ledgar.ui.theme.IncomeGreen
@@ -35,6 +38,7 @@ import com.issaczerubbabel.ledgar.data.preferences.AppLockAuthMode
 import com.issaczerubbabel.ledgar.viewmodel.ImportState
 import com.issaczerubbabel.ledgar.viewmodel.SettingsUiEvent
 import com.issaczerubbabel.ledgar.viewmodel.SettingsViewModel
+import com.issaczerubbabel.ledgar.util.normalizeTimestampKey
 import java.io.File
 
 @Composable
@@ -56,8 +60,8 @@ fun SettingsScreen(
     val sheetsState by vm.sheetsImportState.collectAsStateWithLifecycle()
     val csvState by vm.csvImportState.collectAsStateWithLifecycle()
     val backupState by vm.backupState.collectAsStateWithLifecycle()
-    val duplicateCandidates by vm.duplicateCandidates.collectAsStateWithLifecycle()
-    val duplicateResolutionState by vm.duplicateResolutionState.collectAsStateWithLifecycle()
+    val syncConflicts by vm.syncConflicts.collectAsStateWithLifecycle()
+    val conflictResolutionState by vm.conflictResolutionState.collectAsStateWithLifecycle()
     val currentTheme by vm.themeState.collectAsStateWithLifecycle()
     val scriptUrl by vm.scriptUrl.collectAsStateWithLifecycle()
     val appLockEnabled by vm.appLockEnabled.collectAsStateWithLifecycle()
@@ -83,6 +87,7 @@ fun SettingsScreen(
         vm.uiEvents.collect { event ->
             when (event) {
                 is SettingsUiEvent.ShowMessage -> snackbarHostState.showSnackbar(event.message)
+                SettingsUiEvent.ShowSyncCompletedToast -> Toast.makeText(context, "Sync completed", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -108,12 +113,15 @@ fun SettingsScreen(
         )
     }
 
-    if (duplicateCandidates.isNotEmpty()) {
-        DuplicateReviewDialog(
-            candidates = duplicateCandidates,
-            resolutionState = duplicateResolutionState,
-            onResolve = vm::resolveSkippedDuplicates,
-            onDismiss = vm::dismissDuplicateReview
+    if (syncConflicts.isNotEmpty()) {
+        SyncResolutionSheet(
+            conflicts = syncConflicts,
+            resolutionState = conflictResolutionState,
+            onKeepLocal = vm::keepLocalConflict,
+            onUpdateDevice = vm::updateDeviceConflict,
+            onKeepBoth = vm::keepBothConflict,
+            onDeleteFromCloud = vm::deleteFromCloudConflict,
+            onDismiss = vm::dismissSyncConflictSheet
         )
     }
 
@@ -692,197 +700,182 @@ private fun shareAppApk(context: Context) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DuplicateReviewDialog(
-    candidates: List<SkippedDuplicateCandidate>,
+private fun SyncResolutionSheet(
+    conflicts: List<SyncConflict>,
     resolutionState: ImportState,
-    onResolve: (Set<String>) -> Unit,
+    onKeepLocal: (SyncConflict) -> Unit,
+    onUpdateDevice: (SyncConflict) -> Unit,
+    onKeepBoth: (SyncConflict) -> Unit,
+    onDeleteFromCloud: (SyncConflict) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val skipSelections = remember(candidates) {
-        mutableStateMapOf<String, Boolean>().apply {
-            candidates.forEach { put(it.id, false) }
-        }
-    }
-
-    val canSubmit = resolutionState !is ImportState.Loading
-    val selectedCount = skipSelections.values.count { it }
-
-    AlertDialog(
+    val canResolve = resolutionState !is ImportState.Loading
+    ModalBottomSheet(
         onDismissRequest = {
-            if (canSubmit) onDismiss()
-        },
-        title = { Text("Review Duplicates (${candidates.size})") },
-        text = {
-            Column(
+            if (canResolve) onDismiss()
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Conflict Resolution",
+                style = MaterialTheme.typography.titleLarge
+            )
+            Text(
+                text = "Review each conflicting timestamp and choose how to resolve it.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 420.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .heightIn(max = 520.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = "Check rows to skip from future imports. Unchecked rows stay in Sheets for later review. Nothing is deleted.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(
-                            onClick = {
-                                candidates.forEach { candidate ->
-                                    skipSelections[candidate.id] = true
-                                }
-                            },
-                            enabled = canSubmit
-                        ) {
-                            Text("Skip All")
-                        }
-                        TextButton(
-                            onClick = {
-                                candidates.forEach { candidate ->
-                                    skipSelections[candidate.id] = false
-                                }
-                            },
-                            enabled = canSubmit
-                        ) {
-                            Text("Clear")
-                        }
-                    }
-                    Text(
-                        text = "$selectedCount selected",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                candidates.forEach { candidate ->
+                itemsIndexed(conflicts, key = { _, conflict -> "${conflict.localTx.id}:${normalizeTimestampKey(conflict.sheetTx.timestamp).orEmpty()}" }) { index, conflict ->
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        shape = MaterialTheme.shapes.medium,
+                        shape = MaterialTheme.shapes.large,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = "Incoming sheet row",
-                                style = MaterialTheme.typography.labelSmall,
+                                text = "Conflict ${index + 1} of ${conflicts.size}",
+                                style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Text(
-                                text = "${candidate.type} • ${candidate.date} • ${candidate.amount}",
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                            Text(
-                                text = candidate.description.ifBlank { "(No description)" },
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            Text(
-                                text = "Account: ${candidate.accountName.ifBlank { "-" }}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = "Category: ${candidate.category.ifBlank { "-" }}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            if (!candidate.timestamp.isNullOrBlank()) {
-                                Text(
-                                    text = "Timestamp: ${candidate.timestamp}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-                            Text(
-                                text = "Conflicting local record",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-
-                            val conflict = candidate.conflictingLocalRecord
-                            if (conflict != null) {
-                                Text(
-                                    text = "${conflict.type} • ${conflict.date} • ${conflict.amount}",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                                Text(
-                                    text = conflict.description.ifBlank { "(No description)" },
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                                Text(
-                                    text = "Category: ${conflict.category.ifBlank { "-" }}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = "Account: ${conflict.accountName.ifBlank { "-" }}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                if (!conflict.timestamp.isNullOrBlank()) {
-                                    Text(
-                                        text = "Timestamp: ${conflict.timestamp}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Surface(
+                                    modifier = Modifier.weight(1f),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    shape = MaterialTheme.shapes.medium
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text("On Device", style = MaterialTheme.typography.labelLarge)
+                                        ConflictValue("Amount", conflict.localTx.amount.toString(), false)
+                                        ConflictValue("Category", conflict.localTx.category.ifBlank { "-" }, false)
+                                        ConflictValue("Description", conflict.localTx.description.ifBlank { "-" }, false)
+                                        ConflictValue(
+                                            "Timestamp",
+                                            normalizeTimestampKey(conflict.localTx.remoteTimestamp) ?: "-",
+                                            false
+                                        )
+                                    }
                                 }
-                            } else {
-                                Text(
-                                    text = "No local-row details available for this conflict.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Surface(
+                                    modifier = Modifier.weight(1f),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    shape = MaterialTheme.shapes.medium
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        val cloudCategory = sheetCategory(conflict.sheetTx)
+                                        val amountDiff = !approximatelyEqual(conflict.localTx.amount, conflict.sheetTx.amount)
+                                        val categoryDiff = !conflict.localTx.category.trim().equals(cloudCategory.trim(), ignoreCase = true)
+                                        val descriptionDiff = !conflict.localTx.description.trim().equals(conflict.sheetTx.description.trim(), ignoreCase = true)
+                                        val timestampDiff = normalizeTimestampKey(conflict.localTx.remoteTimestamp) != normalizeTimestampKey(conflict.sheetTx.timestamp)
+
+                                        Text("In Cloud", style = MaterialTheme.typography.labelLarge)
+                                        ConflictValue("Amount", conflict.sheetTx.amount.toString(), amountDiff)
+                                        ConflictValue("Category", cloudCategory.ifBlank { "-" }, categoryDiff)
+                                        ConflictValue("Description", conflict.sheetTx.description.ifBlank { "-" }, descriptionDiff)
+                                        ConflictValue(
+                                            "Timestamp",
+                                            normalizeTimestampKey(conflict.sheetTx.timestamp) ?: "-",
+                                            timestampDiff
+                                        )
+                                    }
+                                }
                             }
 
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Checkbox(
-                                    checked = skipSelections[candidate.id] == true,
-                                    onCheckedChange = { checked -> skipSelections[candidate.id] = checked },
-                                    enabled = canSubmit
-                                )
-                                Text(
-                                    text = "Skip this row",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { onKeepLocal(conflict) },
+                                    enabled = canResolve,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Keep Local")
+                                }
+                                OutlinedButton(
+                                    onClick = { onUpdateDevice(conflict) },
+                                    enabled = canResolve,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Update Device")
+                                }
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { onKeepBoth(conflict) },
+                                    enabled = canResolve,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Keep Both")
+                                }
+                                OutlinedButton(
+                                    onClick = { onDeleteFromCloud(conflict) },
+                                    enabled = canResolve,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Delete from Cloud")
+                                }
                             }
                         }
                     }
                 }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val skippedIds = skipSelections
-                        .filterValues { it }
-                        .keys
-                        .toSet()
-                    onResolve(skippedIds)
-                },
-                enabled = canSubmit
-            ) {
-                if (resolutionState is ImportState.Loading) {
-                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-                } else {
-                    Text("Apply")
+
+            if (resolutionState is ImportState.Loading) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                 }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, enabled = canSubmit) {
-                Text("Close")
-            }
         }
+    }
+}
+
+@Composable
+private fun ConflictValue(label: String, value: String, isDifferent: Boolean) {
+    Text(
+        text = "$label: $value",
+        style = MaterialTheme.typography.bodySmall,
+        color = if (isDifferent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
     )
 }
+
+private fun sheetCategory(dto: ImportRecordDto): String {
+    return dto.expCategory?.trim().takeUnless { it.isNullOrBlank() }
+        ?: dto.incCategory?.trim().takeUnless { it.isNullOrBlank() }
+        ?: ""
+}
+
+private fun approximatelyEqual(a: Double, b: Double): Boolean = kotlin.math.abs(a - b) < 0.000001

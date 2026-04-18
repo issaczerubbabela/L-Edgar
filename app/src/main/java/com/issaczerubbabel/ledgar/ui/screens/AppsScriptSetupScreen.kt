@@ -16,7 +16,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -63,9 +63,6 @@ var TRANSACTIONS_SHEET = "_responses";
 var DROPDOWNS_SHEET = "_dropdowns";
 var BUDGETS_SHEET = "_budgets";
 var ACCOUNTS_SHEET = "_accounts";
-var DUPLICATE_DECISIONS_SHEET = "_duplicate_decisions";
-
-var DUPLICATE_DECISION_HEADERS = ["Timestamp", "Decision", "Updated At"];
 
 var TRANSACTION_HEADERS_V2 = [
   "Timestamp",
@@ -101,123 +98,6 @@ function ensureSheet(spreadsheet, name) {
 function parsePayload(e) {
   var raw = e && e.postData && e.postData.contents ? e.postData.contents : "{}";
   return JSON.parse(raw);
-}
-
-function ensureDuplicateDecisionsSheet(spreadsheet) {
-  var sheet = ensureSheet(spreadsheet, DUPLICATE_DECISIONS_SHEET);
-  if (sheet.getLastRow() === 0) {
-    sheet
-      .getRange(1, 1, 1, DUPLICATE_DECISION_HEADERS.length)
-      .setValues([DUPLICATE_DECISION_HEADERS]);
-  }
-  return sheet;
-}
-
-function markSkippedDuplicateTransactions(spreadsheet, records, timeZone) {
-  var decisionSheet = ensureDuplicateDecisionsSheet(spreadsheet);
-  var nowText = Utilities.formatDate(new Date(), timeZone, "M/d/yyyy HH:mm:ss");
-
-  var decisions = records || [];
-  var normalizedDecisions = [];
-  for (var i = 0; i < decisions.length; i++) {
-    var decision = decisions[i] || {};
-    var normalizedTimestamp = normalizeTimestampKey(decision.timestamp, timeZone);
-    if (!normalizedTimestamp) continue;
-
-    var normalizedDecision = String(decision.decision || "SKIP")
-      .trim()
-      .toUpperCase();
-    if (!normalizedDecision) normalizedDecision = "SKIP";
-
-    normalizedDecisions.push({
-      timestamp: normalizedTimestamp,
-      decision: normalizedDecision,
-      updatedAt: nowText,
-    });
-  }
-
-  if (normalizedDecisions.length === 0) {
-    return {
-      status: "ok",
-      action: "mark_skipped_duplicates",
-      count: 0,
-      message: "No valid timestamp decisions provided",
-    };
-  }
-
-  var lastRow = decisionSheet.getLastRow();
-  var existingRows =
-    lastRow > 1
-      ? decisionSheet
-          .getRange(2, 1, lastRow - 1, DUPLICATE_DECISION_HEADERS.length)
-          .getDisplayValues()
-      : [];
-
-  var rowByTimestamp = {};
-  for (var r = 0; r < existingRows.length; r++) {
-    var existingTimestamp = normalizeTimestampKey(existingRows[r][0], timeZone);
-    if (existingTimestamp) {
-      rowByTimestamp[existingTimestamp] = r + 2;
-    }
-  }
-
-  var rowsToAppend = [];
-  var upserted = 0;
-
-  normalizedDecisions.forEach(function (item) {
-    var foundRow = rowByTimestamp[item.timestamp];
-    var rowData = [item.timestamp, item.decision, item.updatedAt];
-    if (foundRow) {
-      decisionSheet.getRange(foundRow, 1, 1, DUPLICATE_DECISION_HEADERS.length).setValues([rowData]);
-    } else {
-      rowsToAppend.push(rowData);
-      rowByTimestamp[item.timestamp] = -1;
-    }
-    upserted++;
-  });
-
-  if (rowsToAppend.length > 0) {
-    var startRow = decisionSheet.getLastRow() + 1;
-    decisionSheet
-      .getRange(startRow, 1, rowsToAppend.length, DUPLICATE_DECISION_HEADERS.length)
-      .setValues(rowsToAppend);
-  }
-
-  return {
-    status: "ok",
-    action: "mark_skipped_duplicates",
-    count: upserted,
-    message: "Duplicate skip decisions saved",
-  };
-}
-
-function getSkippedTransactionTimestampSet(spreadsheet, timeZone) {
-  var decisionSheet = spreadsheet.getSheetByName(DUPLICATE_DECISIONS_SHEET);
-  if (!decisionSheet || decisionSheet.getLastRow() <= 1) {
-    return {};
-  }
-
-  var rows = decisionSheet
-    .getRange(2, 1, decisionSheet.getLastRow() - 1, DUPLICATE_DECISION_HEADERS.length)
-    .getDisplayValues();
-  var skippedMap = {};
-
-  for (var i = 0; i < rows.length; i++) {
-    var ts = normalizeTimestampKey(rows[i][0], timeZone);
-    if (!ts) continue;
-
-    var decision = String(rows[i][1] || "")
-      .trim()
-      .toUpperCase();
-
-    if (decision === "SKIP") {
-      skippedMap[ts] = true;
-    } else if (skippedMap[ts]) {
-      delete skippedMap[ts];
-    }
-  }
-
-  return skippedMap;
 }
 
 function normalizeTimestampKey(value, timeZone) {
@@ -540,10 +420,6 @@ function doPost(e) {
 
     if (target === "transactions" && action === "migrate") {
       return jsonOut(migrateTransactionsSheetToV2());
-    }
-
-    if (target === "transactions" && action === "mark_skipped_duplicates") {
-      return jsonOut(markSkippedDuplicateTransactions(spreadsheet, records, timeZone));
     }
 
     if (
@@ -877,15 +753,11 @@ function doGet(e) {
     var schemaMode = detectTransactionSchemaMode(headerRow);
 
     var txData = txSheet.getDataRange().getValues();
-    var skippedTimestamps = getSkippedTransactionTimestampSet(spreadsheet, timeZone);
     var txRecords = [];
     for (var t = 1; t < txData.length; t++) {
       var row = txData[t];
       if (!row[2]) continue;
       var normalizedTimestamp = row[0] ? normalizeTimestampKey(row[0], timeZone) : "";
-      if (normalizedTimestamp && skippedTimestamps[normalizedTimestamp]) {
-        continue;
-      }
       var parsed = parseTransactionRow(row, schemaMode);
 
       txRecords.push({
@@ -956,7 +828,7 @@ fun AppsScriptSetupScreen(
           ),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
