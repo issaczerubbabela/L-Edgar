@@ -65,3 +65,7 @@ app/build/
 
 .tmp
 .tmp_vico_src
+
+# Generated when the ui-ux-pro-max skill's search tool runs
+__pycache__/
+*.pyc

@@ -43,7 +43,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Added .tmp and .tmp_vico_src to gitignore for local artifact cleanup",
             "Conflict resolution now emits per-action audit snackbars with exact resolved and remaining counts",
             "Installed mattpocock/skills productivity skill set (grill-me, grilling, handoff, teach, to-questionnaire, wait-what, writing-for-agents) under .agents/skills/ for general workflow assistance",
-            "Installed frontend-design (anthropics/skills) and ui-ux-pro-max (nextlevelbuilder) design skills under .agents/skills/ for UI/UX design work, including a searchable Jetpack Compose stack knowledge base"
+            "Installed frontend-design (anthropics/skills) and ui-ux-pro-max (nextlevelbuilder) design skills under .agents/skills/ for UI/UX design work, including a searchable Jetpack Compose stack knowledge base",
+            "Added __pycache__ and *.pyc to gitignore so the ui-ux-pro-max search tool stops leaving untracked files behind"
         )
     ),
     ChangelogRelease(
