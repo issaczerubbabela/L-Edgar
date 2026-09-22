@@ -17,7 +17,10 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Expense Breakdown now includes tabbed Expense and Income category views with the same interactive donut experience",
             "Cash Flow now supports category filtering with an explicit All Categories option and time bucketing controls for Daily, Weekly, Monthly, and Yearly views",
             "Account Balance As-Of now supports precise timestamp values with a Set to Now shortcut in add/edit account flows",
-            "Added advanced Sheets sync conflict resolution UI"
+            "Added advanced Sheets sync conflict resolution UI",
+            "Add Transaction redesigned around a custom numeric keypad: a dominant amount display, tappable chips for category/account/note that open bottom sheets, and a date pill, replacing the stacked text-field form",
+            "Category and account chips on the Add Transaction screen now open a searchable picker sheet with an inline + Add option for creating a new category without leaving the screen",
+            "Quick Add (widget, Quick Settings tile, app shortcut) now shares the same keypad and category-picker sheet as the full Add Transaction screen"
         ),
         fixes = listOf(
             "Cash Flow chart now refreshes plotted series correctly when switching top period months, preventing stale bars/lines and stale Y-axis scale carryover",
@@ -27,7 +30,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Account balance math now compares transaction timestamps against precise As-Of values, including same-day hour/minute boundaries",
             "Quick Settings quick-add now runs in an isolated transient task, so dismissing the sheet no longer reveals the main app behind it",
             "Removed legacy duplicate-skip resolution plumbing and standardized Sheets conflict handling on timestamp-based conflict flow",
-            "Fixed Google Sheets import crash by removing non-unique conflict list keys so the Conflict Resolution sheet opens reliably"
+            "Fixed Google Sheets import crash by removing non-unique conflict list keys so the Conflict Resolution sheet opens reliably",
+            "Quick Add now enqueues a sync after saving, instead of leaving the record unsynced until some other action triggered a sync run"
         ),
         qol = listOf(
             "Quick Settings tile click now stays in quick-entry flow and updates tile state without opening the main app tabs",
