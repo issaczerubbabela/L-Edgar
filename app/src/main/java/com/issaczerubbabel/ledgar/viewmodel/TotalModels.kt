@@ -13,22 +13,12 @@ data class BudgetProgressUi(
     val todayMarkerFraction: Float = 0f
 )
 
-data class AccountsSummaryUi(
-    val dateRangeLabel: String = "",
-    val comparedExpensesPercent: Int = 0,
-    val cashAccountsExpense: Double = 0.0,
-    val cardExpense: Double = 0.0,
-    val transferExpense: Double = 0.0
-)
-
 data class TotalTabUiState(
     val selectedYearMonth: YearMonth = YearMonth.now(),
     val periodLabel: String = "",
     val summary: PeriodSummary = PeriodSummary(),
     val isBudgetExpanded: Boolean = true,
-    val isAccountsExpanded: Boolean = true,
-    val budgetItems: List<BudgetProgressUi> = emptyList(),
-    val accountsSummary: AccountsSummaryUi = AccountsSummaryUi()
+    val budgetItems: List<BudgetProgressUi> = emptyList()
 )
 
 data class BudgetSettingItemUi(

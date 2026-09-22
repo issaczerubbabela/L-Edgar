@@ -3,7 +3,6 @@ package com.issaczerubbabel.ledgar.ui.screens
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -18,7 +17,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -43,7 +41,6 @@ import com.issaczerubbabel.ledgar.viewmodel.TotalTabUiState
 fun TotalTabScreen(
     state: TotalTabUiState,
     onToggleBudget: () -> Unit,
-    onToggleAccounts: () -> Unit,
     onNavigateBudgetSetting: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -66,29 +63,6 @@ fun TotalTabScreen(
             if (state.isBudgetExpanded) {
                 items(state.budgetItems.size) { index ->
                     BudgetProgressRow(item = state.budgetItems[index])
-                }
-            }
-
-            item {
-                Spacer(Modifier.height(8.dp))
-                SectionHeader(
-                    icon = Icons.Filled.Paid,
-                    title = "Accounts",
-                    trailingText = state.accountsSummary.dateRangeLabel,
-                    onTrailingClick = {},
-                    isExpanded = state.isAccountsExpanded,
-                    onToggle = onToggleAccounts
-                )
-            }
-
-            if (state.isAccountsExpanded) {
-                item {
-                    AccountsCard(
-                        comparedPercent = state.accountsSummary.comparedExpensesPercent,
-                        cashAccounts = state.accountsSummary.cashAccountsExpense,
-                        card = state.accountsSummary.cardExpense,
-                        transfer = state.accountsSummary.transferExpense
-                    )
                 }
             }
         }
@@ -220,36 +194,6 @@ private fun IdealBudgetProgressBar(
             strokeWidth = 2.dp.toPx(),
             cap = StrokeCap.Round
         )
-    }
-}
-
-@Composable
-private fun AccountsCard(
-    comparedPercent: Int,
-    cashAccounts: Double,
-    card: Double,
-    transfer: Double
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-            .background(Color(0xFF232832), shape = MaterialTheme.shapes.small)
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        AccountsLine("Compared Expenses (Last month)", "${comparedPercent}%")
-        AccountsLine("Expenses (Cash, Accounts)", "₹ ${money(cashAccounts)}")
-        AccountsLine("Expenses (Card)", "₹ ${money(card)}")
-        AccountsLine("Transfer (Cash, Accounts -> )", "₹ ${money(transfer)}")
-    }
-}
-
-@Composable
-private fun AccountsLine(label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp, modifier = Modifier.weight(1f))
-        Text(value, color = MaterialTheme.colorScheme.onBackground, fontSize = 17.sp)
     }
 }
 

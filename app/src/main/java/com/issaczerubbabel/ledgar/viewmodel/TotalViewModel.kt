@@ -33,36 +33,19 @@ class TotalViewModel @Inject constructor(
 
     private val _selectedYearMonth = MutableStateFlow(YearMonth.now())
     private val _isBudgetExpanded = MutableStateFlow(true)
-    private val _isAccountsExpanded = MutableStateFlow(true)
     private val budgetsForSelectedMonth = _selectedYearMonth.flatMapLatest { ym ->
         budgetRepository.observeBudgets(ym.format(MONTH_YEAR_FORMATTER))
-    }
-
-    private val uiChromeState = combine(
-        _selectedYearMonth,
-        _isBudgetExpanded,
-        _isAccountsExpanded
-    ) { selectedYearMonth, isBudgetExpanded, isAccountsExpanded ->
-        UiChromeState(
-            selectedYearMonth = selectedYearMonth,
-            isBudgetExpanded = isBudgetExpanded,
-            isAccountsExpanded = isAccountsExpanded
-        )
     }
 
     val uiState: StateFlow<TotalTabUiState> = combine(
         expenseRepository.getAllRecords(),
         budgetsForSelectedMonth,
-        uiChromeState
-    ) { records, budgets, chrome ->
-        val selectedYm = chrome.selectedYearMonth
-
+        _selectedYearMonth,
+        _isBudgetExpanded
+    ) { records, budgets, selectedYm, isBudgetExpanded ->
         val monthRecords = records.filterByYearMonth(selectedYm)
         val monthIncome = monthRecords.filter { it.type == "Income" }.sumOf { it.amount }
         val monthExpense = monthRecords.filter { it.type == "Expense" }.sumOf { it.amount }
-
-        val budgetItems = buildBudgetItems(selectedYm, monthRecords, budgets)
-        val accountsSummary = buildAccountsSummary(selectedYm, records)
 
         TotalTabUiState(
             selectedYearMonth = selectedYm,
@@ -72,10 +55,8 @@ class TotalViewModel @Inject constructor(
                 expense = monthExpense,
                 total = monthIncome - monthExpense
             ),
-            isBudgetExpanded = chrome.isBudgetExpanded,
-            isAccountsExpanded = chrome.isAccountsExpanded,
-            budgetItems = budgetItems,
-            accountsSummary = accountsSummary
+            isBudgetExpanded = isBudgetExpanded,
+            budgetItems = buildBudgetItems(selectedYm, monthRecords, budgets)
         )
     }
         .flowOn(Dispatchers.Default)
@@ -90,8 +71,6 @@ class TotalViewModel @Inject constructor(
     }
 
     fun toggleBudgetSection() = _isBudgetExpanded.update { !it }
-
-    fun toggleAccountsSection() = _isAccountsExpanded.update { !it }
 
     private fun buildBudgetItems(
         selectedYm: YearMonth,
@@ -174,37 +153,6 @@ class TotalViewModel @Inject constructor(
         else -> "📒"
     }
 
-    private fun buildAccountsSummary(selectedYm: YearMonth, allRecords: List<ExpenseRecord>): AccountsSummaryUi {
-        val currentMonthRecords = allRecords.filterByYearMonth(selectedYm)
-        val prevYm = selectedYm.minusMonths(1)
-        val previousMonthRecords = allRecords.filterByYearMonth(prevYm)
-
-        val currentExpense = currentMonthRecords.filter { it.type == "Expense" }.sumOf { it.amount }
-        val previousExpense = previousMonthRecords.filter { it.type == "Expense" }.sumOf { it.amount }
-
-        val cashAccountsExpense = currentMonthRecords.filter {
-            it.type == "Expense" && !it.paymentMode.contains("card", ignoreCase = true)
-        }.sumOf { it.amount }
-
-        val cardExpense = currentMonthRecords.filter {
-            it.type == "Expense" && it.paymentMode.contains("card", ignoreCase = true)
-        }.sumOf { it.amount }
-
-        val transferExpense = currentMonthRecords.filter {
-            it.category.contains("transfer", ignoreCase = true) || it.description.contains("transfer", ignoreCase = true)
-        }.sumOf { it.amount }
-
-        val comparedPercent = if (previousExpense <= 0.0) 100 else ((currentExpense / previousExpense) * 100).toInt()
-
-        return AccountsSummaryUi(
-            dateRangeLabel = "${selectedYm.monthValue}.1.${selectedYm.year % 100} ~ ${selectedYm.monthValue}.${selectedYm.lengthOfMonth()}.${selectedYm.year % 100}",
-            comparedExpensesPercent = comparedPercent,
-            cashAccountsExpense = cashAccountsExpense,
-            cardExpense = cardExpense,
-            transferExpense = transferExpense
-        )
-    }
-
     private fun percent(spent: Double, budget: Double): Int {
         if (budget <= 0.0) return 0
         return ((spent / budget) * 100).toInt().coerceIn(0, 999)
@@ -223,10 +171,4 @@ class TotalViewModel @Inject constructor(
         private const val TOTAL_BUDGET_CATEGORY = "__TOTAL__"
         private val MONTH_YEAR_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM")
     }
-
-    private data class UiChromeState(
-        val selectedYearMonth: YearMonth,
-        val isBudgetExpanded: Boolean,
-        val isAccountsExpanded: Boolean
-    )
 }

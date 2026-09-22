@@ -260,7 +260,6 @@ fun HistoryScreen(
                         3 -> TotalTabScreen(
                             state = totalState,
                             onToggleBudget = totalVm::toggleBudgetSection,
-                            onToggleAccounts = totalVm::toggleAccountsSection,
                             onNavigateBudgetSetting = onNavigateToBudgetSetting,
                             modifier = Modifier.fillMaxSize()
                         )

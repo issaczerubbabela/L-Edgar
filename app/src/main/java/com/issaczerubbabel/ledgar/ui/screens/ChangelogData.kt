@@ -27,7 +27,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Account balance math now compares transaction timestamps against precise As-Of values, including same-day hour/minute boundaries",
             "Quick Settings quick-add now runs in an isolated transient task, so dismissing the sheet no longer reveals the main app behind it",
             "Removed legacy duplicate-skip resolution plumbing and standardized Sheets conflict handling on timestamp-based conflict flow",
-            "Fixed Google Sheets import crash by removing non-unique conflict list keys so the Conflict Resolution sheet opens reliably"
+            "Fixed Google Sheets import crash by removing non-unique conflict list keys so the Conflict Resolution sheet opens reliably",
+            "Accounts transfer total now counts transactions whose type is Transfer, instead of any transaction with the word \"transfer\" in its category or description, which both missed real transfers and counted unrelated expenses"
         ),
         qol = listOf(
             "Quick Settings tile click now stays in quick-entry flow and updates tile state without opening the main app tabs",
@@ -46,6 +47,9 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Export renamed from \"Export data to Excel\" to \"Export to CSV\" to match the file it actually produces, replacing the stale \"Money Manager - Excel\" dialog title",
             "Export dialog now has its own month picker, so any past month can be exported without leaving Settings, and each interval option is labelled with the exact range it will produce (Sep 2026, Jul – Sep 2026, 2026, 2025) instead of a generic name",
             "Exported file is now named for the range it contains, for example sheetsync_export_20260901_to_20260930.csv",
+            "Accounts summary (cash, card and transfer totals) moved out of the Total tab into Insights, where it now follows the selected period scope instead of being pinned to the current month",
+            "Accounts comparison now reads as a signed change against the immediately preceding period of the same length, with a trend arrow alongside the figure, and says \"No earlier data\" when there is nothing to compare against rather than showing a meaningless 100%",
+            "Total tab now shows only the Budget section, clearing the way for the salary-cycle bucket rebuild",
             "Export dialog now uses real radio buttons with 48dp touch targets, inline date validation with an example format, and an Export action that stays disabled until a custom range is valid",
             "Export result is now reported through the Settings snackbar with the exported transaction count instead of an inline status line"
         )

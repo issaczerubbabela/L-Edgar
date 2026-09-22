@@ -27,6 +27,7 @@ import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 import javax.inject.Inject
+import kotlin.math.roundToInt
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -91,6 +92,13 @@ class StatsViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val filteredTransactions: StateFlow<List<ExpenseRecord>> = scopedTransactionsInternal
+
+    val accountsBreakdown: StateFlow<AccountsBreakdownUi> = combine(
+        allRecords,
+        resolvedDateRange
+    ) { records, range ->
+        buildAccountsBreakdown(records, range)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AccountsBreakdownUi())
 
     val expenseByCategory: StateFlow<List<CategoryTotal>> = scopedTransactionsInternal
         .map { records -> records.toCategoryTotals(type = "Expense") }
@@ -528,6 +536,41 @@ class StatsViewModel @Inject constructor(
             }
         }
     }
+
+    private fun buildAccountsBreakdown(
+        records: List<ExpenseRecord>,
+        range: StatsDateRange
+    ): AccountsBreakdownUi {
+        val periodDays = daysInclusive(range.start, range.end).toLong()
+        val previousEnd = range.start.minusDays(1)
+        val previousStart = previousEnd.minusDays(periodDays - 1)
+
+        val current = records.withinRange(range.start, range.end)
+        val previous = records.withinRange(previousStart, previousEnd)
+
+        val currentExpenses = current.filter { it.type == "Expense" }
+        val currentExpense = currentExpenses.sumOf { it.amount }
+        val previousExpense = previous.filter { it.type == "Expense" }.sumOf { it.amount }
+
+        val (card, cash) = currentExpenses.partition { it.paymentMode.contains("card", ignoreCase = true) }
+
+        return AccountsBreakdownUi(
+            cashAndAccountsExpense = cash.sumOf { it.amount },
+            cardExpense = card.sumOf { it.amount },
+            transferTotal = current.filter { it.type == "Transfer" }.sumOf { it.amount },
+            changePercent = if (previousExpense <= 0.0) {
+                null
+            } else {
+                (((currentExpense - previousExpense) / previousExpense) * 100).roundToInt()
+            }
+        )
+    }
+
+    private fun List<ExpenseRecord>.withinRange(start: LocalDate, end: LocalDate): List<ExpenseRecord> =
+        filter { record ->
+            val recordDate = parseFlexibleDate(record.date) ?: return@filter false
+            recordDate >= start && recordDate <= end
+        }
 
     private fun categoryColorFor(categoryName: String): Color {
         return CATEGORY_COLORS[kotlin.math.abs(categoryName.hashCode()) % CATEGORY_COLORS.size]
