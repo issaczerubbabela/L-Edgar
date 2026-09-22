@@ -262,15 +262,6 @@ fun HistoryScreen(
                             onToggleBudget = totalVm::toggleBudgetSection,
                             onToggleAccounts = totalVm::toggleAccountsSection,
                             onNavigateBudgetSetting = onNavigateToBudgetSetting,
-                            onExportClick = totalVm::openExportDialog,
-                            onExportDismiss = totalVm::closeExportDialog,
-                            onSelectExportInterval = totalVm::selectExportInterval,
-                            onCustomStartChanged = totalVm::updateCustomStart,
-                            onCustomEndChanged = totalVm::updateCustomEnd,
-                            onExportConfirm = totalVm::requestExportDocument,
-                            pendingExportFileName = totalState.pendingExportFileName,
-                            onConsumeExportRequest = totalVm::consumeExportRequest,
-                            onExportUriPicked = totalVm::exportDataToUri,
                             modifier = Modifier.fillMaxSize()
                         )
                         else -> DailyContent(

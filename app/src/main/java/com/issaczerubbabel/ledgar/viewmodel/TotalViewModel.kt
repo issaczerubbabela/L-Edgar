@@ -1,32 +1,23 @@
 package com.issaczerubbabel.ledgar.viewmodel
 
-import android.content.Context
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.Budget
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
-import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.BudgetRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
-import java.io.OutputStreamWriter
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -37,20 +28,12 @@ import javax.inject.Inject
 @OptIn(ExperimentalCoroutinesApi::class)
 class TotalViewModel @Inject constructor(
     private val expenseRepository: ExpenseRepository,
-    private val accountRepository: AccountRepository,
-    private val budgetRepository: BudgetRepository,
-    @ApplicationContext private val appContext: Context
+    private val budgetRepository: BudgetRepository
 ) : ViewModel() {
 
     private val _selectedYearMonth = MutableStateFlow(YearMonth.now())
     private val _isBudgetExpanded = MutableStateFlow(true)
     private val _isAccountsExpanded = MutableStateFlow(true)
-    private val _showExportDialog = MutableStateFlow(false)
-    private val _selectedExportInterval = MutableStateFlow(ExportInterval.CURRENT_MONTH)
-    private val _customStartDateInput = MutableStateFlow("")
-    private val _customEndDateInput = MutableStateFlow("")
-    private val _pendingExportFileName = MutableStateFlow<String?>(null)
-    private val _exportStatusMessage = MutableStateFlow<String?>(null)
     private val budgetsForSelectedMonth = _selectedYearMonth.flatMapLatest { ym ->
         budgetRepository.observeBudgets(ym.format(MONTH_YEAR_FORMATTER))
     }
@@ -67,38 +50,11 @@ class TotalViewModel @Inject constructor(
         )
     }
 
-    private val exportDialogState = combine(
-        _showExportDialog,
-        _selectedExportInterval,
-        _customStartDateInput,
-        _customEndDateInput
-    ) { showExportDialog, selectedExportInterval, customStartDateInput, customEndDateInput ->
-        ExportDialogState(
-            showExportDialog = showExportDialog,
-            selectedExportInterval = selectedExportInterval,
-            customStartDateInput = customStartDateInput,
-            customEndDateInput = customEndDateInput
-        )
-    }
-
-    private val exportUiState = combine(
-        exportDialogState,
-        _pendingExportFileName,
-        _exportStatusMessage
-    ) { exportDialog, pendingExportFileName, exportStatusMessage ->
-        ExportUiState(
-            dialogState = exportDialog,
-            pendingExportFileName = pendingExportFileName,
-            exportStatusMessage = exportStatusMessage
-        )
-    }
-
     val uiState: StateFlow<TotalTabUiState> = combine(
         expenseRepository.getAllRecords(),
         budgetsForSelectedMonth,
-        uiChromeState,
-        exportUiState
-    ) { records, budgets, chrome, export ->
+        uiChromeState
+    ) { records, budgets, chrome ->
         val selectedYm = chrome.selectedYearMonth
 
         val monthRecords = records.filterByYearMonth(selectedYm)
@@ -119,13 +75,7 @@ class TotalViewModel @Inject constructor(
             isBudgetExpanded = chrome.isBudgetExpanded,
             isAccountsExpanded = chrome.isAccountsExpanded,
             budgetItems = budgetItems,
-            accountsSummary = accountsSummary,
-            showExportDialog = export.dialogState.showExportDialog,
-            selectedExportInterval = export.dialogState.selectedExportInterval,
-            customStartDateInput = export.dialogState.customStartDateInput,
-            customEndDateInput = export.dialogState.customEndDateInput,
-            pendingExportFileName = export.pendingExportFileName,
-            exportStatusMessage = export.exportStatusMessage
+            accountsSummary = accountsSummary
         )
     }
         .flowOn(Dispatchers.Default)
@@ -142,85 +92,6 @@ class TotalViewModel @Inject constructor(
     fun toggleBudgetSection() = _isBudgetExpanded.update { !it }
 
     fun toggleAccountsSection() = _isAccountsExpanded.update { !it }
-
-    fun openExportDialog() {
-        _showExportDialog.value = true
-    }
-
-    fun closeExportDialog() {
-        _showExportDialog.value = false
-    }
-
-    fun selectExportInterval(interval: ExportInterval) {
-        _selectedExportInterval.value = interval
-    }
-
-    fun updateCustomStart(input: String) {
-        _customStartDateInput.value = input
-    }
-
-    fun updateCustomEnd(input: String) {
-        _customEndDateInput.value = input
-    }
-
-    fun clearExportMessage() {
-        _exportStatusMessage.value = null
-    }
-
-    fun requestExportDocument() {
-        val ym = _selectedYearMonth.value
-        val stamp = ym.format(DateTimeFormatter.ofPattern("yyyy_MM", Locale.ENGLISH))
-        _pendingExportFileName.value = "sheetsync_export_${stamp}.csv"
-    }
-
-    fun consumeExportRequest() {
-        _pendingExportFileName.value = null
-    }
-
-    fun exportDataToUri(uri: Uri) {
-        viewModelScope.launch {
-            val range = buildRange(_selectedExportInterval.value, _selectedYearMonth.value)
-
-            if (range == null) {
-                _exportStatusMessage.value = "Invalid export range"
-                return@launch
-            }
-
-            val filteredRecords = expenseRepository
-                .getRecordsByDateRange(range.first.toString(), range.second.toString())
-                .first()
-            val accounts = accountRepository.getAllAccounts().first()
-            val accountMap = accounts.associateBy { it.id }
-
-            val exported = runCatching {
-                writeCsv(uri, filteredRecords, accountMap)
-            }
-
-            if (exported.isSuccess) {
-                _exportStatusMessage.value = "Export completed"
-                _showExportDialog.value = false
-            } else {
-                _exportStatusMessage.value = "Export failed"
-            }
-        }
-    }
-
-    private fun buildRange(interval: ExportInterval, selectedYm: YearMonth): Pair<LocalDate, LocalDate>? {
-        return when (interval) {
-            ExportInterval.CURRENT_MONTH -> selectedYm.atDay(1) to selectedYm.atEndOfMonth()
-            ExportInterval.LAST_3_MONTHS -> selectedYm.minusMonths(2).atDay(1) to selectedYm.atEndOfMonth()
-            ExportInterval.CURRENT_YEAR -> LocalDate.of(selectedYm.year, 1, 1) to LocalDate.of(selectedYm.year, 12, 31)
-            ExportInterval.LAST_YEAR -> {
-                val year = selectedYm.year - 1
-                LocalDate.of(year, 1, 1) to LocalDate.of(year, 12, 31)
-            }
-            ExportInterval.CUSTOM -> {
-                val start = runCatching { LocalDate.parse(_customStartDateInput.value) }.getOrNull()
-                val end = runCatching { LocalDate.parse(_customEndDateInput.value) }.getOrNull()
-                if (start != null && end != null && !end.isBefore(start)) start to end else null
-            }
-        }
-    }
 
     private fun buildBudgetItems(
         selectedYm: YearMonth,
@@ -348,39 +219,6 @@ class TotalViewModel @Inject constructor(
     private fun parseRecordDate(record: ExpenseRecord): LocalDate? =
         parseFlexibleDate(record.date) ?: record.remoteTimestamp?.let(::parseFlexibleDate)
 
-    private suspend fun writeCsv(
-        uri: Uri,
-        records: List<ExpenseRecord>,
-        accountMap: Map<Long, AccountRecord>
-    ) = withContext(Dispatchers.IO) {
-        appContext.contentResolver.openOutputStream(uri)?.use { stream ->
-            OutputStreamWriter(stream).use { writer ->
-                writer.appendLine("Date,Type,Category/Account,Amount,Note")
-                records.forEach { record ->
-                    val categoryOrAccount = if (record.type == "Transfer") {
-                        val from = record.fromAccountId?.let { accountMap[it]?.accountName } ?: "Unknown"
-                        val to = record.toAccountId?.let { accountMap[it]?.accountName } ?: "Unknown"
-                        "Transfer: $from -> $to"
-                    } else {
-                        record.category
-                    }
-                    val note = record.remarks.ifBlank { record.description }
-                    writer.appendLine(
-                        listOf(
-                            csvEscape(record.date),
-                            csvEscape(record.type),
-                            csvEscape(categoryOrAccount),
-                            record.amount.toString(),
-                            csvEscape(note)
-                        ).joinToString(",")
-                    )
-                }
-            }
-        } ?: error("Unable to open output stream")
-    }
-
-    private fun csvEscape(value: String): String = "\"${value.replace("\"", "\"\"")}\""
-
     companion object {
         private const val TOTAL_BUDGET_CATEGORY = "__TOTAL__"
         private val MONTH_YEAR_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM")
@@ -390,18 +228,5 @@ class TotalViewModel @Inject constructor(
         val selectedYearMonth: YearMonth,
         val isBudgetExpanded: Boolean,
         val isAccountsExpanded: Boolean
-    )
-
-    private data class ExportDialogState(
-        val showExportDialog: Boolean,
-        val selectedExportInterval: ExportInterval,
-        val customStartDateInput: String,
-        val customEndDateInput: String
-    )
-
-    private data class ExportUiState(
-        val dialogState: ExportDialogState,
-        val pendingExportFileName: String?,
-        val exportStatusMessage: String?
     )
 }

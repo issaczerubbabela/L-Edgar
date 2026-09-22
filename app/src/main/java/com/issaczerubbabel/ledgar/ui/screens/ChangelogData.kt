@@ -41,7 +41,12 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Cash Flow chart now renders thicker stacked bars and overlays average-per-day plus budget-aware max-per-day guide lines",
             "Insights card visuals refined: removed redundant chart titles, aligned chart background with card surface, simplified daily x-axis labels, and removed chart grid guidelines",
             "Added .tmp and .tmp_vico_src to gitignore for local artifact cleanup",
-            "Conflict resolution now emits per-action audit snackbars with exact resolved and remaining counts"
+            "Conflict resolution now emits per-action audit snackbars with exact resolved and remaining counts",
+            "Export moved out of the Total tab into Settings, directly below Import from CSV, so every data import and export action now lives in one place",
+            "Export renamed from \"Export data to Excel\" to \"Export to CSV\" to match the file it actually produces, replacing the stale \"Money Manager - Excel\" dialog title",
+            "Export interval options now resolve against today rather than whichever month the Total tab happened to be showing, and are relabelled This month / Last 3 months / This year / Last year to match",
+            "Export dialog now uses real radio buttons with 48dp touch targets, inline date validation with an example format, and an Export action that stays disabled until a custom range is valid",
+            "Export result is now reported through the Settings snackbar with the exported transaction count instead of an inline status line"
         )
     ),
     ChangelogRelease(

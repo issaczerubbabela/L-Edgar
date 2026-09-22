@@ -2,14 +2,6 @@ package com.issaczerubbabel.ledgar.viewmodel
 
 import java.time.YearMonth
 
-enum class ExportInterval(val label: String) {
-    CURRENT_MONTH("Monthly"),
-    LAST_3_MONTHS("Last 3 Months"),
-    CURRENT_YEAR("Annually"),
-    LAST_YEAR("Last Year"),
-    CUSTOM("Custom Date Range")
-}
-
 data class BudgetProgressUi(
     val title: String,
     val icon: String,
@@ -36,13 +28,7 @@ data class TotalTabUiState(
     val isBudgetExpanded: Boolean = true,
     val isAccountsExpanded: Boolean = true,
     val budgetItems: List<BudgetProgressUi> = emptyList(),
-    val accountsSummary: AccountsSummaryUi = AccountsSummaryUi(),
-    val showExportDialog: Boolean = false,
-    val selectedExportInterval: ExportInterval = ExportInterval.CURRENT_MONTH,
-    val customStartDateInput: String = "",
-    val customEndDateInput: String = "",
-    val pendingExportFileName: String? = null,
-    val exportStatusMessage: String? = null
+    val accountsSummary: AccountsSummaryUi = AccountsSummaryUi()
 )
 
 data class BudgetSettingItemUi(

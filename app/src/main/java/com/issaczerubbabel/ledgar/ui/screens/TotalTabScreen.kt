@@ -1,8 +1,5 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,25 +12,18 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Paid
-import androidx.compose.material.icons.filled.TableChart
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -44,11 +34,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.issaczerubbabel.ledgar.ui.theme.ExpenseOrange
 import com.issaczerubbabel.ledgar.ui.theme.FabRed
 import com.issaczerubbabel.ledgar.ui.theme.IncomeBlue
 import com.issaczerubbabel.ledgar.viewmodel.BudgetProgressUi
-import com.issaczerubbabel.ledgar.viewmodel.ExportInterval
 import com.issaczerubbabel.ledgar.viewmodel.TotalTabUiState
 
 @Composable
@@ -57,31 +45,8 @@ fun TotalTabScreen(
     onToggleBudget: () -> Unit,
     onToggleAccounts: () -> Unit,
     onNavigateBudgetSetting: () -> Unit,
-    onExportClick: () -> Unit,
-    onExportDismiss: () -> Unit,
-    onSelectExportInterval: (ExportInterval) -> Unit,
-    onCustomStartChanged: (String) -> Unit,
-    onCustomEndChanged: (String) -> Unit,
-    onExportConfirm: () -> Unit,
-    pendingExportFileName: String?,
-    onConsumeExportRequest: () -> Unit,
-    onExportUriPicked: (Uri) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val exportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("text/csv")
-    ) { uri ->
-        if (uri != null) {
-            onExportUriPicked(uri)
-        }
-    }
-
-    LaunchedEffect(pendingExportFileName) {
-        val fileName = pendingExportFileName ?: return@LaunchedEffect
-        exportLauncher.launch(fileName)
-        onConsumeExportRequest()
-    }
-
     Box(modifier = modifier) {
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
@@ -125,32 +90,7 @@ fun TotalTabScreen(
                         transfer = state.accountsSummary.transferExpense
                     )
                 }
-                item {
-                    ExportButton(onClick = onExportClick)
-                }
-                state.exportStatusMessage?.let { message ->
-                    item {
-                        Text(
-                            text = message,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                    }
-                }
             }
-        }
-
-        if (state.showExportDialog) {
-            ExportDialog(
-                selected = state.selectedExportInterval,
-                customStart = state.customStartDateInput,
-                customEnd = state.customEndDateInput,
-                onSelect = onSelectExportInterval,
-                onStartChanged = onCustomStartChanged,
-                onEndChanged = onCustomEndChanged,
-                onDismiss = onExportDismiss,
-                onConfirm = onExportConfirm
-            )
         }
     }
 }
@@ -311,89 +251,6 @@ private fun AccountsLine(label: String, value: String) {
         Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp, modifier = Modifier.weight(1f))
         Text(value, color = MaterialTheme.colorScheme.onBackground, fontSize = 17.sp)
     }
-}
-
-@Composable
-private fun ExportButton(onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .background(Color(0xFF232832), shape = MaterialTheme.shapes.small)
-            .clickable(onClick = onClick)
-            .padding(vertical = 16.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(Icons.Filled.TableChart, contentDescription = null, tint = Color(0xFF1FCE6D), modifier = Modifier.size(24.dp))
-        Spacer(Modifier.width(10.dp))
-        Text("Export data to Excel", color = MaterialTheme.colorScheme.onBackground, fontSize = 18.sp)
-    }
-}
-
-@Composable
-private fun ExportDialog(
-    selected: ExportInterval,
-    customStart: String,
-    customEnd: String,
-    onSelect: (ExportInterval) -> Unit,
-    onStartChanged: (String) -> Unit,
-    onEndChanged: (String) -> Unit,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text("Export")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        },
-        title = { Text("Money Manager - Excel") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ExportInterval.values().forEach { interval ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelect(interval) }
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = if (selected == interval) Icons.Filled.Description else Icons.Filled.ExpandMore,
-                            contentDescription = null,
-                            tint = if (selected == interval) FabRed else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(interval.label)
-                    }
-                }
-
-                if (selected == ExportInterval.CUSTOM) {
-                    OutlinedTextField(
-                        value = customStart,
-                        onValueChange = onStartChanged,
-                        label = { Text("Start (yyyy-MM-dd)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = customEnd,
-                        onValueChange = onEndChanged,
-                        label = { Text("End (yyyy-MM-dd)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-        }
-    )
 }
 
 private fun money(value: Double): String = "%,.2f".format(kotlin.math.abs(value))
