@@ -384,11 +384,11 @@ private fun AmountDisplay(amount: String, type: String, modifier: Modifier = Mod
     }
     val displayValue = amount.ifEmpty { "0" }
     val baseSp = when {
-        displayValue.length <= 6 -> 46f
-        displayValue.length <= 9 -> 34f
-        else -> 26f
+        displayValue.length <= 5 -> 96f
+        displayValue.length <= 8 -> 72f
+        else -> 52f
     }
-    val fontSize = responsiveTextSize(baseSp = baseSp, minSp = 20f, maxSp = 48f)
+    val fontSize = responsiveTextSize(baseSp = baseSp, minSp = 36f, maxSp = 104f)
 
     Box(
         modifier = modifier
@@ -399,11 +399,11 @@ private fun AmountDisplay(amount: String, type: String, modifier: Modifier = Mod
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 text = "₹",
-                fontSize = 22.sp,
+                fontSize = fontSize.value.times(0.4f).sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 6.dp)
+                modifier = Modifier.padding(bottom = fontSize.value.times(0.12f).dp)
             )
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(6.dp))
             Text(
                 text = displayValue,
                 fontSize = fontSize,
