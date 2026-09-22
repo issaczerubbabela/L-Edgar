@@ -20,7 +20,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.OutputStreamWriter
 import java.time.LocalDate
-import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import javax.inject.Inject
@@ -41,6 +40,12 @@ class ExportViewModel @Inject constructor(
 
     fun selectInterval(interval: ExportInterval) = _uiState.update { it.copy(selectedInterval = interval) }
 
+    fun previousMonth() = _uiState.update { it.copy(anchorMonth = it.anchorMonth.minusMonths(1)) }
+
+    fun nextMonth() = _uiState.update {
+        if (it.canPickLaterMonth) it.copy(anchorMonth = it.anchorMonth.plusMonths(1)) else it
+    }
+
     fun updateCustomStart(input: String) = _uiState.update { it.copy(customStartDateInput = input) }
 
     fun updateCustomEnd(input: String) = _uiState.update { it.copy(customEndDateInput = input) }
@@ -48,8 +53,14 @@ class ExportViewModel @Inject constructor(
     fun clearStatusMessage() = _uiState.update { it.copy(statusMessage = null) }
 
     fun requestExportDocument() {
-        val stamp = LocalDate.now().format(FILE_STAMP_FORMATTER)
-        _uiState.update { it.copy(pendingFileName = "sheetsync_export_$stamp.csv") }
+        val range = buildRange(_uiState.value)
+        if (range == null) {
+            _uiState.update { it.copy(statusMessage = "Enter a valid start and end date") }
+            return
+        }
+        val from = range.first.format(FILE_STAMP_FORMATTER)
+        val to = range.second.format(FILE_STAMP_FORMATTER)
+        _uiState.update { it.copy(pendingFileName = "sheetsync_export_${from}_to_$to.csv") }
     }
 
     fun consumeExportRequest() = _uiState.update { it.copy(pendingFileName = null) }
@@ -83,13 +94,13 @@ class ExportViewModel @Inject constructor(
     }
 
     private fun buildRange(state: ExportUiState): Pair<LocalDate, LocalDate>? {
-        val thisMonth = YearMonth.now()
+        val anchor = state.anchorMonth
         return when (state.selectedInterval) {
-            ExportInterval.CURRENT_MONTH -> thisMonth.atDay(1) to thisMonth.atEndOfMonth()
-            ExportInterval.LAST_3_MONTHS -> thisMonth.minusMonths(2).atDay(1) to thisMonth.atEndOfMonth()
-            ExportInterval.CURRENT_YEAR -> LocalDate.of(thisMonth.year, 1, 1) to LocalDate.of(thisMonth.year, 12, 31)
+            ExportInterval.CURRENT_MONTH -> anchor.atDay(1) to anchor.atEndOfMonth()
+            ExportInterval.LAST_3_MONTHS -> anchor.minusMonths(2).atDay(1) to anchor.atEndOfMonth()
+            ExportInterval.CURRENT_YEAR -> LocalDate.of(anchor.year, 1, 1) to LocalDate.of(anchor.year, 12, 31)
             ExportInterval.LAST_YEAR -> {
-                val year = thisMonth.year - 1
+                val year = anchor.year - 1
                 LocalDate.of(year, 1, 1) to LocalDate.of(year, 12, 31)
             }
             ExportInterval.CUSTOM -> {
@@ -135,6 +146,6 @@ class ExportViewModel @Inject constructor(
 
     companion object {
         private val FILE_STAMP_FORMATTER: DateTimeFormatter =
-            DateTimeFormatter.ofPattern("yyyy_MM_dd", Locale.ENGLISH)
+            DateTimeFormatter.ofPattern("yyyyMMdd", Locale.ENGLISH)
     }
 }

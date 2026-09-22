@@ -121,9 +121,13 @@ fun SettingsScreen(
     if (exportState.showDialog) {
         ExportDialog(
             selected = exportState.selectedInterval,
+            anchorMonth = exportState.anchorMonth,
+            canPickLaterMonth = exportState.canPickLaterMonth,
             customStart = exportState.customStartDateInput,
             customEnd = exportState.customEndDateInput,
             onSelect = exportVm::selectInterval,
+            onPreviousMonth = exportVm::previousMonth,
+            onNextMonth = exportVm::nextMonth,
             onStartChanged = exportVm::updateCustomStart,
             onEndChanged = exportVm::updateCustomEnd,
             onDismiss = exportVm::closeDialog,

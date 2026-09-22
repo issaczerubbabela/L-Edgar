@@ -10,9 +10,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -23,16 +26,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.issaczerubbabel.ledgar.viewmodel.ExportInterval
 import java.time.LocalDate
+import java.time.YearMonth
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @Composable
 fun ExportDialog(
     selected: ExportInterval,
+    anchorMonth: YearMonth,
+    canPickLaterMonth: Boolean,
     customStart: String,
     customEnd: String,
     onSelect: (ExportInterval) -> Unit,
+    onPreviousMonth: () -> Unit,
+    onNextMonth: () -> Unit,
     onStartChanged: (String) -> Unit,
     onEndChanged: (String) -> Unit,
     onDismiss: () -> Unit,
@@ -48,25 +59,59 @@ fun ExportDialog(
         icon = { Icon(Icons.Filled.TableChart, contentDescription = null) },
         title = { Text("Export to CSV") },
         text = {
-            Column(
-                modifier = Modifier.selectableGroup(),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                ExportInterval.entries.forEach { interval ->
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (!isCustom) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .selectable(
-                                selected = selected == interval,
-                                role = Role.RadioButton,
-                                onClick = { onSelect(interval) }
-                            ),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        RadioButton(selected = selected == interval, onClick = null)
-                        Spacer(Modifier.width(12.dp))
-                        Text(interval.label, style = MaterialTheme.typography.bodyLarge)
+                        IconButton(onClick = onPreviousMonth) {
+                            Icon(Icons.Filled.ChevronLeft, contentDescription = "Previous month")
+                        }
+                        Text(
+                            text = anchorMonth.format(MONTH_YEAR),
+                            style = MaterialTheme.typography.titleMedium,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = onNextMonth, enabled = canPickLaterMonth) {
+                            Icon(Icons.Filled.ChevronRight, contentDescription = "Next month")
+                        }
+                    }
+                }
+
+                Column(
+                    modifier = Modifier.selectableGroup(),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    ExportInterval.entries.forEach { interval ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .selectable(
+                                    selected = selected == interval,
+                                    role = Role.RadioButton,
+                                    onClick = { onSelect(interval) }
+                                ),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = selected == interval, onClick = null)
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = interval.rangeLabel(anchorMonth),
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                interval.caption()?.let { caption ->
+                                    Text(
+                                        text = caption,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -91,9 +136,11 @@ fun ExportDialog(
                     )
                     Text(
                         text = when {
-                            startDate == null || endDate == null -> "Use the format yyyy-MM-dd, for example 2026-04-18."
-                            endDate.isBefore(startDate) -> "The end date must fall on or after the start date."
-                            else -> "Exporting ${startDate} to ${endDate}."
+                            startDate == null || endDate == null ->
+                                "Use the format yyyy-MM-dd, for example 2026-04-18."
+                            endDate.isBefore(startDate) ->
+                                "The end date must fall on or after the start date."
+                            else -> "Exporting $startDate to $endDate."
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = if (rangeIsValid) {
@@ -114,6 +161,30 @@ fun ExportDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+}
+
+private val MONTH_YEAR: DateTimeFormatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
+private val MONTH_SHORT: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)
+private val MONTH_ONLY: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH)
+
+private fun ExportInterval.rangeLabel(anchor: YearMonth): String = when (this) {
+    ExportInterval.CURRENT_MONTH -> anchor.format(MONTH_SHORT)
+    ExportInterval.LAST_3_MONTHS -> {
+        val start = anchor.minusMonths(2)
+        val startText = if (start.year == anchor.year) start.format(MONTH_ONLY) else start.format(MONTH_SHORT)
+        "$startText – ${anchor.format(MONTH_SHORT)}"
+    }
+    ExportInterval.CURRENT_YEAR -> anchor.year.toString()
+    ExportInterval.LAST_YEAR -> (anchor.year - 1).toString()
+    ExportInterval.CUSTOM -> "Custom date range"
+}
+
+private fun ExportInterval.caption(): String? = when (this) {
+    ExportInterval.CURRENT_MONTH -> "Selected month"
+    ExportInterval.LAST_3_MONTHS -> "Three months ending with the selected month"
+    ExportInterval.CURRENT_YEAR -> "Whole year"
+    ExportInterval.LAST_YEAR -> "Year before"
+    ExportInterval.CUSTOM -> null
 }
 
 private fun parseDateOrNull(value: String): LocalDate? =

@@ -44,7 +44,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Conflict resolution now emits per-action audit snackbars with exact resolved and remaining counts",
             "Export moved out of the Total tab into Settings, directly below Import from CSV, so every data import and export action now lives in one place",
             "Export renamed from \"Export data to Excel\" to \"Export to CSV\" to match the file it actually produces, replacing the stale \"Money Manager - Excel\" dialog title",
-            "Export interval options now resolve against today rather than whichever month the Total tab happened to be showing, and are relabelled This month / Last 3 months / This year / Last year to match",
+            "Export dialog now has its own month picker, so any past month can be exported without leaving Settings, and each interval option is labelled with the exact range it will produce (Sep 2026, Jul – Sep 2026, 2026, 2025) instead of a generic name",
+            "Exported file is now named for the range it contains, for example sheetsync_export_20260901_to_20260930.csv",
             "Export dialog now uses real radio buttons with 48dp touch targets, inline date validation with an example format, and an Export action that stays disabled until a custom range is valid",
             "Export result is now reported through the Settings snackbar with the exported transaction count instead of an inline status line"
         )
