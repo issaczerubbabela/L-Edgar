@@ -9,12 +9,14 @@ import androidx.lifecycle.viewModelScope
 import androidx.work.*
 import androidx.work.WorkInfo
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
+import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
 import com.issaczerubbabel.ledgar.sync.SyncWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -35,7 +37,7 @@ enum class SyncStatusUi {
 class LogViewModel @Inject constructor(
     private val repository: ExpenseRepository,
     accountRepository: AccountRepository,
-    dropdownOptionRepository: DropdownOptionRepository,
+    private val dropdownOptionRepository: DropdownOptionRepository,
     private val workManager: WorkManager,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -219,6 +221,39 @@ class LogViewModel @Inject constructor(
     fun retrySync() {
         syncStatus = SyncStatusUi.Syncing
         enqueueSyncWork()
+    }
+
+    /**
+     * Creates a new expense/income category from the Add Transaction screen itself, so the
+     * user never has to leave for Settings → Dropdowns. Case-insensitive match against the
+     * existing list selects that option instead of inserting a duplicate, since there is no
+     * unique index on (optionType, name).
+     */
+    fun addCategoryInline(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+
+        val optionType = if (selectedType == "Income") "INCOME_CATEGORY" else "EXPENSE_CATEGORY"
+        val currentOptions = if (selectedType == "Income") incomeCategories.value else expenseCategories.value
+        val existing = currentOptions.firstOrNull { it.equals(trimmed, ignoreCase = true) }
+        if (existing != null) {
+            selectedCategory = existing
+            return
+        }
+
+        viewModelScope.launch {
+            val options = dropdownOptionRepository.getOptionsByType(optionType).first()
+            val maxOrder = options.maxOfOrNull { it.displayOrder } ?: -1
+            dropdownOptionRepository.insert(
+                DropdownOption(
+                    optionType = optionType,
+                    name = trimmed,
+                    displayOrder = maxOrder + 1
+                )
+            )
+            selectedCategory = trimmed
+            enqueueSyncWork()
+        }
     }
 
     fun startSyncStatusObserver() {
