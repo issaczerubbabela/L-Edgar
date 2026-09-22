@@ -15,6 +15,41 @@
       "source": ".github/skills/android-design-system",
       "sourceType": "local",
       "computedHash": ""
+    },
+    "grill-me": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "computedHash": "46906860aeee298b18de6132db39b6fde0ff4723e474ea95dc70f2d4b9ac6e5a"
+    },
+    "grilling": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "computedHash": "19cc3a9d60aa71051d006eaf60f0d671162e633195f9a8c33c165786a0e65b9d"
+    },
+    "handoff": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "computedHash": "bddf7e0491cec4980ee20f86b7b96e4650ee7060b320367a51232cc81cb7e147"
+    },
+    "teach": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "computedHash": "89a8f43784051bacf54ca1567e09143a95d95eff0984ab1e30de015c6eccd3be"
+    },
+    "to-questionnaire": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "computedHash": "4d95d1008cbdbc7c3c6578bad478a0b712cc62520831d0bac0a080c70b7638b2"
+    },
+    "wait-what": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "computedHash": "3e3a45e78b8fd25af077c027375221601b941328f7e22bf40b9f7b3d9c62f23b"
+    },
+    "writing-for-agents": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "computedHash": "41ccfebfddf6c61f84063eca85c1ccb2711194945fec606f1934f2d4fa39e4c8"
     }
   }
 }

@@ -41,7 +41,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Cash Flow chart now renders thicker stacked bars and overlays average-per-day plus budget-aware max-per-day guide lines",
             "Insights card visuals refined: removed redundant chart titles, aligned chart background with card surface, simplified daily x-axis labels, and removed chart grid guidelines",
             "Added .tmp and .tmp_vico_src to gitignore for local artifact cleanup",
-            "Conflict resolution now emits per-action audit snackbars with exact resolved and remaining counts"
+            "Conflict resolution now emits per-action audit snackbars with exact resolved and remaining counts",
+            "Installed mattpocock/skills productivity skill set (grill-me, grilling, handoff, teach, to-questionnaire, wait-what, writing-for-agents) under .agents/skills/ for general workflow assistance"
         )
     ),
     ChangelogRelease(
