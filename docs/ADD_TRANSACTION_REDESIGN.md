@@ -3,15 +3,19 @@
 Design reference for reworking `LogScreen.kt` / `LogViewModel.kt` around a keypad-first
 layout inspired by Buckwheat's Add Transaction UI, while keeping every field and behavior
 already present in SheetSync. This doc is the implementation reference; the visual mockups
-live in three Claude artifacts (not checked into the repo):
+live in four Claude artifacts (not checked into the repo):
 
 - v1 — first pass, Buckwheat-style layout mapped onto L-Edgar's fields:
   https://claude.ai/artifact/5NrFazr2ChjRty4gxJZYyu
 - v2 — design-critique pass (`frontend-design` / `ui-ux-pro-max` skills): dropped AI-tell
   chrome, cut to two typefaces, real vector icons, 44dp touch targets, 4/8dp spacing rhythm:
   https://claude.ai/artifact/RU3x8YYf4vLVh8LSbovgeh
-- v3 — current — adds inline category creation and a live per-category budget preview:
+- v3 — adds inline category creation and a per-category budget preview, but as its own
+  bordered strip under the type row:
   https://claude.ai/artifact/LT2znLxWKyTcKiEufeQPwY
+- v4 — current — moves the budget preview into the date pill as a radial ring instead of a
+  separate box, following a second `frontend-design` / `ui-ux-pro-max` pass:
+  https://claude.ai/artifact/PzjK1xNVWvYdJrbZngBW9V
 
 No code has been changed yet. This is a design spec to implement against.
 
@@ -29,7 +33,8 @@ collapsing everything into one, and adds two features on top:
    the screen for Settings → Manage Categories & Dropdowns.
 2. **Live category budget preview** — replaces a generic "account balance" idea with the
    category budget math the Total tab already computes, scoped to the category currently
-   selected and recalculated as the amount is typed.
+   selected and recalculated as the amount is typed. It lives inside the date pill as a
+   small ring rather than a separate strip — see below for why.
 
 ## Layout
 
@@ -37,23 +42,36 @@ Top to bottom, replacing the current `TopAppBar` + stacked fields in `LogScreen.
 
 1. **Top bar** — back arrow, sync status chip (`SyncStatusUi`, same four states as today),
    trash icon (edit mode only).
-2. **Date pill** — single line, current date; tapping opens the same `DatePickerDialog`
-   already wired to `vm.selectedDate`.
+2. **Date pill** — one row, fixed height regardless of type or category: date on the left;
+   an adaptive slot on the right (budget ring for Expense, account flow text for Transfer,
+   nothing for Income). Tapping the date still opens the same `DatePickerDialog` already
+   wired to `vm.selectedDate`. See "Live category budget preview" below.
 3. **Type row** — `Expense / Income / Transfer` segmented control, same three options and
    same reset-on-change behavior as `LogScreen.kt`'s `SingleChoiceSegmentedButtonRow`.
-4. **Budget strip** (Expense only, see below) or **context line** (Transfer: `"Cash → HDFC
-   Bank"`; Income: nothing — budgets aren't implemented for Income).
-5. **Amount** — large, right-aligned, tabular numerals, tinted by type (coral for Expense,
+4. **Amount** — large, right-aligned, tabular numerals, tinted by type (coral for Expense,
    green for Income, neutral for Transfer).
-6. **Chip row** — Category chip + Account chip (Expense/Income), or From/To chips
+5. **Chip row** — Category chip + Account chip (Expense/Income), or From/To chips
    (Transfer), plus a Note chip that opens both Description and Remarks in one sheet.
-7. **Drag handle**, then the **custom keypad**: 7 8 9 ⌫ / 4 5 6 [commit, spans 3 rows] /
+6. **Drag handle**, then the **custom keypad**: 7 8 9 ⌫ / 4 5 6 [commit, spans 3 rows] /
    1 2 3 / 0 [spans 2 cells] . — replaces the system decimal keyboard on the amount field.
 
 ## Live category budget preview
 
-Sourced from the exact computation `TotalViewModel.buildBudgetItems()` already does for the
-Total tab's `BudgetProgressUi` rows — this reuses that math, it doesn't invent new math:
+An earlier pass (v3) gave the budget preview its own bordered strip under the type row.
+That added a second boxed component competing with the amount for attention, and it only
+appeared for Expense — meaning the layout shifted height every time type or category
+changed. v4 folds it into the date pill instead: one component, one fixed height, for every
+type. Concretely, the pill's right side is an adaptive slot:
+
+- **Expense with a configured budget for the selected category** — a small radial ring
+  (~32dp) plus "₹X left" / "of ₹Y · Category" text.
+- **Transfer** — plain text, the account flow (`"Cash → HDFC Bank"`).
+- **Income, or Expense with no budget configured for the category** — nothing; the pill
+  just shows the date.
+
+The ring's math is sourced from the exact computation `TotalViewModel.buildBudgetItems()`
+already does for the Total tab's `BudgetProgressUi` rows — this reuses that math, it
+doesn't invent new math:
 
 ```kotlin
 // TotalViewModel.kt — existing per-category computation to reuse
@@ -87,21 +105,38 @@ exists, used by `BudgetSettingViewModel`) and the current month's Expense record
 selected category (already available via `ExpenseRepository`). `LogViewModel` currently
 injects neither — both need adding to its constructor.
 
-**Visual spec**: reuse `IdealBudgetProgressBar` from `TotalTabScreen.kt` at a smaller scale
-(6dp track height vs. 30dp) — same track color `#2D323C`, same fill color `IncomeBlue
-(#1976D2)`, same over-budget color `FabRed (#E53935)` when `spentFraction > 1f`, same white
-ideal-marker tick at `todayMarkerFraction`. Label row: category name (left), "₹X left"
-(right, using `remainingAmount`).
+**Visual spec**: a new small composable (the shape differs from the Total tab's linear bar,
+so it isn't a literal reuse of `IdealBudgetProgressBar` — same math and colors, new shape),
+e.g. `CategoryBudgetRing(spentFraction, idealFraction, isOverBudget, modifier)`, drawn with
+`Canvas` + `drawArc`:
 
-**Scope**: only render the strip when `selectedType == "Expense"` and a category with a
+- Track: full circle, `drawArc(startAngle = -90f, sweepAngle = 360f, useCenter = false)`,
+  color `#2D323C`, same as the Total tab's track.
+- Fill: `drawArc(startAngle = -90f, sweepAngle = 360f * fillFraction.coerceIn(0f, 1f))`,
+  color `IncomeBlue (#1976D2)` normally, `FabRed (#E53935)` when `spentFraction > 1f` — the
+  same two colors `IdealBudgetProgressBar` already uses for the same condition.
+- Ideal-pace marker: a small dot or short tick at the point on the circle corresponding to
+  `todayMarkerFraction * 360°` from the top (same trig as placing anything on a clock face),
+  in white, mirroring the Total tab's vertical white line at the same fraction.
+- Stroke width ~3–4dp so the ring reads clearly at ~32dp diameter; inner area transparent
+  (a ring, not a filled pie).
+
+Placed in the date pill's right slot, next to two lines of text: `"₹{remainingAmount} left"`
+(bold) and `"of ₹{budgetAmount} · {category}"` (small, muted).
+
+**Scope**: only render the ring when `selectedType == "Expense"` and a category with a
 configured budget for the current month is selected. `BudgetSettingViewModel` only reads
 `EXPENSE_CATEGORY` dropdown options today — Income and Transfer have no budget concept in
-the app, so they get a plain context line (Transfer: account flow) or nothing (Income)
-instead of a fabricated bar.
+the app, so the pill's right slot falls back to the account-flow text (Transfer) or nothing
+(Income) instead of a fabricated ring.
 
-**No configured budget for the category**: hide the strip rather than showing a
-zero/empty bar — a budget row only exists in `budgets` once the user has set one via
-`BudgetSettingScreen`.
+**No configured budget for the category**: fall back to the date-only pill rather than
+showing a zero/empty ring — a budget row only exists in `budgets` once the user has set one
+via `BudgetSettingScreen`.
+
+**Behind a sheet**: when the category or account sheet is open, the pill (and its ring) stay
+visible above it rather than being replaced by sheet content — picking a different category
+in the sheet can update the ring live as a preview before confirming.
 
 ## Inline category creation
 
@@ -149,7 +184,8 @@ deleting still only happen in Settings — the sheet links out to
 | Form state, save/update, sync observing | `viewmodel/LogViewModel.kt` |
 | Category/account bottom sheets (new) | new composables in `ui/screens/LogScreen.kt` or `ui/components` |
 | Inline category insert | `data/repository/DropdownOptionRepository.kt` (existing `insert()`) |
-| Budget data for the strip | `data/repository/BudgetRepository.kt` (existing `observeBudgets()`) |
+| Budget data for the ring | `data/repository/BudgetRepository.kt` (existing `observeBudgets()`) |
 | Budget math to mirror | `viewmodel/TotalViewModel.kt` (`buildBudgetItems`, `calculateIdealFraction`, `percent`) |
-| Progress bar visual to reuse at smaller scale | `ui/screens/TotalTabScreen.kt` (`IdealBudgetProgressBar`) |
+| Colors to mirror (not reuse directly — new shape) | `ui/screens/TotalTabScreen.kt` (`IdealBudgetProgressBar`), `ui/theme/Color.kt` (`IncomeBlue`, `FabRed`) |
+| New radial progress composable | new composable, e.g. `ui/components/CategoryBudgetRing.kt` |
 | Custom keypad (new component) | new composable, e.g. `ui/components/NumericKeypad.kt` |

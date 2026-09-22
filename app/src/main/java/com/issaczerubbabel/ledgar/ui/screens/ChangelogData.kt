@@ -42,7 +42,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Insights card visuals refined: removed redundant chart titles, aligned chart background with card surface, simplified daily x-axis labels, and removed chart grid guidelines",
             "Added .tmp and .tmp_vico_src to gitignore for local artifact cleanup",
             "Conflict resolution now emits per-action audit snackbars with exact resolved and remaining counts",
-            "Added docs/ADD_TRANSACTION_REDESIGN.md, a spec for a keypad-first Add Transaction screen with inline category creation and a live per-category budget preview"
+            "Added docs/ADD_TRANSACTION_REDESIGN.md, a spec for a keypad-first Add Transaction screen with inline category creation and a live per-category budget preview",
+            "Reworked the Add Transaction spec's budget preview from a separate bordered strip into a radial ring inside the existing date pill, after a design-skill critique pass"
         )
     ),
     ChangelogRelease(
