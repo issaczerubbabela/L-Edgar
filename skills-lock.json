@@ -50,6 +50,16 @@
       "source": "mattpocock/skills",
       "sourceType": "github",
       "computedHash": "41ccfebfddf6c61f84063eca85c1ccb2711194945fec606f1934f2d4fa39e4c8"
+    },
+    "frontend-design": {
+      "source": "anthropics/skills@klazuka/frontend-design-skill",
+      "sourceType": "github",
+      "computedHash": "938011432b6fd1c3a2221f963f4e36727af3c2dd9946220799558708e1d3dc74"
+    },
+    "ui-ux-pro-max": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "computedHash": "b4dff4aee695c50e5037d11c93015ea505fa6e47bb627f3d763724cb2936c69b"
     }
   }
 }
