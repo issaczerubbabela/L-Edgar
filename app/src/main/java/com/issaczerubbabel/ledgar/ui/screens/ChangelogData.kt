@@ -27,7 +27,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Account balance math now compares transaction timestamps against precise As-Of values, including same-day hour/minute boundaries",
             "Quick Settings quick-add now runs in an isolated transient task, so dismissing the sheet no longer reveals the main app behind it",
             "Removed legacy duplicate-skip resolution plumbing and standardized Sheets conflict handling on timestamp-based conflict flow",
-            "Fixed Google Sheets import crash by removing non-unique conflict list keys so the Conflict Resolution sheet opens reliably"
+            "Fixed Google Sheets import crash by removing non-unique conflict list keys so the Conflict Resolution sheet opens reliably",
+            "Fixed the Trans. tab pager getting stuck between pages after tapping a distant tab (for example Daily to Total): the pager's intermediate pages were being written back into the selected tab, which cancelled the scroll animation part-way"
         ),
         qol = listOf(
             "Quick Settings tile click now stays in quick-entry flow and updates tile state without opening the main app tabs",
