@@ -63,6 +63,16 @@ Any prompt that changes a repository file (code, UI, sync, schema, or instructio
 
 This is enforced by a `PreToolUse` hook (`.github/hooks/changelog-enforcer.json` → `scripts/enforce-changelog.ps1`) — expect tool calls to be blocked if the changelog isn't updated alongside other changes.
 
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues (`issaczerubbabela/L-Edgar`), managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context: a `CONTEXT.md` glossary and ADRs in `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
 ## Repo-local skills
 
 `.github/skills/` contains 17 Android-focused skills (architecture, Compose, Room/Retrofit data layer, coroutines, testing, performance, etc.) auto-discovered by keyword match — see `.github/copilot-instructions.md` for the full index. `.agents/skills/` has an additional `android-security-skill`. Prefer using the relevant skill for its domain (e.g. `compose-ui` for Composable work, `android-data-layer` for Room/Retrofit changes) rather than improvising patterns that conflict with them.
