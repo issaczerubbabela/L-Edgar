@@ -11,6 +11,21 @@ var DROPDOWNS_SHEET = "_dropdowns";
 var BUDGETS_SHEET = "_budgets";
 var ACCOUNTS_SHEET = "_accounts";
 
+// Column indices (0-based) for TRANSACTION_HEADERS_V2
+var COL_TIMESTAMP       = 0;
+var COL_DATE            = 1;
+var COL_TYPE            = 2;
+var COL_EXP_CATEGORY    = 3;
+var COL_INC_CATEGORY    = 4;
+var COL_DESCRIPTION     = 5;  // <-- description lives here
+var COL_AMOUNT          = 6;
+var COL_ACCOUNT_NAME    = 7;
+var COL_FROM_ACCOUNT    = 8;
+var COL_TO_ACCOUNT      = 9;
+var COL_REMARKS         = 10;
+var COL_SYNCED_AT       = 11;
+var COL_IS_BOOKMARKED   = 12;
+
 var TRANSACTION_HEADERS_V2 = [
   "Timestamp",
   "Date",
@@ -100,6 +115,44 @@ function detectTransactionSchemaMode(headerRow) {
     h[9] === "To Account Name" &&
     h[10] === "Remarks";
   return isV2Header ? "v2" : "legacy";
+}
+
+/**
+ * Ensures the transactions sheet has the correct V2 headers.
+ * Called on every insert/update so a legacy sheet is silently upgraded
+ * (adds missing columns) without disturbing existing data rows.
+ */
+function ensureTransactionSheetHeaders(txSheet) {
+  var lastCol = txSheet.getLastColumn();
+  var lastRow = txSheet.getLastRow();
+
+  // Empty sheet — write headers and return.
+  if (lastRow === 0) {
+    txSheet
+      .getRange(1, 1, 1, TRANSACTION_HEADERS_V2.length)
+      .setValues([TRANSACTION_HEADERS_V2]);
+    return;
+  }
+
+  // Read existing header row.
+  var headerRange = txSheet.getRange(1, 1, 1, Math.max(lastCol, TRANSACTION_HEADERS_V2.length));
+  var existingHeaders = headerRange.getDisplayValues()[0];
+
+  // Check if Description column is missing or shifted.
+  var hasDescriptionAtCorrectPos = String(existingHeaders[COL_DESCRIPTION] || "").trim() === "Description";
+  if (hasDescriptionAtCorrectPos) return; // Already correct — nothing to do.
+
+  // Overwrite only the header row with the canonical V2 headers.
+  // This does NOT touch data rows.
+  if (txSheet.getMaxColumns() < TRANSACTION_HEADERS_V2.length) {
+    txSheet.insertColumnsAfter(
+      txSheet.getMaxColumns(),
+      TRANSACTION_HEADERS_V2.length - txSheet.getMaxColumns()
+    );
+  }
+  txSheet
+    .getRange(1, 1, 1, TRANSACTION_HEADERS_V2.length)
+    .setValues([TRANSACTION_HEADERS_V2]);
 }
 
 function parseTransactionRow(row, schemaMode) {
@@ -383,6 +436,55 @@ function doPost(e) {
       return jsonOut(migrateTransactionsSheetToV2());
     }
 
+    // =============================================================
+    // DESCRIPTION REPAIR
+    // Patches only the Description cell of existing rows matched by
+    // Timestamp. Safe — no other column is touched.
+    // Payload: { target: "transactions", action: "description_repair",
+    //            records: [{ timestamp: "M/d/yyyy HH:mm:ss", description: "..." }, ...] }
+    // =============================================================
+    if (target === "transactions" && action === "description_repair") {
+      var txSheetRepair = ensureSheet(spreadsheet, TRANSACTIONS_SHEET);
+      if (txSheetRepair.getLastRow() < 2) {
+        return jsonOut({
+          status: "ok",
+          action: "description_repair",
+          updated: 0,
+          notFound: records.length,
+          message: "Sheet has no data rows",
+        });
+      }
+
+      // Build a map: normalizedTimestamp -> 1-based sheet row index
+      var sheetData = txSheetRepair.getDataRange().getDisplayValues();
+      var tsToRowIndex = {};
+      for (var ri = 1; ri < sheetData.length; ri++) {
+        var sheetTs = normalizeTimestampKey(sheetData[ri][COL_TIMESTAMP], timeZone);
+        if (sheetTs) tsToRowIndex[sheetTs] = ri + 1; // +1 because getRange is 1-based
+      }
+
+      var repairUpdated = 0;
+      var repairNotFound = 0;
+      records.forEach(function (r) {
+        var incomingTs = normalizeTimestampKey(r.timestamp, timeZone);
+        if (!incomingTs) { repairNotFound++; return; }
+        var sheetRowNum = tsToRowIndex[incomingTs];
+        if (!sheetRowNum) { repairNotFound++; return; }
+        // Only write the Description cell (col COL_DESCRIPTION+1 in 1-based)
+        txSheetRepair
+          .getRange(sheetRowNum, COL_DESCRIPTION + 1)
+          .setValue(String(r.description || ""));
+        repairUpdated++;
+      });
+
+      return jsonOut({
+        status: "ok",
+        action: "description_repair",
+        updated: repairUpdated,
+        notFound: repairNotFound,
+      });
+    }
+
     if (
       action === "backup" &&
       (target === "accounts" ||
@@ -536,9 +638,8 @@ function doPost(e) {
     // TRANSACTIONS LOGIC
     // =============================================================
     var txSheet = ensureSheet(spreadsheet, TRANSACTIONS_SHEET);
-    if (txSheet.getLastRow() === 0) {
-      txSheet.appendRow(TRANSACTION_HEADERS_V2);
-    }
+    // Ensure header row is always correct V2 (adds Description column if legacy sheet).
+    ensureTransactionSheetHeaders(txSheet);
 
     if (action === "delete") {
       var targetTimestamp = String(payload.targetTimestamp || "");
@@ -769,4 +870,50 @@ function formatDate(value) {
     return py + "-" + pm + "-" + pd;
   }
   return String(value);
+}
+
+// =============================================================
+// MANUAL REPAIR HELPER — Run this from the Apps Script Editor
+// (Extensions → Apps Script → select runDescriptionRepair → Run)
+//
+// This scans all rows in _responses that have a blank Description
+// and logs them. Since the sheet doesn't have the descriptions
+// itself, actual patching requires the app to send them via the
+// description_repair action. Use this to verify which rows still
+// need repair after editing + syncing transactions from the app.
+// =============================================================
+function runDescriptionRepair() {
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var txSheet = spreadsheet.getSheetByName(TRANSACTIONS_SHEET);
+  if (!txSheet) {
+    Logger.log("Sheet '" + TRANSACTIONS_SHEET + "' not found.");
+    return;
+  }
+
+  var data = txSheet.getDataRange().getDisplayValues();
+  if (data.length < 2) {
+    Logger.log("No data rows found.");
+    return;
+  }
+
+  var blankDescriptionRows = [];
+  for (var i = 1; i < data.length; i++) {
+    var desc = String(data[i][COL_DESCRIPTION] || "").trim();
+    var ts   = String(data[i][COL_TIMESTAMP] || "").trim();
+    var type = String(data[i][COL_TYPE] || "").trim();
+    if (!desc && type) {
+      blankDescriptionRows.push("Row " + (i + 1) + " | Timestamp: " + ts + " | Type: " + type + " | Amount: " + data[i][COL_AMOUNT]);
+    }
+  }
+
+  if (blankDescriptionRows.length === 0) {
+    Logger.log("All rows already have a Description. Nothing to repair.");
+  } else {
+    Logger.log("Rows with blank Description (" + blankDescriptionRows.length + " total):");
+    blankDescriptionRows.forEach(function (line) { Logger.log(line); });
+    Logger.log(
+      "\nTo fix these: edit each transaction in the app and sync." +
+      "\nEach save triggers an UPDATE sync which writes the description to the sheet."
+    );
+  }
 }

@@ -16,7 +16,10 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const root = path.resolve(__dirname, "..", "..");
-const gsSource = fs.readFileSync(path.join(root, "scripts", "AppsScript.gs"), "utf8");
+// APPS_SCRIPT_PATH points the suite at another copy of the script, for checking a file that is about
+// to be deployed. The drift check between the repo copy and the embedded copy is then skipped.
+const overridePath = process.env.APPS_SCRIPT_PATH;
+const gsSource = fs.readFileSync(overridePath || path.join(root, "scripts", "AppsScript.gs"), "utf8");
 const ktSource = fs.readFileSync(
   path.join(root, "app/src/main/java/com/issaczerubbabel/ledgar/ui/screens/AppsScriptSetupScreen.kt"),
   "utf8",
@@ -29,6 +32,9 @@ class FakeSheet {
   constructor() { this.clear(); }
   clear() { this.cells = {}; this.formats = {}; }
   getLastRow() { return Math.max(0, ...Object.keys(this.cells).map((k) => Number(k.split(",")[0]))); }
+  getLastColumn() { return Math.max(0, ...Object.keys(this.cells).map((k) => Number(k.split(",")[1]))); }
+  getMaxColumns() { return 26; }
+  insertColumnsAfter() {} // the production script only calls this on a sheet narrower than its headers
   appendRow(values) {
     const row = this.getLastRow() + 1;
     values.forEach((v, c) => { this.cells[`${row},${c + 1}`] = v; });
@@ -36,6 +42,13 @@ class FakeSheet {
   getRange(row, col, numRows = 1, numCols = 1) {
     const sheet = this;
     return {
+      getDisplayValues() {
+        return Array.from({ length: numRows }, (_, r) =>
+          Array.from({ length: numCols }, (_, c) => {
+            const v = sheet.cells[`${row + r},${col + c}`];
+            return v === undefined ? "" : String(v);
+          }));
+      },
       setNumberFormat(fmt) {
         for (let r = 0; r < numRows; r++) for (let c = 0; c < numCols; c++) sheet.formats[`${row + r},${col + c}`] = fmt;
         return this;
@@ -215,7 +228,7 @@ for (const zone of ZONES) for (const [label, source] of [["AppsScript.gs", gsSou
   });
 }
 
-test("the two copies of the script define the bucket-budget code identically", () => {
+test("the two copies of the script define the bucket-budget code identically", { skip: Boolean(overridePath) }, () => {
   const block = (src) => src.slice(src.indexOf("// BUCKET BUDGETS"), src.indexOf("function doPost(e)")).replace(/\r\n/g, "\n");
   assert.equal(block(gsSource), block(embedded));
 });

@@ -42,7 +42,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Export dialog no longer shows its date-format hint in the error colour before anything has been typed; it only turns red once an entered range is actually invalid",
             "Fixed the Trans. tab pager getting stuck between pages after tapping a distant tab (for example Daily to Total): the pager's intermediate pages were being written back into the selected tab, which cancelled the scroll animation part-way",
             "Accounts card: card and cash spending is now split by the group of the account each expense was paid from (Card, Debit Card, Cash and so on). It previously read a payment-mode field the app never saves, so the card total was always zero and every expense counted as cash",
-            "The date picker on Insights now opens on the day you already selected. It was converting the initial date in the device time zone while the picker works in UTC, so in time zones ahead of UTC it highlighted the previous day"
+            "The date picker on Insights now opens on the day you already selected. It was converting the initial date in the device time zone while the picker works in UTC, so in time zones ahead of UTC it highlighted the previous day",
+            "The Apps Script in the repo and the copy shown in Database Setup were missing changes that only existed in a deployed script: the Description column header upgrade, the description_repair action and a manual repair helper. Anyone redeploying from either copy would have lost description support. Both now match the deployed script, plus the bucket-budget backup"
         ),
         qol = listOf(
             "Quick Settings tile click now stays in quick-entry flow and updates tile state without opening the main app tabs",
