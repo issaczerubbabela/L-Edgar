@@ -35,6 +35,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.issaczerubbabel.ledgar.data.bucket.BucketSummary
@@ -205,26 +206,28 @@ fun BucketRow(
             .padding(vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            BucketColorDot(bucket.colorIndex)
+        // The name takes all the space the amount leaves and wraps onto a second line when it must, so
+        // the amount always sits flush at the right edge. (A name that only takes what it needs, with
+        // a spacer beside it, leaves the amount a different distance from the edge on every row.)
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            BucketColorDot(bucket.colorIndex, modifier = Modifier.padding(top = 7.dp))
             if (bucket.emoji.isNotBlank()) {
                 Text(bucket.emoji, modifier = Modifier.clearAndSetSemantics { }, style = MaterialTheme.typography.bodyLarge)
             }
             Text(
                 text = bucket.name,
                 style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
+                modifier = Modifier.weight(1f)
             )
-            Spacer(Modifier.weight(1f))
             if (summary.isOver) {
                 OverBudgetFlag(overBy = abs(summary.remaining))
             } else {
                 Text(
                     text = "${formatRupees(summary.remaining)} left",
                     style = tabularNumbers(MaterialTheme.typography.titleMedium),
-                    maxLines = 1
+                    textAlign = TextAlign.End,
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
         }
@@ -234,8 +237,6 @@ fun BucketRow(
                 text = bucket.note,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = 18.dp)
             )
         }

@@ -167,16 +167,14 @@ private fun PlanContent(
                             .padding(vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            BucketColorDot(bucket.colorIndex)
+                        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            BucketColorDot(bucket.colorIndex, modifier = Modifier.padding(top = 7.dp))
                             if (bucket.emoji.isNotBlank()) {
                                 Text(bucket.emoji, modifier = Modifier.clearAndSetSemantics { })
                             }
                             Text(
                                 text = bucket.name,
-                                style = MaterialTheme.typography.bodyLarge,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                style = MaterialTheme.typography.bodyLarge
                             )
                         }
                         val count = state.categoryCountByBucket[bucket.id] ?: 0
