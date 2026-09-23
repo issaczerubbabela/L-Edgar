@@ -1,56 +1,3 @@
-package com.issaczerubbabel.ledgar.ui.screens
-
-import android.content.Intent
-import android.net.Uri
-import android.widget.Toast
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.background
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.issaczerubbabel.ledgar.viewmodel.ConnectionTestState
-import com.issaczerubbabel.ledgar.viewmodel.SettingsViewModel
-
-private const val SCRIPT_URL_PREFIX = "https://script.google.com/macros/s/"
-
-private val APPS_SCRIPT_CODE = """
 /**
  * SheetSync — Google Apps Script (Transactions + Dropdowns + Budgets + Accounts)
  *
@@ -63,9 +10,6 @@ var TRANSACTIONS_SHEET = "_responses";
 var DROPDOWNS_SHEET = "_dropdowns";
 var BUDGETS_SHEET = "_budgets";
 var ACCOUNTS_SHEET = "_accounts";
-var CYCLES_SHEET = "_cycles";
-var BUCKETS_SHEET = "_buckets";
-var BUCKET_CATEGORIES_SHEET = "_bucket_categories";
 
 var TRANSACTION_HEADERS_V2 = [
   "Timestamp",
@@ -160,7 +104,9 @@ function detectTransactionSchemaMode(headerRow) {
 
 function parseTransactionRow(row, schemaMode) {
   var accountName = String(row[7] || "");
-  var type = String(row[2] || "").trim().toLowerCase();
+  var type = String(row[2] || "")
+    .trim()
+    .toLowerCase();
 
   var normalizedMode = schemaMode || "legacy";
 
@@ -201,7 +147,11 @@ function parseTransactionRow(row, schemaMode) {
     isBookmarked = row[10] ? toBool(row[10]) : false;
   }
 
-  if (type === "transfer" && (!fromAccountName || !toAccountName) && accountName) {
+  if (
+    type === "transfer" &&
+    (!fromAccountName || !toAccountName) &&
+    accountName
+  ) {
     var legacySplit = accountName.split("->").map(function (part) {
       return String(part || "").trim();
     });
@@ -363,7 +313,12 @@ function migrateTransactionsSheetToV2() {
   var backupSheet = createTransactionsBackupSheet(spreadsheet, txSheet);
 
   var sourceRows = txSheet
-    .getRange(1, 1, lastRow, Math.max(lastColumn, TRANSACTION_HEADERS_V2.length))
+    .getRange(
+      1,
+      1,
+      lastRow,
+      Math.max(lastColumn, TRANSACTION_HEADERS_V2.length),
+    )
     .getDisplayValues();
 
   var normalizedRows = [TRANSACTION_HEADERS_V2];
@@ -385,7 +340,10 @@ function migrateTransactionsSheetToV2() {
 
   var maxColumns = txSheet.getMaxColumns();
   if (maxColumns < TRANSACTION_HEADERS_V2.length) {
-    txSheet.insertColumnsAfter(maxColumns, TRANSACTION_HEADERS_V2.length - maxColumns);
+    txSheet.insertColumnsAfter(
+      maxColumns,
+      TRANSACTION_HEADERS_V2.length - maxColumns,
+    );
   } else if (maxColumns > TRANSACTION_HEADERS_V2.length) {
     txSheet.deleteColumns(
       TRANSACTION_HEADERS_V2.length + 1,
@@ -409,151 +367,6 @@ function migrateTransactionsSheetToV2() {
     nonTransferRowsCleared: nonTransferRowsCleared,
     backupSheet: backupSheet,
   };
-}
-
-// =============================================================
-// BUCKET BUDGETS (salary cycles, buckets and their categories)
-// Sent and returned as nested cycles -> buckets -> categories, and stored as three flat sheets.
-// =============================================================
-
-/**
- * Writes one table, replacing whatever the sheet held. Columns in textColumns are formatted as
- * plain text BEFORE the values go in: otherwise Sheets turns ISO dates into Date cells and parses
- * any note or category name that starts with "=" as a formula.
- */
-function writeTable(spreadsheet, name, headers, rows, textColumns) {
-  var sheet = ensureSheet(spreadsheet, name);
-  sheet.clear();
-  var height = rows.length + 1;
-  textColumns.forEach(function (col) {
-    sheet.getRange(1, col, height, 1).setNumberFormat("@");
-  });
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-  if (rows.length > 0) {
-    sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
-  }
-}
-
-function backupBucketBudgets(spreadsheet, cycles, timeZone) {
-  var backupAt = Utilities.formatDate(
-    new Date(),
-    timeZone,
-    "M/d/yyyy HH:mm:ss",
-  );
-  var cycleRows = [];
-  var bucketRows = [];
-  var categoryRows = [];
-
-  cycles.forEach(function (c) {
-    cycleRows.push([
-      c.id,
-      c.startDate || "",
-      c.endDate || "",
-      Number(c.spendableAmount) || 0,
-      c.closedAt || "",
-      backupAt,
-    ]);
-    (c.buckets || []).forEach(function (b) {
-      bucketRows.push([
-        b.id,
-        c.id,
-        b.name || "",
-        b.note || "",
-        Number(b.colorIndex) || 0,
-        b.emoji || "",
-        Number(b.allocatedAmount) || 0,
-        Number(b.sortOrder) || 0,
-      ]);
-      (b.categories || []).forEach(function (category) {
-        categoryRows.push([c.id, b.id, String(category)]);
-      });
-    });
-  });
-
-  writeTable(
-    spreadsheet,
-    CYCLES_SHEET,
-    ["Cycle ID", "Start Date", "End Date", "Spendable Amount", "Closed At", "Last Backed Up"],
-    cycleRows,
-    [2, 3, 5, 6],
-  );
-  writeTable(
-    spreadsheet,
-    BUCKETS_SHEET,
-    ["Bucket ID", "Cycle ID", "Name", "Note", "Color Index", "Emoji", "Allocated Amount", "Sort Order"],
-    bucketRows,
-    [3, 4, 6],
-  );
-  writeTable(
-    spreadsheet,
-    BUCKET_CATEGORIES_SHEET,
-    ["Cycle ID", "Bucket ID", "Category"],
-    categoryRows,
-    [3],
-  );
-  return cycles.length;
-}
-
-// A plain yyyy-MM-dd string is returned as it is. formatDate would parse it as UTC midnight and
-// then read the local day, which is the previous day anywhere behind UTC.
-function isoDateValue(value) {
-  if (
-    typeof value === "string" &&
-    value.trim().length === 10 &&
-    /^\d{4}-\d{2}-\d{2}/.test(value.trim())
-  ) {
-    return value.trim();
-  }
-  return formatDate(value);
-}
-
-function readTableRows(spreadsheet, name) {
-  var sheet = spreadsheet.getSheetByName(name);
-  if (!sheet) return [];
-  return sheet.getDataRange().getValues().slice(1);
-}
-
-function readBucketBudgets(spreadsheet) {
-  var categoriesByBucket = {};
-  readTableRows(spreadsheet, BUCKET_CATEGORIES_SHEET).forEach(function (r) {
-    var category = String(r[2] || "");
-    if (!category) return;
-    var key = (Number(r[0]) || 0) + ":" + (Number(r[1]) || 0);
-    (categoriesByBucket[key] = categoriesByBucket[key] || []).push(category);
-  });
-
-  var bucketsByCycle = {};
-  readTableRows(spreadsheet, BUCKETS_SHEET).forEach(function (r) {
-    var bucketId = Number(r[0]) || 0;
-    var cycleId = Number(r[1]) || 0;
-    (bucketsByCycle[cycleId] = bucketsByCycle[cycleId] || []).push({
-      id: bucketId,
-      name: String(r[2] || ""),
-      note: String(r[3] || ""),
-      colorIndex: Number(r[4]) || 0,
-      emoji: String(r[5] || ""),
-      allocatedAmount: Number(r[6]) || 0,
-      sortOrder: Number(r[7]) || 0,
-      categories: categoriesByBucket[cycleId + ":" + bucketId] || [],
-    });
-  });
-
-  var cycles = [];
-  readTableRows(spreadsheet, CYCLES_SHEET).forEach(function (r) {
-    var cycleId = Number(r[0]) || 0;
-    var startDate = r[1] ? isoDateValue(r[1]) : "";
-    var endDate = r[2] ? isoDateValue(r[2]) : "";
-    if (!startDate || !endDate) return;
-    cycles.push({
-      id: cycleId,
-      startDate: startDate,
-      endDate: endDate,
-      spendableAmount: Number(r[3]) || 0,
-      closedAt: r[4] ? isoDateValue(r[4]) : null,
-      buckets: bucketsByCycle[cycleId] || [],
-    });
-  });
-  return cycles;
 }
 
 function doPost(e) {
@@ -590,28 +403,6 @@ function doPost(e) {
     // =============================================================
     // ACCOUNTS BACKUP (Updated with Current Balance)
     // =============================================================
-    if (target === "bucket_budgets" && action === "backup") {
-      // Cycles travel in payload.cycles, and records stays empty on purpose: a script deployed
-      // before this target existed treats records as transactions and would append them to the
-      // transaction sheet. With records empty that older script does nothing.
-      var bucketCycles = payload.cycles || [];
-      if (bucketCycles.length === 0 && !allowEmptyBackup) {
-        return jsonOut({
-          status: "ok",
-          action: "backup_skipped",
-          type: "bucket_budgets_backed_up",
-          target: target,
-          count: 0,
-          message: "Skipped empty backup to prevent accidental sheet erase",
-        });
-      }
-      return jsonOut({
-        status: "ok",
-        type: "bucket_budgets_backed_up",
-        count: backupBucketBudgets(spreadsheet, bucketCycles, timeZone),
-      });
-    }
-
     if (target === "accounts" && action === "backup") {
       var accountSheet = ensureSheet(spreadsheet, ACCOUNTS_SHEET);
       accountSheet.clear();
@@ -795,7 +586,9 @@ function doPost(e) {
 
       var fromAccountName = String(r.fromAccountName || "").trim();
       var toAccountName = String(r.toAccountName || "").trim();
-      var combinedAccountName = String(r.accountName || r.paymentMode || "").trim();
+      var combinedAccountName = String(
+        r.accountName || r.paymentMode || "",
+      ).trim();
       if ((!fromAccountName || !toAccountName) && combinedAccountName) {
         var legacyParts = combinedAccountName.split("->").map(function (part) {
           return String(part || "").trim();
@@ -895,16 +688,6 @@ function doGet(e) {
       return jsonOut({ status: "ok", data: dropdowns });
     }
 
-    if (target === "bucket_budgets") {
-      // "type" tells the app this script understands the target; an older script would fall
-      // through to the transaction list, which has no such marker.
-      return jsonOut({
-        status: "ok",
-        type: "bucket_budgets",
-        data: readBucketBudgets(spreadsheet),
-      });
-    }
-
     if (target === "budgets") {
       var budgetSheet = spreadsheet.getSheetByName(BUDGETS_SHEET);
       if (!budgetSheet) return jsonOut({ status: "ok", data: [] });
@@ -928,7 +711,12 @@ function doGet(e) {
     if (!txSheet) return jsonOut({ status: "ok", count: 0, data: [] });
 
     var headerRow = txSheet
-      .getRange(1, 1, 1, Math.max(txSheet.getLastColumn(), TRANSACTION_HEADERS_V2.length))
+      .getRange(
+        1,
+        1,
+        1,
+        Math.max(txSheet.getLastColumn(), TRANSACTION_HEADERS_V2.length),
+      )
       .getDisplayValues()[0];
     var schemaMode = detectTransactionSchemaMode(headerRow);
 
@@ -937,7 +725,9 @@ function doGet(e) {
     for (var t = 1; t < txData.length; t++) {
       var row = txData[t];
       if (!row[2]) continue;
-      var normalizedTimestamp = row[0] ? normalizeTimestampKey(row[0], timeZone) : "";
+      var normalizedTimestamp = row[0]
+        ? normalizeTimestampKey(row[0], timeZone)
+        : "";
       var parsed = parseTransactionRow(row, schemaMode);
 
       txRecords.push({
@@ -979,175 +769,4 @@ function formatDate(value) {
     return py + "-" + pm + "-" + pd;
   }
   return String(value);
-}
-""".trimIndent()
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AppsScriptSetupScreen(
-    innerPadding: PaddingValues,
-    onBack: () -> Unit,
-    vm: SettingsViewModel = hiltViewModel()
-) {
-    val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
-  val keyboardController = LocalSoftwareKeyboardController.current
-  val configuredUrl by vm.scriptUrl.collectAsStateWithLifecycle()
-  val connectionState by vm.connectionTestState.collectAsStateWithLifecycle()
-
-    var urlInput by remember(configuredUrl) { mutableStateOf(configuredUrl.orEmpty()) }
-    var showValidationError by remember { mutableStateOf(false) }
-
-    Scaffold(
-      containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = { Text("Database Setup") },
-                colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.background
-          ),
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
-        }
-    ) { scaffoldPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-              .background(MaterialTheme.colorScheme.background)
-                .padding(scaffoldPadding)
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text("Step 1: The Code", style = MaterialTheme.typography.titleMedium)
-            Text(
-              "Deploy a private Google Apps Script as your sync backend. Copy this script and paste it into Apps Script.",
-              style = MaterialTheme.typography.bodyMedium
-            )
-            Button(onClick = {
-              clipboardManager.setText(AnnotatedString(APPS_SCRIPT_CODE))
-              Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
-            }) {
-              Text("Copy Script Code")
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Text("Step 2: Deployment", style = MaterialTheme.typography.titleMedium)
-            Text(
-              "- Create a new Google Sheet\n- Go to Extensions > Apps Script\n- Paste the copied code\n- Click Deploy > New Deployment > Web App (Execute as: Me, Access: Anyone)\n- Copy the resulting Web App URL",
-              style = MaterialTheme.typography.bodyMedium
-            )
-            TextButton(onClick = {
-              val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://docs.google.com/spreadsheets"))
-              context.startActivity(intent)
-            }) {
-              Text("Open Google Sheets")
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Text("Step 3: Connect", style = MaterialTheme.typography.titleMedium)
-            Text("Paste your deployed Web App URL and save it.", style = MaterialTheme.typography.bodyMedium)
-
-            OutlinedTextField(
-              value = urlInput,
-              onValueChange = {
-                urlInput = it
-                showValidationError = false
-                vm.resetConnectionTestState()
-              },
-              modifier = Modifier.fillMaxWidth(),
-              singleLine = true,
-              label = { Text("Web App URL") },
-              isError = showValidationError,
-              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-              trailingIcon = {
-                IconButton(
-                  onClick = {
-                    clipboardManager.getText()?.text?.let { pastedText ->
-                      urlInput = pastedText
-                      showValidationError = false
-                      vm.resetConnectionTestState()
-                    }
-                    keyboardController?.hide()
-                  }
-                ) {
-                  Icon(
-                    imageVector = Icons.Default.ContentPaste,
-                    contentDescription = "Paste URL"
-                  )
-                }
-              }
-            )
-
-            if (showValidationError) {
-              Text(
-                text = "URL must start with $SCRIPT_URL_PREFIX",
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 2.dp)
-              )
-            }
-
-            Button(
-              onClick = {
-                val normalized = urlInput.trim()
-                val isValid = normalized.startsWith(SCRIPT_URL_PREFIX)
-                if (!isValid) {
-                  showValidationError = true
-                  return@Button
-                }
-                vm.updateScriptUrl(normalized)
-                Toast.makeText(context, "Connected", Toast.LENGTH_SHORT).show()
-              },
-              modifier = Modifier.padding(top = 4.dp)
-            ) {
-              Text("Save & Connect")
-            }
-
-            OutlinedButton(
-              onClick = {
-                val normalized = urlInput.trim()
-                val isValid = normalized.startsWith(SCRIPT_URL_PREFIX)
-                if (!isValid) {
-                  showValidationError = true
-                  vm.resetConnectionTestState()
-                  return@OutlinedButton
-                }
-                vm.testScriptConnection(normalized)
-              }
-            ) {
-              Text("Test Connection")
-            }
-
-            when (val state = connectionState) {
-              ConnectionTestState.Idle -> Unit
-              ConnectionTestState.Testing -> Text(
-                text = "Testing...",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall
-              )
-              ConnectionTestState.Success -> Text(
-                text = "Connected: URL is reachable",
-                color = androidx.compose.ui.graphics.Color(0xFF2E7D32),
-                style = MaterialTheme.typography.bodySmall
-              )
-              is ConnectionTestState.Error -> Text(
-                text = "Connection failed: ${state.message}",
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall
-              )
-            }
-        }
-    }
 }

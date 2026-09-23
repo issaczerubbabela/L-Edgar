@@ -1,7 +1,9 @@
 package com.issaczerubbabel.ledgar.data.repository
 
 import androidx.room.withTransaction
+import com.issaczerubbabel.ledgar.data.bucket.BucketBudgetSnapshot
 import com.issaczerubbabel.ledgar.data.bucket.CycleTransitions
+import com.issaczerubbabel.ledgar.data.bucket.RestoredCycle
 import com.issaczerubbabel.ledgar.data.bucket.StartCycleRequest
 import com.issaczerubbabel.ledgar.data.bucket.StartCycleResult
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
@@ -70,6 +72,44 @@ class BucketBudgetRepositoryImpl @Inject constructor(
     override fun observeCycle(cycleId: Long): Flow<BudgetCycle?> = dao.observeCycle(cycleId)
 
     override fun observeBucket(bucketId: Long): Flow<BudgetBucket?> = dao.observeBucket(bucketId)
+
+    override suspend fun getBackupSnapshot(): BucketBudgetSnapshot = db.withTransaction {
+        BucketBudgetSnapshot(dao.getAllCycles(), dao.getAllBuckets(), dao.getAllAssignments())
+    }
+
+    override suspend fun replaceAllFromBackup(cycles: List<RestoredCycle>) {
+        db.withTransaction {
+            dao.deleteAllAssignments()
+            dao.deleteAllBuckets()
+            dao.deleteAllCycles()
+            cycles.forEach { cycle ->
+                val cycleId = dao.insertCycle(
+                    BudgetCycle(
+                        startDate = cycle.startDate,
+                        endDate = cycle.endDate,
+                        spendableAmount = cycle.spendableAmount,
+                        closedAt = cycle.closedAt
+                    )
+                )
+                cycle.buckets.forEach { bucket ->
+                    val bucketId = dao.insertBucket(
+                        BudgetBucket(
+                            cycleId = cycleId,
+                            name = bucket.name,
+                            note = bucket.note,
+                            colorIndex = bucket.colorIndex,
+                            emoji = bucket.emoji,
+                            allocatedAmount = bucket.allocatedAmount,
+                            sortOrder = bucket.sortOrder
+                        )
+                    )
+                    dao.assignCategories(
+                        bucket.categories.map { BucketCategory(cycleId = cycleId, bucketId = bucketId, category = it) }
+                    )
+                }
+            }
+        }
+    }
 
     override fun observeBuckets(cycleId: Long): Flow<List<BudgetBucket>> = dao.observeBuckets(cycleId)
 

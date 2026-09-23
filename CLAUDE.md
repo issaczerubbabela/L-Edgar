@@ -50,7 +50,7 @@ Core tables: `expense_records` (transaction ledger + sync state: `isSynced`, `sy
 2. Expose operations via repository interfaces/impls.
 3. Add ViewModel state + actions (StateFlow).
 4. Build/update Compose screens, wire navigation.
-5. If remote-facing, update `scripts/AppsScript.gs` contract and the Retrofit DTO/API methods together — the two must stay in sync since there's no shared schema.
+5. If remote-facing, update `scripts/AppsScript.gs` contract and the Retrofit DTO/API methods together — the two must stay in sync since there's no shared schema. The script also exists as a copy inside `ui/screens/AppsScriptSetupScreen.kt` (what users paste into Apps Script): change both, and run `node --test scripts/tests/bucket-budgets.test.js`, which fails if they drift. Never send new data in `records`: a script deployed before your change files `records` as transactions.
 6. Validate sync behavior for insert/update/delete and import paths.
 
 ## Mandatory changelog policy

@@ -283,8 +283,15 @@ class LogViewModel @Inject constructor(
                     val dropdownCount = latest.outputData.getInt(SyncWorker.KEY_DROPDOWN_BACKUP_COUNT, -1)
                     val budgetCount = latest.outputData.getInt(SyncWorker.KEY_BUDGET_BACKUP_COUNT, -1)
                     val accountCount = latest.outputData.getInt(SyncWorker.KEY_ACCOUNTS_BACKUP_COUNT, -1)
+                    val bucketCount = latest.outputData.getInt(SyncWorker.KEY_BUCKET_BACKUP_COUNT, 0)
+                    val bucketNote = when {
+                        bucketCount == SyncWorker.SCRIPT_OUTDATED ->
+                            " Buckets were not backed up: redeploy the latest Apps Script from Database Setup."
+                        bucketCount > 0 -> " Bucket backup: $bucketCount cycle${if (bucketCount == 1) "" else "s"}."
+                        else -> ""
+                    }
                     if (dropdownCount >= 0 && budgetCount >= 0 && accountCount >= 0) {
-                        syncInfoMessage = "Sync complete. Dropdown backup: $dropdownCount option${if (dropdownCount == 1) "" else "s"}. Budget backup: $budgetCount row${if (budgetCount == 1) "" else "s"}. Account backup: $accountCount account${if (accountCount == 1) "" else "s"}."
+                        syncInfoMessage = "Sync complete. Dropdown backup: $dropdownCount option${if (dropdownCount == 1) "" else "s"}. Budget backup: $budgetCount row${if (budgetCount == 1) "" else "s"}. Account backup: $accountCount account${if (accountCount == 1) "" else "s"}.$bucketNote"
                     } else if (dropdownCount >= 0 && budgetCount >= 0) {
                         syncInfoMessage = "Sync complete. Dropdown backup: $dropdownCount option${if (dropdownCount == 1) "" else "s"}. Budget backup: $budgetCount row${if (budgetCount == 1) "" else "s"}."
                     } else if (dropdownCount >= 0) {

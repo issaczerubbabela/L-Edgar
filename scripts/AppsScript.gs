@@ -10,6 +10,9 @@ var TRANSACTIONS_SHEET = "_responses";
 var DROPDOWNS_SHEET = "_dropdowns";
 var BUDGETS_SHEET = "_budgets";
 var ACCOUNTS_SHEET = "_accounts";
+var CYCLES_SHEET = "_cycles";
+var BUCKETS_SHEET = "_buckets";
+var BUCKET_CATEGORIES_SHEET = "_bucket_categories";
 
 var TRANSACTION_HEADERS_V2 = [
   "Timestamp",
@@ -369,6 +372,151 @@ function migrateTransactionsSheetToV2() {
   };
 }
 
+// =============================================================
+// BUCKET BUDGETS (salary cycles, buckets and their categories)
+// Sent and returned as nested cycles -> buckets -> categories, and stored as three flat sheets.
+// =============================================================
+
+/**
+ * Writes one table, replacing whatever the sheet held. Columns in textColumns are formatted as
+ * plain text BEFORE the values go in: otherwise Sheets turns ISO dates into Date cells and parses
+ * any note or category name that starts with "=" as a formula.
+ */
+function writeTable(spreadsheet, name, headers, rows, textColumns) {
+  var sheet = ensureSheet(spreadsheet, name);
+  sheet.clear();
+  var height = rows.length + 1;
+  textColumns.forEach(function (col) {
+    sheet.getRange(1, col, height, 1).setNumberFormat("@");
+  });
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  if (rows.length > 0) {
+    sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
+  }
+}
+
+function backupBucketBudgets(spreadsheet, cycles, timeZone) {
+  var backupAt = Utilities.formatDate(
+    new Date(),
+    timeZone,
+    "M/d/yyyy HH:mm:ss",
+  );
+  var cycleRows = [];
+  var bucketRows = [];
+  var categoryRows = [];
+
+  cycles.forEach(function (c) {
+    cycleRows.push([
+      c.id,
+      c.startDate || "",
+      c.endDate || "",
+      Number(c.spendableAmount) || 0,
+      c.closedAt || "",
+      backupAt,
+    ]);
+    (c.buckets || []).forEach(function (b) {
+      bucketRows.push([
+        b.id,
+        c.id,
+        b.name || "",
+        b.note || "",
+        Number(b.colorIndex) || 0,
+        b.emoji || "",
+        Number(b.allocatedAmount) || 0,
+        Number(b.sortOrder) || 0,
+      ]);
+      (b.categories || []).forEach(function (category) {
+        categoryRows.push([c.id, b.id, String(category)]);
+      });
+    });
+  });
+
+  writeTable(
+    spreadsheet,
+    CYCLES_SHEET,
+    ["Cycle ID", "Start Date", "End Date", "Spendable Amount", "Closed At", "Last Backed Up"],
+    cycleRows,
+    [2, 3, 5, 6],
+  );
+  writeTable(
+    spreadsheet,
+    BUCKETS_SHEET,
+    ["Bucket ID", "Cycle ID", "Name", "Note", "Color Index", "Emoji", "Allocated Amount", "Sort Order"],
+    bucketRows,
+    [3, 4, 6],
+  );
+  writeTable(
+    spreadsheet,
+    BUCKET_CATEGORIES_SHEET,
+    ["Cycle ID", "Bucket ID", "Category"],
+    categoryRows,
+    [3],
+  );
+  return cycles.length;
+}
+
+// A plain yyyy-MM-dd string is returned as it is. formatDate would parse it as UTC midnight and
+// then read the local day, which is the previous day anywhere behind UTC.
+function isoDateValue(value) {
+  if (
+    typeof value === "string" &&
+    value.trim().length === 10 &&
+    /^\d{4}-\d{2}-\d{2}/.test(value.trim())
+  ) {
+    return value.trim();
+  }
+  return formatDate(value);
+}
+
+function readTableRows(spreadsheet, name) {
+  var sheet = spreadsheet.getSheetByName(name);
+  if (!sheet) return [];
+  return sheet.getDataRange().getValues().slice(1);
+}
+
+function readBucketBudgets(spreadsheet) {
+  var categoriesByBucket = {};
+  readTableRows(spreadsheet, BUCKET_CATEGORIES_SHEET).forEach(function (r) {
+    var category = String(r[2] || "");
+    if (!category) return;
+    var key = (Number(r[0]) || 0) + ":" + (Number(r[1]) || 0);
+    (categoriesByBucket[key] = categoriesByBucket[key] || []).push(category);
+  });
+
+  var bucketsByCycle = {};
+  readTableRows(spreadsheet, BUCKETS_SHEET).forEach(function (r) {
+    var bucketId = Number(r[0]) || 0;
+    var cycleId = Number(r[1]) || 0;
+    (bucketsByCycle[cycleId] = bucketsByCycle[cycleId] || []).push({
+      id: bucketId,
+      name: String(r[2] || ""),
+      note: String(r[3] || ""),
+      colorIndex: Number(r[4]) || 0,
+      emoji: String(r[5] || ""),
+      allocatedAmount: Number(r[6]) || 0,
+      sortOrder: Number(r[7]) || 0,
+      categories: categoriesByBucket[cycleId + ":" + bucketId] || [],
+    });
+  });
+
+  var cycles = [];
+  readTableRows(spreadsheet, CYCLES_SHEET).forEach(function (r) {
+    var cycleId = Number(r[0]) || 0;
+    var startDate = r[1] ? isoDateValue(r[1]) : "";
+    var endDate = r[2] ? isoDateValue(r[2]) : "";
+    if (!startDate || !endDate) return;
+    cycles.push({
+      id: cycleId,
+      startDate: startDate,
+      endDate: endDate,
+      spendableAmount: Number(r[3]) || 0,
+      closedAt: r[4] ? isoDateValue(r[4]) : null,
+      buckets: bucketsByCycle[cycleId] || [],
+    });
+  });
+  return cycles;
+}
+
 function doPost(e) {
   try {
     var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
@@ -403,6 +551,28 @@ function doPost(e) {
     // =============================================================
     // ACCOUNTS BACKUP (Updated with Current Balance)
     // =============================================================
+    if (target === "bucket_budgets" && action === "backup") {
+      // Cycles travel in payload.cycles, and records stays empty on purpose: a script deployed
+      // before this target existed treats records as transactions and would append them to the
+      // transaction sheet. With records empty that older script does nothing.
+      var bucketCycles = payload.cycles || [];
+      if (bucketCycles.length === 0 && !allowEmptyBackup) {
+        return jsonOut({
+          status: "ok",
+          action: "backup_skipped",
+          type: "bucket_budgets_backed_up",
+          target: target,
+          count: 0,
+          message: "Skipped empty backup to prevent accidental sheet erase",
+        });
+      }
+      return jsonOut({
+        status: "ok",
+        type: "bucket_budgets_backed_up",
+        count: backupBucketBudgets(spreadsheet, bucketCycles, timeZone),
+      });
+    }
+
     if (target === "accounts" && action === "backup") {
       var accountSheet = ensureSheet(spreadsheet, ACCOUNTS_SHEET);
       accountSheet.clear();
@@ -686,6 +856,16 @@ function doGet(e) {
         });
       }
       return jsonOut({ status: "ok", data: dropdowns });
+    }
+
+    if (target === "bucket_budgets") {
+      // "type" tells the app this script understands the target; an older script would fall
+      // through to the transaction list, which has no such marker.
+      return jsonOut({
+        status: "ok",
+        type: "bucket_budgets",
+        data: readBucketBudgets(spreadsheet),
+      });
     }
 
     if (target === "budgets") {

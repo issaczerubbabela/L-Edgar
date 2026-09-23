@@ -65,6 +65,27 @@ interface BucketBudgetDao {
     @Query("SELECT * FROM budget_buckets WHERE cycleId = :cycleId ORDER BY sortOrder ASC, id ASC")
     suspend fun getBuckets(cycleId: Long): List<BudgetBucket>
 
+    // ── Whole-table access, for backup and restore ────────────────────────────
+
+    @Query("SELECT * FROM budget_cycles ORDER BY startDate ASC, id ASC")
+    suspend fun getAllCycles(): List<BudgetCycle>
+
+    @Query("SELECT * FROM budget_buckets ORDER BY cycleId ASC, sortOrder ASC, id ASC")
+    suspend fun getAllBuckets(): List<BudgetBucket>
+
+    @Query("SELECT * FROM bucket_categories ORDER BY cycleId ASC, bucketId ASC, category ASC")
+    suspend fun getAllAssignments(): List<BucketCategory>
+
+    // Children first. Foreign keys would cascade anyway, but this does not depend on them.
+    @Query("DELETE FROM bucket_categories")
+    suspend fun deleteAllAssignments()
+
+    @Query("DELETE FROM budget_buckets")
+    suspend fun deleteAllBuckets()
+
+    @Query("DELETE FROM budget_cycles")
+    suspend fun deleteAllCycles()
+
     // ── Category routing ──────────────────────────────────────────────────────
 
     /**

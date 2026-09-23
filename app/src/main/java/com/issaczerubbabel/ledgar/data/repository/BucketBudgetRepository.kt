@@ -1,5 +1,7 @@
 package com.issaczerubbabel.ledgar.data.repository
 
+import com.issaczerubbabel.ledgar.data.bucket.BucketBudgetSnapshot
+import com.issaczerubbabel.ledgar.data.bucket.RestoredCycle
 import com.issaczerubbabel.ledgar.data.bucket.StartCycleRequest
 import com.issaczerubbabel.ledgar.data.bucket.StartCycleResult
 import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
@@ -24,6 +26,15 @@ interface BucketBudgetRepository {
      * the new one opened and (optionally) the buckets carried over, or nothing changes at all.
      */
     suspend fun startCycle(request: StartCycleRequest, today: LocalDate = LocalDate.now()): StartCycleResult
+
+    /** Everything, read in one transaction so a backup never sees half of a change. */
+    suspend fun getBackupSnapshot(): BucketBudgetSnapshot
+
+    /**
+     * Replaces every cycle, bucket and category routing with [cycles], atomically. Callers pass
+     * cycles that have already been cleaned by BucketBackupMapper.
+     */
+    suspend fun replaceAllFromBackup(cycles: List<RestoredCycle>)
 
     // Buckets
     fun observeBucket(bucketId: Long): Flow<BudgetBucket?>

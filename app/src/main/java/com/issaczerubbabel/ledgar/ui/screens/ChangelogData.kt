@@ -25,7 +25,9 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Start new cycle screen: pick payday and the end date by hand, prefill the spendable amount from the last cycle, accept a detected salary with one tap, and choose whether to carry over your buckets. Starting a cycle in the past or after payday closes the old one cleanly, and mistakes are explained on the field that caused them",
             "Plan your buckets screen: an always-visible Unallocated figure that turns red when you over-allocate without ever blocking a save, plus steppers and typed amounts for each bucket, an editable spendable amount, and new buckets",
             "Bucket detail and editor: see where a bucket's money went by category, and edit its name, note, emoji, colour, allocation and categories. Choosing a category held by another bucket moves it, so a category is only ever in one bucket",
-            "Browse past cycles from the Budget header. Closed cycles keep their frozen numbers and cannot be edited"
+            "Browse past cycles from the Budget header. Closed cycles keep their frozen numbers and cannot be edited",
+            "Salary cycles, buckets and their categories are now backed up to your Google Sheet on every sync (new _cycles, _buckets and _bucket_categories tabs) and restored on import, so a new phone or a reinstall brings your budgeting back. The Apps Script has to be redeployed once from Database Setup for this to start",
+            "Restoring an old backup that has monthly budgets but no buckets on a device with no cycles now carries those budgets across as a starting cycle, the same way an app upgrade does"
         ),
         fixes = listOf(
             "Cash Flow chart now refreshes plotted series correctly when switching top period months, preventing stale bars/lines and stale Y-axis scale carryover",
@@ -60,6 +62,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Added on-device instrumented tests that exercise the cycle transaction against a real in-memory Room database, run with am instrument so they never touch app data",
             "Total tab removed from the Trans. pager (Daily, Calendar and Monthly remain): its budget section is replaced by the Budget tab, and the old budget-setting screen that only it linked to is gone. The legacy budgets table and its Sheets backup are kept untouched for restores",
             "Budget tab stays highlighted while you are on its sub-screens (Start cycle, Plan buckets, bucket detail)",
+            "If your Apps Script has not been redeployed, syncing keeps working and Settings and the Log screen tell you that buckets were not backed up and how to fix it. Cycles are sent in a separate field so an older script cannot mistake them for transactions and add junk rows to your transaction sheet",
+            "Sheet dates and free text are written as plain text, so cycle dates stay dates and a note or category beginning with = is never run as a formula",
             "Amount and name dialogs in Plan buckets open with the field focused and ready to type, and a zero amount starts blank instead of with a stray 0",
             "Rupee amounts on the Budget screens use Indian digit grouping (₹1,20,000) and tabular digits so figures line up as they change",
             "Export moved out of the Total tab into Settings, directly below Import from CSV, so every data import and export action now lives in one place",

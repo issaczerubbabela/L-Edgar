@@ -46,6 +46,10 @@ sealed class ImportState {
     data class Error(val message: String) : ImportState()
 }
 
+private const val BUCKET_SCRIPT_OUTDATED_MESSAGE =
+    "Your Apps Script is out of date, so your buckets were not backed up. " +
+        "Copy the latest script from Database Setup and redeploy it."
+
 sealed class SettingsUiEvent {
     data class ShowMessage(val message: String) : SettingsUiEvent()
     data object ShowSyncCompletedToast : SettingsUiEvent()
@@ -280,7 +284,7 @@ class SettingsViewModel @Inject constructor(
                 _syncConflicts.value = result.conflicts
                 _uiEvents.emit(
                     SettingsUiEvent.ShowMessage(
-                        "Sync import complete. ${result.restoredDropdowns} dropdown options restored, ${result.restoredAccounts} accounts restored, ${result.restoredBudgets} budget rows restored, ${result.imported} new transactions imported, and ${result.skipped} identical rows skipped."
+                        "Sync import complete. ${result.restoredDropdowns} dropdown options restored, ${result.restoredAccounts} accounts restored, ${result.restoredBudgets} budget rows restored, ${result.restoredCycles} budget ${if (result.restoredCycles == 1) "cycle" else "cycles"} restored, ${result.imported} new transactions imported, and ${result.skipped} identical rows skipped."
                     )
                 )
                 if (result.conflicts.isNotEmpty()) {
@@ -429,8 +433,12 @@ class SettingsViewModel @Inject constructor(
                         val dropdownCount = latest.outputData.getInt(SyncWorker.KEY_DROPDOWN_BACKUP_COUNT, 0)
                         val budgetCount = latest.outputData.getInt(SyncWorker.KEY_BUDGET_BACKUP_COUNT, 0)
                         val accountCount = latest.outputData.getInt(SyncWorker.KEY_ACCOUNTS_BACKUP_COUNT, 0)
-                        val total = (dropdownCount + budgetCount + accountCount).coerceAtLeast(0)
+                        val bucketCount = latest.outputData.getInt(SyncWorker.KEY_BUCKET_BACKUP_COUNT, 0)
+                        val total = (dropdownCount + budgetCount + accountCount + bucketCount.coerceAtLeast(0)).coerceAtLeast(0)
                         _backupState.value = ImportState.Success(imported = total, skipped = 0)
+                        if (bucketCount == SyncWorker.SCRIPT_OUTDATED) {
+                            _uiEvents.emit(SettingsUiEvent.ShowMessage(BUCKET_SCRIPT_OUTDATED_MESSAGE))
+                        }
                         backupRequestedFromSettings = false
                     }
 

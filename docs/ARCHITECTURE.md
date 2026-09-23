@@ -68,7 +68,7 @@ graph TD
 ### Background Execution
 
 - WorkManager + Hilt-injected SyncWorker.
-- SyncWorker sends local unsynced records and then backs up dropdowns and budgets.
+- SyncWorker sends local unsynced records and then backs up dropdowns, budgets and bucket budgets (cycles, buckets and category routing).
 - Worker uses retry semantics on failure.
 
 ## 3. Navigation Architecture
@@ -142,6 +142,7 @@ sequenceDiagram
 
     Worker->>API: backup dropdowns
     Worker->>API: backup budgets
+    Worker->>API: backup bucket_budgets
 ```
 
 ## 5. Import Flows
@@ -151,6 +152,7 @@ sequenceDiagram
 1. Settings triggers importFromSheets.
 2. Repository imports dropdowns and overwrites local options.
 3. Repository imports budgets and overwrites local budget rows.
+3a. Repository imports bucket_budgets (cycles with nested buckets and categories) and replaces the local cycle tables.
 4. Repository imports transactions and deduplicates against local comparable fields.
 
 ### CSV Import
@@ -280,6 +282,30 @@ erDiagram
   close-open-carry-over sequence in one Room transaction.
 - v16 -> v17 migration (data/local/migration/BucketBudgetMigration.kt) creates the tables and seeds the
   first cycle from the most recent month in budgets. The budgets table itself is left untouched.
+
+### Bucket budget sync (Google Sheets)
+
+- Backed up wholesale on every sync and restored wholesale on import, like budgets. Stored in three
+  sheets (`_cycles`, `_buckets`, `_bucket_categories`) but sent and returned as one nested list of
+  cycles, each holding its buckets, each holding its category names, so a restore never re-links ids.
+- Request: `{action: "backup", target: "bucket_budgets", records: [], cycles: [...]}`. Cycles travel in
+  `cycles` and `records` stays empty on purpose: a script deployed before this target existed treats
+  `records` as transactions and would append junk rows to the transaction sheet. With `records`
+  empty that older script does nothing.
+- The app trusts a reply only if it carries the new script's marker (`type: "bucket_budgets_backed_up"`
+  for a backup, `type: "bucket_budgets"` for a fetch). Without it the app reports "script outdated" and
+  carries on; an outdated script never fails the whole sync.
+- Date and free-text columns are written as plain text so Sheets does not turn ISO dates into Date cells
+  or parse notes and category names that start with `=` as formulas.
+- Restore treats the sheet as untrusted (data/bucket/BucketBackup.kt): malformed cycles are dropped,
+  categories are de-duplicated per cycle ignoring case, and at most one cycle can come back running.
+  An empty or outdated sheet never wipes local cycles. On a device with no cycles, the restored monthly
+  budgets are carried across as on upgrade.
+- The script exists twice: `scripts/AppsScript.gs` and the copy in `AppsScriptSetupScreen.kt` that users
+  paste in. `scripts/tests/bucket-budgets.test.js` runs both against a fake spreadsheet, in India and Los
+  Angeles time zones, and fails if they drift. It also runs the pre-change script from
+  `scripts/tests/fixtures/` to prove the compatibility above. `BucketBudgetContractTest` and the test
+  share golden request/response files, so a field renamed on either side fails a test.
 
 ### dropdown_options
 
