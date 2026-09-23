@@ -1,9 +1,12 @@
 package com.issaczerubbabel.ledgar.data.repository
 
+import com.issaczerubbabel.ledgar.data.bucket.StartCycleRequest
+import com.issaczerubbabel.ledgar.data.bucket.StartCycleResult
 import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetBucket
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetCycle
 import kotlinx.coroutines.flow.Flow
+import java.time.LocalDate
 
 interface BucketBudgetRepository {
     // Cycles
@@ -14,6 +17,12 @@ interface BucketBudgetRepository {
     suspend fun insertCycle(cycle: BudgetCycle): Long
     suspend fun updateCycle(cycle: BudgetCycle)
     suspend fun closeCycle(cycleId: Long, closedAt: String)
+
+    /**
+     * Ends the running cycle and begins a new one, atomically: either the old cycle is closed,
+     * the new one opened and (optionally) the buckets carried over, or nothing changes at all.
+     */
+    suspend fun startCycle(request: StartCycleRequest, today: LocalDate = LocalDate.now()): StartCycleResult
 
     // Buckets
     fun observeBuckets(cycleId: Long): Flow<List<BudgetBucket>>

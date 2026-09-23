@@ -1,13 +1,20 @@
 package com.issaczerubbabel.ledgar.data.repository
 
+import androidx.room.withTransaction
+import com.issaczerubbabel.ledgar.data.bucket.CycleTransitions
+import com.issaczerubbabel.ledgar.data.bucket.StartCycleRequest
+import com.issaczerubbabel.ledgar.data.bucket.StartCycleResult
+import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.dao.BucketBudgetDao
 import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetBucket
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetCycle
 import kotlinx.coroutines.flow.Flow
+import java.time.LocalDate
 import javax.inject.Inject
 
 class BucketBudgetRepositoryImpl @Inject constructor(
+    private val db: SheetSyncDatabase,
     private val dao: BucketBudgetDao
 ) : BucketBudgetRepository {
 
@@ -24,6 +31,41 @@ class BucketBudgetRepositoryImpl @Inject constructor(
     override suspend fun updateCycle(cycle: BudgetCycle) = dao.updateCycle(cycle)
 
     override suspend fun closeCycle(cycleId: Long, closedAt: String) = dao.closeCycle(cycleId, closedAt)
+
+    override suspend fun startCycle(request: StartCycleRequest, today: LocalDate): StartCycleResult =
+        db.withTransaction {
+            val running = dao.getRunningCycle()
+            CycleTransitions.validate(request, running)?.let { return@withTransaction StartCycleResult.Rejected(it) }
+
+            val oldBuckets = running?.let { dao.getBuckets(it.id) }.orEmpty()
+            val oldAssignments = running?.let { dao.getCategoryAssignments(it.id) }.orEmpty()
+
+            running?.let { dao.updateCycle(CycleTransitions.closeForNext(it, request, today)) }
+
+            val newCycleId = dao.insertCycle(
+                BudgetCycle(
+                    startDate = request.startDate.toString(),
+                    endDate = request.endDate.toString(),
+                    spendableAmount = request.spendableAmount
+                )
+            )
+
+            if (request.carryOverBuckets && oldBuckets.isNotEmpty()) {
+                val newIdByOldId = HashMap<Long, Long>()
+                oldBuckets.forEach { bucket ->
+                    newIdByOldId[bucket.id] = dao.insertBucket(bucket.copy(id = 0, cycleId = newCycleId))
+                }
+                dao.assignCategories(
+                    oldAssignments.mapNotNull { assignment ->
+                        newIdByOldId[assignment.bucketId]?.let { newBucketId ->
+                            BucketCategory(cycleId = newCycleId, bucketId = newBucketId, category = assignment.category)
+                        }
+                    }
+                )
+            }
+
+            StartCycleResult.Started(newCycleId)
+        }
 
     override fun observeBuckets(cycleId: Long): Flow<List<BudgetBucket>> = dao.observeBuckets(cycleId)
 

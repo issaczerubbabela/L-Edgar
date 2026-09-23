@@ -19,7 +19,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Account Balance As-Of now supports precise timestamp values with a Set to Now shortcut in add/edit account flows",
             "Added advanced Sheets sync conflict resolution UI",
             "Salary-cycle bucket budgeting data layer: new budget_cycles, budget_buckets and bucket_categories tables, with a unique (cycle, category) constraint so a category can belong to only one bucket and bucket totals always reconcile",
-            "Existing per-category budgets are carried into the new bucket model on upgrade: the most recent budgeted month becomes the first running cycle, with each category budget as its own bucket"
+            "Existing per-category budgets are carried into the new bucket model on upgrade: the most recent budgeted month becomes the first running cycle, with each category budget as its own bucket",
+            "Salary-cycle engine: starting a new cycle atomically closes the running one, opens the next and can carry the buckets and category routing across; a late start stretches the old cycle over the gap it was absorbing and a backdated start trims it, so spend from the real payday moves into the new cycle"
         ),
         fixes = listOf(
             "Cash Flow chart now refreshes plotted series correctly when switching top period months, preventing stale bars/lines and stale Y-axis scale carryover",
@@ -46,6 +47,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Added .tmp and .tmp_vico_src to gitignore for local artifact cleanup",
             "Conflict resolution now emits per-action audit snackbars with exact resolved and remaining counts",
             "Database upgrade to v17 keeps the old budgets table and its Sheets backup untouched, so existing backups still restore and there is a rollback path; the upgrade was verified against a real device database",
+            "Cycle summaries derive spent, remaining, daily pace, overdue days and unbucketed spend from the expense ledger rather than storing them, so moving a category or backdating a cycle can never leave stale totals",
+            "Added on-device instrumented tests that exercise the cycle transaction against a real in-memory Room database, run with am instrument so they never touch app data",
             "Export moved out of the Total tab into Settings, directly below Import from CSV, so every data import and export action now lives in one place",
             "Export renamed from \"Export data to Excel\" to \"Export to CSV\" to match the file it actually produces, replacing the stale \"Money Manager - Excel\" dialog title",
             "Export dialog now has its own month picker, so any past month can be exported without leaving Settings, and each interval option is labelled with the exact range it will produce (Sep 2026, Jul – Sep 2026, 2026, 2025) instead of a generic name",

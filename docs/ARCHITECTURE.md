@@ -270,6 +270,10 @@ erDiagram
 - Categories with no row are "Unbucketed", a virtual bucket that is derived, never stored.
 - Spent and remaining amounts are derived from expense_records over the cycle's date range, not stored.
 - No per-row sync fields: like budgets, these are backed up wholesale rather than tracked per record.
+- Cycle rules live in data/bucket/ as pure functions: CycleCalendar (day counts, pace, overdue),
+  CycleSummaryBuilder (derives spend per bucket from expense_records), CycleTransitions (validation and the
+  closing rule when a new cycle starts) and SalaryDetector. BucketBudgetRepository.startCycle runs the
+  close-open-carry-over sequence in one Room transaction.
 - v16 -> v17 migration (data/local/migration/BucketBudgetMigration.kt) creates the tables and seeds the
   first cycle from the most recent month in budgets. The budgets table itself is left untouched.
 
