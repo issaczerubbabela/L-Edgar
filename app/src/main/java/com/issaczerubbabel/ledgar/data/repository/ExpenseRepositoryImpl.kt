@@ -8,6 +8,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.Budget
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
+import com.issaczerubbabel.ledgar.data.preferences.SyncStateRepository
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
 import com.issaczerubbabel.ledgar.data.remote.ApiService
 import com.issaczerubbabel.ledgar.data.remote.DeletePayload
@@ -30,7 +31,8 @@ class ExpenseRepositoryImpl @Inject constructor(
     private val apiService: ApiService,
     private val dropdownOptionRepository: DropdownOptionRepository,
     private val budgetDao: BudgetDao,
-    private val preferenceRepository: ThemePreferenceRepository
+    private val preferenceRepository: ThemePreferenceRepository,
+    private val syncState: SyncStateRepository
 ) : ExpenseRepository {
 
     private val importLogTag = "ExpenseImport"
@@ -285,6 +287,9 @@ class ExpenseRepositoryImpl @Inject constructor(
             }
             mapped.size
         }
+
+        // The phone's lists now match the Sheet's, so Backups can safely write them back.
+        syncState.setMergedListsFromSheet()
 
         val txResponse = apiService.importRecords(
             url = scriptUrl,

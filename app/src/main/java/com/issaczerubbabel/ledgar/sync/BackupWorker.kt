@@ -32,7 +32,8 @@ class BackupWorker @AssistedInject constructor(
     private val dropdownOptionRepository: DropdownOptionRepository,
     private val budgetRepository: BudgetRepository,
     private val apiService: ApiService,
-    private val preferenceRepository: ThemePreferenceRepository
+    private val preferenceRepository: ThemePreferenceRepository,
+    private val listsMerger: SheetListsMerger
 ) : CoroutineWorker(context, workerParams) {
 
     private var lastSyncError: String? = null
@@ -41,6 +42,7 @@ class BackupWorker @AssistedInject constructor(
         val scriptUrl = preferenceRepository.scriptUrl.first()
             ?: return Result.failure(workDataOf(KEY_ERROR_MESSAGE to SyncUrlNotConfiguredException().message))
         return try {
+            listsMerger.mergeOnce(scriptUrl)
             val accounts = accountRepository.getAllAccountsSnapshot()
             val accountCount = backupAccounts(accounts, scriptUrl)
             val dropdownCount = accountCount?.let { backupDropdownOptions(scriptUrl) }

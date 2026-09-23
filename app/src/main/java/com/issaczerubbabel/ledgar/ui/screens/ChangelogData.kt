@@ -36,7 +36,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Permanently deleting an account with its transactions now removes them from Google Sheets too, so an import no longer brings them back",
             "Deleting a transaction that is already gone from the Sheet no longer leaves sync stuck retrying",
             "Saving a budget no longer interrupts a sync in progress, and budget and dropdown changes are now backed up automatically",
-            "Changes that hadn't synced when the app was closed now sync as soon as it starts again"
+            "Changes that hadn't synced when the app was closed now sync as soon as it starts again",
+            "A fresh install no longer overwrites the Sheet's accounts, categories and budgets with its defaults: the first backup adds the Sheet's lists to the phone before writing"
         ),
         qol = listOf(
             "Quick Settings tile click now stays in quick-entry flow and updates tile state without opening the main app tabs",

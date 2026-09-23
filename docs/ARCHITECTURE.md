@@ -67,7 +67,7 @@ graph TD
 ### Background Execution
 
 - `SyncTriggers` (started in `SheetSyncApp`) watches Room: any Transaction waiting to sync requests a Sync, and any change to accounts, dropdowns, budgets or transactions requests a Backup. Screens never schedule sync work. All work is queued through `SyncScheduler`. `SyncWorker` sends pending Transaction changes. It's queued with `APPEND_OR_REPLACE`, so a running Sync is never cancelled, and it retries with exponential backoff.
-- `BackupWorker` replaces the Sheet's accounts, dropdowns and budgets tabs. It runs as a separate, delayed job, so a failing Backup can't hold Transactions back.
+- `BackupWorker` replaces the Sheet's accounts, dropdowns and budgets tabs. It runs as a separate, delayed job, so a failing Backup can't hold Transactions back. Before a phone's first Backup, `SheetListsMerger` adds the Sheet's accounts, dropdowns and budgets that the phone lacks (matched by name), so a fresh install's defaults can never replace the Sheet's real lists.
 - Sync is safe to repeat (ADR-0003). A Transaction's Remote timestamp is saved in Room before its first request, every insert/update is sent as the script's overwrite-or-append `update`, and a Transaction is only marked synced if its `localVersion` (raised by a SQLite trigger on every change) hasn't moved since Sync read it.
 
 ## 3. Navigation Architecture
