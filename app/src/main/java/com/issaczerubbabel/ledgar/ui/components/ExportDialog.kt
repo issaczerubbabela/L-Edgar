@@ -143,7 +143,9 @@ fun ExportDialog(
                             else -> "Exporting $startDate to $endDate."
                         },
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (rangeIsValid) {
+                        // Only alarm-coloured once the user has typed something wrong; on a
+                        // pristine form this is just a format hint.
+                        color = if (rangeIsValid || (customStart.isBlank() && customEnd.isBlank())) {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         } else {
                             MaterialTheme.colorScheme.error
