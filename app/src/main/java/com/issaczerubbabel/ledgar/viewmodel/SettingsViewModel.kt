@@ -17,9 +17,10 @@ import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
 import com.issaczerubbabel.ledgar.data.repository.SyncConflict
 import com.issaczerubbabel.ledgar.sync.BackupWorker
 import com.issaczerubbabel.ledgar.sync.SyncScheduler
+import com.issaczerubbabel.ledgar.sync.SyncStatus
+import com.issaczerubbabel.ledgar.data.preferences.SyncStateRepository
 import com.issaczerubbabel.ledgar.ui.theme.AppThemeOption
 import com.issaczerubbabel.ledgar.util.CsvParser
-import com.issaczerubbabel.ledgar.util.normalizeTimestampKey
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -61,7 +62,8 @@ class SettingsViewModel @Inject constructor(
     private val repository: ExpenseRepository,
     private val themeRepository: ThemePreferenceRepository,
     private val apiService: ApiService,
-    private val syncScheduler: SyncScheduler
+    private val syncScheduler: SyncScheduler,
+    private val syncState: SyncStateRepository
 ) : ViewModel() {
 
     init {
@@ -237,8 +239,24 @@ class SettingsViewModel @Inject constructor(
     private val _backupState = MutableStateFlow<ImportState>(ImportState.Idle)
     val backupState: StateFlow<ImportState> = _backupState
 
-    private val _syncConflicts = MutableStateFlow<List<SyncConflict>>(emptyList())
-    val syncConflicts: StateFlow<List<SyncConflict>> = _syncConflicts
+    val syncConflicts: StateFlow<List<SyncConflict>> = repository.observeSyncConflicts()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _showConflictSheet = MutableStateFlow(false)
+    val showConflictSheet: StateFlow<Boolean> = _showConflictSheet
+
+    /** Local ids of Transactions the Sheet no longer has, waiting for the user to decide. */
+    val heldSheetDeletions: StateFlow<Set<Long>> = syncState.heldSheetDeletions
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    val possibleDuplicates: StateFlow<List<List<ExpenseRecord>>> = repository.observePossibleDuplicates()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _showDuplicatesSheet = MutableStateFlow(false)
+    val showDuplicatesSheet: StateFlow<Boolean> = _showDuplicatesSheet
+
+    val syncStatus: StateFlow<SyncStatus> = syncScheduler.transactionSyncStatus
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SyncStatus.Idle)
 
     private val _conflictResolutionState = MutableStateFlow<ImportState>(ImportState.Idle)
     val conflictResolutionState: StateFlow<ImportState> = _conflictResolutionState
@@ -261,13 +279,13 @@ class SettingsViewModel @Inject constructor(
             try {
                 val result = repository.importFromGoogleSheets()
                 _sheetsState.value = ImportState.Success(result.imported, result.skipped)
-                _syncConflicts.value = result.conflicts
                 _uiEvents.emit(
                     SettingsUiEvent.ShowMessage(
-                        "Sync import complete. ${result.restoredDropdowns} dropdown options restored, ${result.restoredAccounts} accounts restored, ${result.restoredBudgets} budget rows restored, ${result.imported} new transactions imported, and ${result.skipped} identical rows skipped."
+                        "Sync import complete. ${result.restoredDropdowns} dropdown options restored, ${result.restoredAccounts} accounts restored, ${result.restoredBudgets} budget rows restored, and ${result.imported} transaction changes pulled from the Sheet."
                     )
                 )
                 if (result.conflicts.isNotEmpty()) {
+                    _showConflictSheet.value = true
                     _uiEvents.emit(
                         SettingsUiEvent.ShowMessage(
                             "${result.conflicts.size} sync conflicts detected. Resolve them to complete sync."
@@ -280,38 +298,49 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun openConflictSheet() { _showConflictSheet.value = true }
+
     fun keepLocalConflict(conflict: SyncConflict) {
-        completeConflictAction(actionLabel = "Keep Local") {
-            removeConflict(conflict)
-        }
+        completeConflictAction(actionLabel = "Kept the phone's version") { repository.resolveConflictKeepPhone(conflict) }
     }
 
     fun updateDeviceConflict(conflict: SyncConflict) {
-        completeConflictAction(actionLabel = "Update Device") {
-            repository.updateLocalTransactionFromSheet(conflict)
-            removeConflict(conflict)
-        }
+        completeConflictAction(actionLabel = "Kept the Sheet's version") { repository.resolveConflictKeepSheet(conflict) }
     }
 
     fun keepBothConflict(conflict: SyncConflict) {
-        completeConflictAction(actionLabel = "Keep Both") {
-            repository.insertSheetTransactionAsDuplicate(conflict)
-            removeConflict(conflict)
-        }
+        completeConflictAction(actionLabel = "Kept both") { repository.resolveConflictKeepBoth(conflict) }
     }
 
     fun deleteFromCloudConflict(conflict: SyncConflict) {
-        completeConflictAction(actionLabel = "Delete from Cloud") {
-            val ts = normalizeTimestampKey(conflict.sheetTx.timestamp)
-                ?: throw IllegalArgumentException("Cloud delete requires a valid sheet timestamp")
-            repository.deleteTransactionFromSheet(ts)
-            removeConflict(conflict)
-        }
+        completeConflictAction(actionLabel = "Deleted everywhere") { repository.resolveConflictDeleteEverywhere(conflict) }
     }
 
     fun dismissSyncConflictSheet() {
-        _syncConflicts.value = emptyList()
+        _showConflictSheet.value = false
         _conflictResolutionState.value = ImportState.Idle
+    }
+
+    // ── Transactions deleted from the Sheet, held back by the safety brake ───
+
+    fun deleteHeldFromPhone() = syncScheduler.requestFullSync(allowMassDelete = true)
+
+    fun keepHeldAndReupload() {
+        viewModelScope.launch { repository.keepTransactionsMissingFromSheet(heldSheetDeletions.value) }
+    }
+
+    // ── Possible duplicates ──────────────────────────────────────────────────
+
+    fun openDuplicatesSheet() { _showDuplicatesSheet.value = true }
+    fun dismissDuplicatesSheet() { _showDuplicatesSheet.value = false }
+
+    /** Deletes one copy on the phone; Sync then deletes it from the Sheet by its Transaction ID. */
+    fun deleteDuplicate(record: ExpenseRecord) {
+        viewModelScope.launch { repository.delete(record) }
+    }
+
+    fun syncNow() {
+        viewModelScope.launch { syncScheduler.retrySync() }
     }
 
     // ── CSV import ───────────────────────────────────────────────────────────
@@ -364,35 +393,23 @@ class SettingsViewModel @Inject constructor(
     fun resetBackupState() { _backupState.value = ImportState.Idle }
 
     private fun completeConflictAction(actionLabel: String, action: suspend () -> Unit) {
-        if (_syncConflicts.value.isEmpty() || _conflictResolutionState.value is ImportState.Loading) return
+        if (_conflictResolutionState.value is ImportState.Loading) return
         viewModelScope.launch {
             _conflictResolutionState.value = ImportState.Loading
             try {
-                val beforeCount = _syncConflicts.value.size
+                val remaining = (syncConflicts.value.size - 1).coerceAtLeast(0)
                 action()
-                val remaining = _syncConflicts.value.size
-                val resolved = (beforeCount - remaining).coerceAtLeast(0)
-                _conflictResolutionState.value = ImportState.Success(imported = resolved, skipped = remaining)
-                _uiEvents.emit(
-                    SettingsUiEvent.ShowMessage(
-                        "$actionLabel applied. Resolved $resolved conflict(s). Remaining: $remaining."
-                    )
-                )
+                // Conflicts don't count as unsynced changes, so the resolved one needs an explicit Sync.
+                syncScheduler.requestSync()
+                _conflictResolutionState.value = ImportState.Success(imported = 1, skipped = remaining)
+                _uiEvents.emit(SettingsUiEvent.ShowMessage("$actionLabel. Conflicts left: $remaining."))
                 if (remaining == 0) {
+                    _showConflictSheet.value = false
                     _uiEvents.emit(SettingsUiEvent.ShowSyncCompletedToast)
-                    _uiEvents.emit(SettingsUiEvent.ShowMessage("Sync completed"))
                 }
             } catch (e: Exception) {
                 _conflictResolutionState.value = ImportState.Error(e.message ?: "Conflict resolution failed")
             }
-        }
-    }
-
-    private fun removeConflict(conflict: SyncConflict) {
-        val targetTs = normalizeTimestampKey(conflict.sheetTx.timestamp)
-        _syncConflicts.value = _syncConflicts.value.filterNot { existing ->
-            existing.localTx.id == conflict.localTx.id &&
-                normalizeTimestampKey(existing.sheetTx.timestamp) == targetTs
         }
     }
 

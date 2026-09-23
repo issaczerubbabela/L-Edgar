@@ -51,9 +51,18 @@ interface ExpenseRepository {
     suspend fun delete(record: ExpenseRecord)
     suspend fun deleteAll()
     suspend fun isDuplicate(date: String, type: String, category: String, amount: Double): Boolean
-    suspend fun importRemoteRecords(records: List<ImportRecordDto>): Int
     suspend fun importFromGoogleSheets(): GoogleSheetsImportResult
-    suspend fun updateLocalTransactionFromSheet(conflict: SyncConflict)
-    suspend fun insertSheetTransactionAsDuplicate(conflict: SyncConflict)
-    suspend fun deleteTransactionFromSheet(timestamp: String)
+
+    /** Transactions changed differently on the phone and in the Sheet since their last Sync. */
+    fun observeSyncConflicts(): Flow<List<SyncConflict>>
+    suspend fun resolveConflictKeepPhone(conflict: SyncConflict)
+    suspend fun resolveConflictKeepSheet(conflict: SyncConflict)
+    suspend fun resolveConflictKeepBoth(conflict: SyncConflict)
+    suspend fun resolveConflictDeleteEverywhere(conflict: SyncConflict)
+
+    /** Re-uploads Transactions a Pull found missing from the Sheet, instead of deleting them. */
+    suspend fun keepTransactionsMissingFromSheet(ids: Collection<Long>)
+
+    /** Groups of Transactions that look identical: same date, type, category, amount, description and account. */
+    fun observePossibleDuplicates(): Flow<List<List<ExpenseRecord>>>
 }

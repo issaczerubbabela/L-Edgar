@@ -17,7 +17,12 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Expense Breakdown now includes tabbed Expense and Income category views with the same interactive donut experience",
             "Cash Flow now supports category filtering with an explicit All Categories option and time bucketing controls for Daily, Weekly, Monthly, and Yearly views",
             "Account Balance As-Of now supports precise timestamp values with a Set to Now shortcut in add/edit account flows",
-            "Added advanced Sheets sync conflict resolution UI"
+            "Added advanced Sheets sync conflict resolution UI",
+            "Two-way sync with Google Sheets: edits and rows typed into the Sheet now come to the phone when you open the app or tap Sync now",
+            "Every transaction now has a permanent ID shared with the Sheet's new ID column, so syncing again or reinstalling never duplicates rows",
+            "A transaction changed both on the phone and in the Sheet now becomes a sync conflict to resolve in Settings, instead of one side silently overwriting the other",
+            "New Settings tools: Sync now, Resolve sync conflicts, and Find duplicate transactions",
+            "Deleting many rows in the Sheet at once now asks before removing them from the phone, with the option to put them back"
         ),
         fixes = listOf(
             "Cash Flow chart now refreshes plotted series correctly when switching top period months, preventing stale bars/lines and stale Y-axis scale carryover",
@@ -37,7 +42,9 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Deleting a transaction that is already gone from the Sheet no longer leaves sync stuck retrying",
             "Saving a budget no longer interrupts a sync in progress, and budget and dropdown changes are now backed up automatically",
             "Changes that hadn't synced when the app was closed now sync as soon as it starts again",
-            "A fresh install no longer overwrites the Sheet's accounts, categories and budgets with its defaults: the first backup adds the Sheet's lists to the phone before writing"
+            "A fresh install no longer overwrites the Sheet's accounts, categories and budgets with its defaults: the first backup adds the Sheet's lists to the phone before writing",
+            "On a fresh install, transactions pulled from the Sheet now land on your restored accounts instead of a placeholder Cash account",
+            "Sync now pauses with an Update script notice when the deployed Apps Script is too old, instead of writing to it unsafely"
         ),
         qol = listOf(
             "Quick Settings tile click now stays in quick-entry flow and updates tile state without opening the main app tabs",

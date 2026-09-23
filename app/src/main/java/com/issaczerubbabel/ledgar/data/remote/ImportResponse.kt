@@ -6,5 +6,7 @@ package com.issaczerubbabel.ledgar.data.remote
 data class ImportResponse(
     val status: String? = null,
     val data: List<ImportRecordDto>? = null,
-    val message: String? = null
+    val message: String? = null,
+    /** Absent from scripts older than version 2. */
+    val scriptVersion: Int? = null
 )

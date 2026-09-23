@@ -2,136 +2,132 @@ package com.issaczerubbabel.ledgar.sync
 
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.remote.ApiService
-import com.issaczerubbabel.ledgar.data.remote.SyncRecordDto
 import com.issaczerubbabel.ledgar.data.remote.SyncRequest
-import com.issaczerubbabel.ledgar.util.generateTimestampKey
-import com.issaczerubbabel.ledgar.util.normalizeTimestampKey
-import java.time.Clock
-import java.time.LocalDateTime
+import com.issaczerubbabel.ledgar.data.remote.SyncResponse
 import javax.inject.Inject
 
 /**
- * Sends pending Transaction changes so that repeating a Sync can never duplicate a row.
+ * Two-way Sync keyed by Transaction ID (ADR-0003). A Pull merges the Sheet into the phone, then a
+ * Push sends the phone's pending changes as upserts and deletes by ID, which are safe to repeat.
  *
- * Every insert and update goes out as the script's `update` action, which overwrites the row with
- * the Transaction's Remote timestamp or appends it if there is none. That makes each write safe to
- * repeat even on scripts deployed before this change. It relies on the Remote timestamp being saved
- * in Room before the first attempt, so a retry after a lost reply targets the same row.
+ * Only a version-2 script is ever written to. An older one ignores version-2 requests (they carry no
+ * `records`) and its replies carry no `scriptVersion`, which is how it is detected.
  */
 class TransactionSyncer @Inject constructor(
     private val store: TransactionSyncStore,
-    private val api: ApiService,
-    private val clock: Clock
+    private val api: ApiService
 ) {
     sealed interface Outcome {
-        data class Synced(val count: Int) : Outcome
+        /** [heldDeletes] is null when this run didn't Pull, so what was held before still stands. */
+        data class Synced(val pushed: Int, val pulledChanges: Int, val heldDeletes: List<Long>?) : Outcome
         data class Failed(val message: String) : Outcome
+        data object ScriptOutdated : Outcome
     }
 
-    suspend fun sync(scriptUrl: String): Outcome {
-        assignMissingRemoteTimestamps()
-
-        val pending = store.pending()
-        if (pending.isEmpty()) return Outcome.Synced(0)
-
-        val (deletes, upserts) = pending.partition { it.syncAction.equals(DELETE, ignoreCase = true) }
-        val accountNames = store.accountNamesById()
-
-        upserts.chunked(BATCH_SIZE).forEach { batch ->
-            upsert(batch, accountNames, scriptUrl)?.let { return Outcome.Failed(it) }
-        }
-        deletes.forEach { record ->
-            delete(record, scriptUrl)?.let { return Outcome.Failed(it) }
-        }
-        return Outcome.Synced(pending.size)
-    }
-
-    private suspend fun assignMissingRemoteTimestamps() {
-        val missing = store.pending().filter { it.remoteTimestamp.isNullOrBlank() }
-        if (missing.isEmpty()) return
-
-        val inUse = store.remoteTimestampsInUse().toMutableSet()
-        var candidate = LocalDateTime.now(clock).withNano(0)
-        missing.forEach { record ->
-            if (record.syncAction.equals(DELETE, ignoreCase = true)) {
-                // Never reached the Sheet: nothing to delete there.
-                store.finishDeleteIfUnchanged(record.id, record.localVersion)
-                return@forEach
+    suspend fun sync(scriptUrl: String, pull: Boolean, allowMassDelete: Boolean = false): Outcome {
+        var pulledChanges = 0
+        var heldDeletes: List<Long>? = null
+        if (pull || store.hasRowsWithoutSyncId()) {
+            when (val pulled = pull(scriptUrl, allowMassDelete)) {
+                is PullResult.Done -> {
+                    pulledChanges = pulled.applied
+                    heldDeletes = pulled.heldDeletes
+                }
+                is PullResult.Stop -> return pulled.outcome
             }
-            while (!inUse.add(generateTimestampKey(candidate))) {
-                candidate = candidate.plusSeconds(1)
-            }
-            store.assignRemoteTimestamp(record.id, generateTimestampKey(candidate))
         }
+        val pushed = when (val pushOutcome = push(scriptUrl)) {
+            is PushResult.Done -> pushOutcome
+            is PushResult.Stop -> return pushOutcome.outcome
+        }
+        // Rows the script refused changed in the Sheet since this phone last saw them: merge, don't overwrite.
+        if (pushed.staleSeen) {
+            when (val pulled = pull(scriptUrl, allowMassDelete)) {
+                is PullResult.Done -> {
+                    pulledChanges += pulled.applied
+                    heldDeletes = pulled.heldDeletes
+                }
+                is PullResult.Stop -> return pulled.outcome
+            }
+        }
+        return Outcome.Synced(pushed.pushed, pulledChanges, heldDeletes)
     }
 
-    private suspend fun upsert(
-        batch: List<ExpenseRecord>,
-        accountNames: Map<Long, String>,
-        scriptUrl: String
-    ): String? {
-        val response = api.syncRecords(
-            scriptUrl,
-            SyncRequest(action = "update", target = "transactions", records = batch.map { it.toSyncDto(accountNames) })
-        )
+    private sealed interface PullResult {
+        data class Done(val applied: Int, val heldDeletes: List<Long>) : PullResult
+        data class Stop(val outcome: Outcome) : PullResult
+    }
+
+    private suspend fun pull(scriptUrl: String, allowMassDelete: Boolean): PullResult {
+        val response = api.importRecords(scriptUrl, target = "transactions")
         val body = response.body()
         if (!response.isSuccessful || !body?.status.equals("ok", ignoreCase = true)) {
-            return "Transaction sync failed (HTTP ${response.code()}): ${body?.message ?: "unknown error"}"
+            return PullResult.Stop(Outcome.Failed("Reading the Sheet failed (HTTP ${response.code()}): ${body?.message ?: "unknown error"}"))
         }
-        batch.forEach { store.markSyncedIfUnchanged(it.id, it.localVersion) }
-        return null
+        if ((body?.scriptVersion ?: 0) < REQUIRED_SCRIPT_VERSION) return PullResult.Stop(Outcome.ScriptOutdated)
+
+        val rows = body?.data.orEmpty().mapNotNull { dto -> dto.id?.takeIf { it.isNotBlank() }?.let { PulledRow(it, dto) } }
+        val plan = SheetMerge.plan(store.allTransactions(), rows, store.accountNamesById(), allowMassDelete)
+        return PullResult.Done(store.apply(plan.steps), plan.heldDeletes.map { it.localId })
     }
 
-    private suspend fun delete(record: ExpenseRecord, scriptUrl: String): String? {
-        val response = api.syncRecords(
-            scriptUrl,
-            SyncRequest(action = "delete", target = "transactions", targetTimestamp = record.remoteKey())
-        )
+    private sealed interface PushResult {
+        data class Done(val pushed: Int, val staleSeen: Boolean) : PushResult
+        data class Stop(val outcome: Outcome) : PushResult
+    }
+
+    private suspend fun push(scriptUrl: String): PushResult {
+        val pending = store.pending().filter { it.syncId != null && it.sheetConflictJson == null }
+        if (pending.isEmpty()) return PushResult.Done(0, staleSeen = false)
+
+        val (deletes, upserts) = pending.partition { it.syncAction.equals("DELETE", ignoreCase = true) }
+        val accountNames = store.accountNamesById()
+
+        var pushed = 0
+        var staleSeen = false
+        upserts.chunked(BATCH_SIZE).forEach { batch ->
+            val request = SyncRequest(
+                action = "upsert",
+                target = "transactions",
+                transactions = batch.map { it.toSheetDto(accountNames) }
+            )
+            val reply = when (val sent = send(scriptUrl, request)) {
+                is Sent.Ok -> sent.reply
+                is Sent.Stop -> return PushResult.Stop(sent.outcome)
+            }
+            val stale = reply.stale.orEmpty().toSet()
+            staleSeen = staleSeen || stale.isNotEmpty()
+            batch.filter { it.syncId !in stale }.forEach {
+                store.markSyncedIfUnchanged(it.id, it.localVersion, reply.revisions?.get(it.syncId))
+                pushed++
+            }
+        }
+
+        deletes.chunked(BATCH_SIZE).forEach { batch ->
+            val request = SyncRequest(action = "delete_ids", target = "transactions", ids = batch.mapNotNull(ExpenseRecord::syncId))
+            (send(scriptUrl, request) as? Sent.Stop)?.let { return PushResult.Stop(it.outcome) }
+            batch.forEach { store.finishDeleteIfUnchanged(it.id, it.localVersion) }
+            pushed += batch.size
+        }
+        return PushResult.Done(pushed, staleSeen)
+    }
+
+    private sealed interface Sent {
+        data class Ok(val reply: SyncResponse) : Sent
+        data class Stop(val outcome: Outcome) : Sent
+    }
+
+    private suspend fun send(scriptUrl: String, request: SyncRequest): Sent {
+        val response = api.syncRecords(scriptUrl, request)
         val body = response.body()
-        // A count of 0, or "not found", means the row is already gone: the delete has taken effect.
-        val alreadyGone = body?.message.orEmpty().contains("not found", ignoreCase = true)
-        if (!alreadyGone && (!response.isSuccessful || !body?.status.equals("ok", ignoreCase = true))) {
-            return "Transaction delete failed (HTTP ${response.code()}): ${body?.message ?: "unknown error"}"
+        if (!response.isSuccessful || body == null || !body.status.equals("ok", ignoreCase = true)) {
+            return Sent.Stop(Outcome.Failed("Transaction ${request.action} failed (HTTP ${response.code()}): ${body?.message ?: "unknown error"}"))
         }
-        store.finishDeleteIfUnchanged(record.id, record.localVersion)
-        return null
-    }
-
-    private fun ExpenseRecord.remoteKey(): String =
-        normalizeTimestampKey(remoteTimestamp) ?: remoteTimestamp.orEmpty().trim()
-
-    private fun ExpenseRecord.toSyncDto(accountNames: Map<Long, String>): SyncRecordDto {
-        val fromName = fromAccountId?.let { accountNames[it] } ?: fromAccountName
-        val toName = toAccountId?.let { accountNames[it] } ?: toAccountName
-        val combinedAccountName = when (type) {
-            "Expense", "Income" ->
-                accountId?.let { accountNames[it] } ?: accountName ?: fromAccountName ?: toAccountName ?: ""
-            "Transfer" -> listOf(fromName.orEmpty(), toName.orEmpty()).filter { it.isNotBlank() }.joinToString(" -> ")
-            else -> ""
-        }
-        val key = remoteKey()
-        return SyncRecordDto(
-            id = id,
-            remoteTimestamp = key,
-            timestamp = key,
-            date = date,
-            type = type,
-            expCategory = if (type == "Expense") category else "",
-            incCategory = if (type == "Income") category else "",
-            description = description,
-            amount = amount,
-            accountName = combinedAccountName,
-            fromAccountName = if (type == "Transfer") fromName else null,
-            toAccountName = if (type == "Transfer") toName else null,
-            remarks = remarks,
-            isBookmarked = isBookmarked
-        )
+        return if ((body.scriptVersion ?: 0) < REQUIRED_SCRIPT_VERSION) Sent.Stop(Outcome.ScriptOutdated) else Sent.Ok(body)
     }
 
     companion object {
-        private const val DELETE = "DELETE"
-
-        /** Each `update` rescans the sheet per row, so keep requests well inside Apps Script limits. */
-        const val BATCH_SIZE = 20
+        const val REQUIRED_SCRIPT_VERSION = 2
+        const val BATCH_SIZE = 50
     }
 }

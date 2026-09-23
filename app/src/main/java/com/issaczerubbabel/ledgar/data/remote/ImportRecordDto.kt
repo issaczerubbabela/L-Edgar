@@ -5,6 +5,10 @@ package com.issaczerubbabel.ledgar.data.remote
  * Mirror of [SyncRecordDto] but used for the inbound import direction.
  */
 data class ImportRecordDto(
+    /** Transaction ID from the Sheet's ID column (scripts from version 2 on). */
+    val id: String? = null,
+    /** Hash of the row's stored content cells: changes whenever the row is edited, by hand or not. */
+    val revision: String? = null,
     val timestamp: String? = null,
     val date: String,
     val type: String,

@@ -1,6 +1,6 @@
 package com.issaczerubbabel.ledgar.di
 
-import com.issaczerubbabel.ledgar.data.local.entity.ExpenseVersionTrigger
+import com.issaczerubbabel.ledgar.data.local.entity.ExpenseTableTriggers
 import android.content.Context
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -72,7 +72,18 @@ object DatabaseModule {
     private val MIGRATION_16_17 = object : Migration(16, 17) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE expense_records ADD COLUMN localVersion INTEGER NOT NULL DEFAULT 0")
-            ExpenseVersionTrigger.install(db)
+            db.execSQL(ExpenseTableTriggers.CREATE_SQL)
+        }
+    }
+
+    /** Existing rows keep a null Transaction ID: Sync links them to their Sheet row by Remote timestamp. */
+    private val MIGRATION_17_18 = object : Migration(17, 18) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE expense_records ADD COLUMN syncId TEXT")
+            db.execSQL("ALTER TABLE expense_records ADD COLUMN syncedRevision TEXT")
+            db.execSQL("ALTER TABLE expense_records ADD COLUMN sheetConflictJson TEXT")
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_expense_records_syncId` ON `expense_records` (`syncId`)")
+            ExpenseTableTriggers.install(db)
         }
     }
 
@@ -176,14 +187,14 @@ object DatabaseModule {
         val callback = object : RoomDatabase.Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
                 super.onCreate(db)
-                ExpenseVersionTrigger.install(db)
+                ExpenseTableTriggers.install(db)
                 android.util.Log.d("DatabaseModule", "Database created, seeding defaults...")
                 seedDropdownDefaultsIfEmpty(db)
             }
 
             override fun onOpen(db: SupportSQLiteDatabase) {
                 super.onOpen(db)
-                ExpenseVersionTrigger.install(db)
+                ExpenseTableTriggers.install(db)
                 // Seed defaults on first open as a fallback (in case onCreate wasn't called due to migrations)
                 // This is safe because seedDropdownDefaultsIfEmpty checks if data already exists
                 seedDropdownDefaultsIfEmpty(db)
@@ -198,6 +209,7 @@ object DatabaseModule {
             .addMigrations(MIGRATION_14_15)
             .addMigrations(MIGRATION_15_16)
             .addMigrations(MIGRATION_16_17)
+            .addMigrations(MIGRATION_17_18)
             .fallbackToDestructiveMigration()
             .addCallback(callback)
             .build()
