@@ -46,6 +46,7 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Export renamed from \"Export data to Excel\" to \"Export to CSV\" to match the file it actually produces, replacing the stale \"Money Manager - Excel\" dialog title",
             "Export dialog now has its own month picker, so any past month can be exported without leaving Settings, and each interval option is labelled with the exact range it will produce (Sep 2026, Jul – Sep 2026, 2026, 2025) instead of a generic name",
             "Exported file is now named for the range it contains, for example sheetsync_export_20260901_to_20260930.csv",
+            "Android CI workflow now also builds claude/** branches on push, so feature work is compiled before it reaches a pull request, and installs an Oracle JDK to match the toolchain vendor pinned in gradle-daemon-jvm.properties",
             "Export dialog now uses real radio buttons with 48dp touch targets, inline date validation with an example format, and an Export action that stays disabled until a custom range is valid",
             "Export result is now reported through the Settings snackbar with the exported transaction count instead of an inline status line"
         )

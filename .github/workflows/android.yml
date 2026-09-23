@@ -2,7 +2,10 @@ name: Android CI Build
 
 on:
   push:
+    branches: [ "main", "claude/**" ]
+  pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -14,7 +17,7 @@ jobs:
       uses: actions/setup-java@v4
       with:
         java-version: '17'
-        distribution: 'temurin'
+        distribution: 'oracle'
         cache: gradle
 
     - name: Grant execute permission for gradlew
