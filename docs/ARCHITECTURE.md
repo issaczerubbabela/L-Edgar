@@ -195,6 +195,35 @@ erDiagram
         double amount
     }
 
+    BUDGET_CYCLES ||--o{ BUDGET_BUCKETS : cycleId
+    BUDGET_BUCKETS ||--o{ BUCKET_CATEGORIES : "bucketId, cycleId"
+
+    BUDGET_CYCLES {
+        long id PK
+        string startDate
+        string endDate
+        double spendableAmount
+        string closedAt
+    }
+
+    BUDGET_BUCKETS {
+        long id PK
+        long cycleId FK
+        string name
+        string note
+        int colorIndex
+        string emoji
+        double allocatedAmount
+        int sortOrder
+    }
+
+    BUCKET_CATEGORIES {
+        long id PK
+        long cycleId FK
+        long bucketId FK
+        string category
+    }
+
     DROPDOWN_OPTIONS {
         long id PK
         string optionType
@@ -226,6 +255,24 @@ erDiagram
 - Unique index: (monthYear, category).
 - Includes both category-level entries and total-budget semantics from app logic.
 
+### budget_cycles / budget_buckets / bucket_categories
+
+- Purpose: salary-cycle bucket budgeting. A cycle is the money to spend between two paydays,
+  a bucket is a named pot inside one cycle, and bucket_categories routes expense categories into buckets.
+- A cycle with a null closedAt is the running one. It stays running past its endDate until the next
+  cycle is started, so spend logged after payday is never orphaned.
+- Buckets belong to a cycle (not shared across cycles), so a closed cycle is immutable history and
+  "carry over" is a copy.
+- One category per bucket is enforced by the unique index on bucket_categories (cycleId, category),
+  which is case-insensitive (NOCASE) because category names are matched ignoring case elsewhere.
+  The composite foreign key (bucketId, cycleId) -> budget_buckets(id, cycleId) keeps the repeated
+  cycleId honest. Assigning uses REPLACE, so a category moves between buckets instead of duplicating.
+- Categories with no row are "Unbucketed", a virtual bucket that is derived, never stored.
+- Spent and remaining amounts are derived from expense_records over the cycle's date range, not stored.
+- No per-row sync fields: like budgets, these are backed up wholesale rather than tracked per record.
+- v16 -> v17 migration (data/local/migration/BucketBudgetMigration.kt) creates the tables and seeds the
+  first cycle from the most recent month in budgets. The budgets table itself is left untouched.
+
 ### dropdown_options
 
 - Purpose: configurable app dictionaries.
@@ -244,6 +291,7 @@ graph TD
     H --> DAO2[AccountDao]
     H --> DAO3[BudgetDao]
     H --> DAO4[DropdownOptionDao]
+    H --> DAO5[BucketBudgetDao]
     H --> NET[Retrofit ApiService]
     H --> WMF[HiltWorkerFactory]
 
@@ -251,6 +299,7 @@ graph TD
     DAO2 --> R2[AccountRepositoryImpl]
     DAO3 --> R3[BudgetRepositoryImpl]
     DAO4 --> R4[DropdownOptionRepositoryImpl]
+    DAO5 --> R5[BucketBudgetRepositoryImpl]
     NET --> R1
 
     R1 --> VM1[LogViewModel]

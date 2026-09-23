@@ -42,7 +42,7 @@ UI (Compose) → ViewModel (StateFlow) → Repository → Room (instant local wr
 
 ### Room model
 
-Core tables: `expense_records` (transaction ledger + sync state: `isSynced`, `syncAction`, `remoteTimestamp`), `account_records` (accounts/groups, referenced by `accountId`/`fromAccountId`/`toAccountId` for transfers), `budgets` (unique on `monthYear`+`category`), `dropdown_options` (configurable dictionaries: `EXPENSE_CATEGORY`, `INCOME_CATEGORY`, `ACCOUNT_GROUP`, `PAYMENT_MODE`).
+Core tables: `expense_records` (transaction ledger + sync state: `isSynced`, `syncAction`, `remoteTimestamp`), `account_records` (accounts/groups, referenced by `accountId`/`fromAccountId`/`toAccountId` for transfers), `budgets` (unique on `monthYear`+`category`; legacy per-category model, superseded by the bucket tables but kept for backup/rollback), `budget_cycles` / `budget_buckets` / `bucket_categories` (salary-cycle bucket budgeting; unique on `cycleId`+`category` so a category lives in exactly one bucket), `dropdown_options` (configurable dictionaries: `EXPENSE_CATEGORY`, `INCOME_CATEGORY`, `ACCOUNT_GROUP`, `PAYMENT_MODE`).
 
 ### Extending the app (typical flow)
 
