@@ -12,9 +12,7 @@ val localProperties = Properties().apply {
     if (file.exists()) load(file.inputStream())
 }
 
-val appsScriptUrl = localProperties.getProperty("APPS_SCRIPT_URL")
-    ?: localProperties.getProperty("APP_SCRIPT_URL")
-    ?: "https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec"
+val debugScriptUrl = localProperties.getProperty("APPS_SCRIPT_URL_DEBUG").orEmpty().trim()
 
 android {
     namespace = "com.issaczerubbabel.ledgar"
@@ -28,13 +26,15 @@ android {
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
-        buildConfigField(
-            "String", "APPS_SCRIPT_URL",
-            "\"$appsScriptUrl\""
-        )
+        buildConfigField("String", "DEFAULT_SCRIPT_URL", "\"\"")
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+            buildConfigField("String", "DEFAULT_SCRIPT_URL", "\"$debugScriptUrl\"")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true

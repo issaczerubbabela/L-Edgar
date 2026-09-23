@@ -17,7 +17,7 @@ SheetSync (package `com.issaczerubbabel.ledgar`) is an offline-first Android exp
 ### First-time setup required before building
 
 1. Copy `local.properties.example` to `local.properties` and set `sdk.dir`.
-2. Set `APPS_SCRIPT_URL` in `local.properties` to a deployed Google Apps Script web app URL (built from `scripts/AppsScript.gs`, deployed as web app, execute as Me, access Anyone). This value is injected into `BuildConfig.APPS_SCRIPT_URL` in `app/build.gradle.kts`. Without it, sync/import features fail but the app still builds.
+2. The app syncs to the Apps Script URL entered in its Database Setup screen (deploy `scripts/AppsScript.gs` as a web app, execute as Me, access Anyone). The debug build installs as `com.issaczerubbabel.ledgar.debug` ("L.Edgar (Debug)") next to the release app, and falls back to `APPS_SCRIPT_URL_DEBUG` from `local.properties` (injected as `BuildConfig.DEFAULT_SCRIPT_URL`) so development can use a test Sheet.
 3. JDK 17 required (`gradle/gradle-daemon-jvm.properties` pins toolchain vendor `oracle` / version 17).
 
 ## Architecture

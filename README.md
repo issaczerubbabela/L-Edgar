@@ -120,10 +120,10 @@ Current version: **v1.0.1** (April 10, 2026)
 
 1. Copy `local.properties.example` to `local.properties`.
 2. Ensure `sdk.dir` is set (Android Studio usually sets this automatically).
-3. Set your Apps Script endpoint:
+3. Optional, for development: set a **test** Apps Script URL. The debug build installs as "L.Edgar (Debug)" next to the release app and uses this URL until one is entered in the app, so you never sync test data to your real Sheet:
 
 ```properties
-APPS_SCRIPT_URL=https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec
+APPS_SCRIPT_URL_DEBUG=https://script.google.com/macros/s/YOUR_TEST_SCRIPT_ID/exec
 ```
 
 ### 4. Deploy Google Apps Script web app
@@ -135,9 +135,9 @@ APPS_SCRIPT_URL=https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec
 5. Type: `Web app`.
 6. Execute as: `Me`.
 7. Who has access: `Anyone`.
-8. Copy the deployment URL and paste it into `local.properties` as `APPS_SCRIPT_URL`.
+8. Copy the deployment URL and paste it into the app under `More -> Database Setup (Sheets)`.
 
-Note: the deployment URL changes on each new deployment. Update `local.properties` whenever you redeploy.
+Note: the deployment URL changes on each new deployment. Paste the new URL into the app whenever you redeploy.
 
 ### 5. Run the app
 
@@ -156,7 +156,7 @@ Note: the deployment URL changes on each new deployment. Update `local.propertie
 
 ### Sync or import fails
 
-- Verify `APPS_SCRIPT_URL` in `local.properties` is the latest deployed Apps Script Web App URL.
+- Verify the URL in `Database Setup (Sheets)` is the latest deployed Apps Script Web App URL.
 - If you updated Apps Script code, always redeploy with `Deploy -> New deployment` and paste the new URL.
 - Ensure deployment access is `Anyone` and type is `Web app`.
 
@@ -207,4 +207,4 @@ Note: the deployment URL changes on each new deployment. Update `local.propertie
 ## Notes
 
 - `local.properties` is intentionally untracked; keep secrets and machine-specific values there only.
-- If the app runs but sync/import fails, verify `APPS_SCRIPT_URL` first.
+- If the app runs but sync/import fails, verify the Apps Script URL in `Database Setup (Sheets)` first.

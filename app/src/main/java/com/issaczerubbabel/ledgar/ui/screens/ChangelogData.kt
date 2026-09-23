@@ -42,7 +42,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Insights card visuals refined: removed redundant chart titles, aligned chart background with card surface, simplified daily x-axis labels, and removed chart grid guidelines",
             "Added .tmp and .tmp_vico_src to gitignore for local artifact cleanup",
             "Conflict resolution now emits per-action audit snackbars with exact resolved and remaining counts",
-            "Added developer docs: a CONTEXT.md glossary of app terms, architecture decision records, and issue-tracker notes for coding agents"
+            "Added developer docs: a CONTEXT.md glossary of app terms, architecture decision records, and issue-tracker notes for coding agents",
+            "Debug builds now install as a separate \"L.Edgar (Debug)\" app next to the release app, and can default to a test Apps Script from APPS_SCRIPT_URL_DEBUG"
         )
     ),
     ChangelogRelease(

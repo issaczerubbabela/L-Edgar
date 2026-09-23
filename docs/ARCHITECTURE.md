@@ -269,5 +269,5 @@ graph TD
 ## 9. Operational Notes
 
 - The app is intentionally resilient to intermittent connectivity due to local-first persistence + queued sync.
-- Remote endpoint changes (Apps Script redeploy) require local `APPS_SCRIPT_URL` update.
+- Remote endpoint changes (Apps Script redeploy) require pasting the new URL into Database Setup (Sheets).
 - Sync includes not only transactions but also dropdown and budget backup to support restore scenarios.
