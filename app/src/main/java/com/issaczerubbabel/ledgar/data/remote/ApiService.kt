@@ -33,6 +33,13 @@ interface ApiService {
         @Query("target") target: String = "budgets"
     ): Response<BudgetImportResponse>
 
+    /** GET salary cycles with their buckets and categories from Apps Script. */
+    @GET
+    suspend fun importBucketBudgets(
+        @Url url: String,
+        @Query("target") target: String = "bucket_budgets"
+    ): Response<BucketBudgetImportResponse>
+
     /** GET accounts from Apps Script. */
     @GET
     suspend fun importAccounts(
