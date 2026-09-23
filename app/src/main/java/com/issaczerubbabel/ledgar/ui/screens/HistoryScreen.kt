@@ -152,9 +152,12 @@ fun HistoryScreen(
     val selectedSum = vm.selectedSum(allVisibleRecords)
     val selectedIdSet = vm.selectedTxIds.toSet()
 
-    LaunchedEffect(pagerState.currentPage) {
-        if (selectedTab != pagerState.currentPage) {
-            selectedTab = pagerState.currentPage
+    // Follow settledPage, not currentPage. currentPage changes on every page an animation passes,
+    // so tapping a distant tab (Daily -> Total) wrote the intermediate pages back into selectedTab,
+    // which cancelled the scroll below mid-flight and left the pager stuck between pages.
+    LaunchedEffect(pagerState.settledPage) {
+        if (selectedTab != pagerState.settledPage) {
+            selectedTab = pagerState.settledPage
         }
     }
 

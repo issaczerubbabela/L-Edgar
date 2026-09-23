@@ -32,7 +32,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Removed legacy duplicate-skip resolution plumbing and standardized Sheets conflict handling on timestamp-based conflict flow",
             "Fixed Google Sheets import crash by removing non-unique conflict list keys so the Conflict Resolution sheet opens reliably",
             "Accounts transfer total now counts transactions whose type is Transfer, instead of any transaction with the word \"transfer\" in its category or description, which both missed real transfers and counted unrelated expenses",
-            "Export dialog no longer shows its date-format hint in the error colour before anything has been typed; it only turns red once an entered range is actually invalid"
+            "Export dialog no longer shows its date-format hint in the error colour before anything has been typed; it only turns red once an entered range is actually invalid",
+            "Fixed the Trans. tab pager getting stuck between pages after tapping a distant tab (for example Daily to Total): the pager's intermediate pages were being written back into the selected tab, which cancelled the scroll animation part-way"
         ),
         qol = listOf(
             "Quick Settings tile click now stays in quick-entry flow and updates tile state without opening the main app tabs",
