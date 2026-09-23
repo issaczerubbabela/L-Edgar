@@ -50,6 +50,7 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Accounts summary (cash, card and transfer totals) moved out of the Total tab into Insights, where it now follows the selected period scope instead of being pinned to the current month",
             "Accounts comparison now reads as a signed change against the immediately preceding period of the same length, with a trend arrow alongside the figure, and says \"No earlier data\" when there is nothing to compare against rather than showing a meaningless 100%",
             "Total tab now shows only the Budget section, clearing the way for the salary-cycle bucket rebuild",
+            "Android CI workflow now also builds claude/** branches on push, so feature work is compiled before it reaches a pull request, and installs an Oracle JDK to match the toolchain vendor pinned in gradle-daemon-jvm.properties",
             "Export dialog now uses real radio buttons with 48dp touch targets, inline date validation with an example format, and an Export action that stays disabled until a custom range is valid",
             "Export result is now reported through the Settings snackbar with the exported transaction count instead of an inline status line"
         )
