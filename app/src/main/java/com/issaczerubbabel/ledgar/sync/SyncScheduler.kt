@@ -14,43 +14,23 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Where the Sync status indicator stands. */
-enum class SyncStatus { Idle, Syncing, Synced, Failed }
-
-/** The part of a Sync job's WorkInfo that decides [SyncStatus]. */
-data class SyncJob(val state: WorkInfo.State, val runAttemptCount: Int)
-
-/**
- * A replaced or cancelled job isn't a failure, so CANCELLED never shows as [SyncStatus.Failed].
- * A job waiting to retry after a failed attempt does, since the change hasn't reached the Sheet.
- */
-fun syncStatusOf(jobs: List<SyncJob>): SyncStatus = when {
-    jobs.any { it.state == WorkInfo.State.RUNNING } -> SyncStatus.Syncing
-    jobs.any { it.state == WorkInfo.State.ENQUEUED && it.runAttemptCount > 0 } -> SyncStatus.Failed
-    jobs.any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.BLOCKED } -> SyncStatus.Syncing
-    jobs.any { it.state == WorkInfo.State.FAILED } -> SyncStatus.Failed
-    jobs.any { it.state == WorkInfo.State.SUCCEEDED } -> SyncStatus.Synced
-    else -> SyncStatus.Idle
-}
-
-/** The only place Sync and Backup work is queued. */
+/** The only place Sync and Backup work is queued. [SyncTriggers] decides when. */
 @Singleton
 class SyncScheduler @Inject constructor(private val workManager: WorkManager) {
 
     val transactionSyncStatus: Flow<SyncStatus> = workManager
         .getWorkInfosForUniqueWorkFlow(SyncWorker.WORK_NAME)
-        .map { infos -> syncStatusOf(infos.map { SyncJob(it.state, it.runAttemptCount) }) }
+        .map { infos -> syncStatusOf(infos.map { SyncJob(it.state, it.runAttemptCount, it.stopReason) }) }
 
     val backupWorkInfos: Flow<List<WorkInfo>> =
         workManager.getWorkInfosForUniqueWorkFlow(BackupWorker.WORK_NAME)
 
     /**
-     * Call after any local change. A running Sync is never cancelled: the new job queues behind it,
-     * so changes made while it runs still go out, and a request already on its way can't be cut off.
+     * A running Sync is never cancelled: the new job queues behind it, so changes made while it runs
+     * still go out, and a request already on its way can't be cut off.
      */
     fun requestSync() {
         workManager.enqueueUniqueWork(SyncWorker.WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, transactionSyncRequest())
-        requestBackup()
     }
 
     /** Skips the retry wait of a failed Sync, unless one is running right now. */

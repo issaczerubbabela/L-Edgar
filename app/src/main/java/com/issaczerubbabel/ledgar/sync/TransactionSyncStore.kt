@@ -12,7 +12,7 @@ interface TransactionSyncStore {
     suspend fun remoteTimestampsInUse(): Set<String>
     suspend fun assignRemoteTimestamp(id: Long, timestamp: String)
     suspend fun markSyncedIfUnchanged(id: Long, version: Long)
-    suspend fun deleteIfUnchanged(id: Long, version: Long)
+    suspend fun finishDeleteIfUnchanged(id: Long, version: Long)
     suspend fun accountNamesById(): Map<Long, String>
 }
 
@@ -33,8 +33,8 @@ class RoomTransactionSyncStore @Inject constructor(
         expenseDao.markSyncedIfUnchanged(id, version)
     }
 
-    override suspend fun deleteIfUnchanged(id: Long, version: Long) {
-        expenseDao.deleteSyncedDeleteIfUnchanged(id, version)
+    override suspend fun finishDeleteIfUnchanged(id: Long, version: Long) {
+        expenseDao.finishDeleteIfUnchanged(id, version)
     }
 
     override suspend fun accountNamesById() =

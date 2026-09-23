@@ -296,7 +296,6 @@ class SettingsViewModel @Inject constructor(
     fun keepBothConflict(conflict: SyncConflict) {
         completeConflictAction(actionLabel = "Keep Both") {
             repository.insertSheetTransactionAsDuplicate(conflict)
-            syncScheduler.requestSync()
             removeConflict(conflict)
         }
     }

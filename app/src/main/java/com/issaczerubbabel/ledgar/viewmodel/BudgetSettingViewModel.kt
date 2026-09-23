@@ -2,15 +2,9 @@ package com.issaczerubbabel.ledgar.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.Constraints
-import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import com.issaczerubbabel.ledgar.data.local.entity.Budget
 import com.issaczerubbabel.ledgar.data.repository.BudgetRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
-import com.issaczerubbabel.ledgar.sync.SyncWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -27,8 +21,7 @@ import javax.inject.Inject
 @HiltViewModel
 class BudgetSettingViewModel @Inject constructor(
     private val budgetRepository: BudgetRepository,
-    dropdownOptionRepository: DropdownOptionRepository,
-    private val workManager: WorkManager
+    dropdownOptionRepository: DropdownOptionRepository
 ) : ViewModel() {
 
     private val activeMonthYear = YearMonth.now().format(MONTH_YEAR_FORMATTER)
@@ -129,7 +122,6 @@ class BudgetSettingViewModel @Inject constructor(
                         )
                         // Keep the header text field in sync
                         _totalBudgetInput.value = categorySum.toLong().toString()
-                        enqueueSyncWork()
                     }
                 }
         }
@@ -184,7 +176,6 @@ class BudgetSettingViewModel @Inject constructor(
                 )
             )
             _totalInputSeeded = true
-            enqueueSyncWork()
         }
     }
 
@@ -201,7 +192,6 @@ class BudgetSettingViewModel @Inject constructor(
                 )
             )
             _showBottomSheet.value = false
-            enqueueSyncWork()
         }
     }
 
@@ -215,23 +205,10 @@ class BudgetSettingViewModel @Inject constructor(
                     amount = item.amount
                 )
             )
-            enqueueSyncWork()
         }
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────────
-
-    private fun enqueueSyncWork() {
-        val request = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .build()
-            )
-            .addTag(SyncWorker.TAG)
-            .build()
-        workManager.enqueueUniqueWork(SyncWorker.TAG, ExistingWorkPolicy.REPLACE, request)
-    }
 
     private fun iconForCategory(category: String): String = when (category) {
         "Food" -> "🍜"

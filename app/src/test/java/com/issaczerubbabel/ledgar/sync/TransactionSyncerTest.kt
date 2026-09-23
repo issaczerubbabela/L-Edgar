@@ -21,14 +21,16 @@ import org.junit.Assert.fail
 import org.junit.Test
 import retrofit2.Response
 import java.io.IOException
+import java.time.Clock
 import java.time.LocalDateTime
+import java.time.ZoneOffset
 
 class TransactionSyncerTest {
 
     private val clock = LocalDateTime.of(2026, 9, 24, 10, 0, 0)
     private val store = FakeStore()
     private val sheet = FakeAppsScript()
-    private val syncer = TransactionSyncer(store, sheet) { clock }
+    private val syncer = TransactionSyncer(store, sheet, Clock.fixed(clock.toInstant(ZoneOffset.UTC), ZoneOffset.UTC))
 
     @Test
     fun `a new Transaction reaches the Sheet once and is settled`() = runBlocking {
@@ -237,7 +239,7 @@ private class FakeStore : TransactionSyncStore {
         }
     }
 
-    override suspend fun deleteIfUnchanged(id: Long, version: Long) {
+    override suspend fun finishDeleteIfUnchanged(id: Long, version: Long) {
         val row = rows[id] ?: return
         if (row.localVersion == version && row.syncAction == "DELETE") rows.remove(id)
     }

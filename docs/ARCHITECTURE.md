@@ -66,7 +66,7 @@ graph TD
 
 ### Background Execution
 
-- All work is queued through `SyncScheduler`. `SyncWorker` sends pending Transaction changes. It's queued with `APPEND_OR_REPLACE`, so a running Sync is never cancelled, and it retries with exponential backoff.
+- `SyncTriggers` (started in `SheetSyncApp`) watches Room: any Transaction waiting to sync requests a Sync, and any change to accounts, dropdowns, budgets or transactions requests a Backup. Screens never schedule sync work. All work is queued through `SyncScheduler`. `SyncWorker` sends pending Transaction changes. It's queued with `APPEND_OR_REPLACE`, so a running Sync is never cancelled, and it retries with exponential backoff.
 - `BackupWorker` replaces the Sheet's accounts, dropdowns and budgets tabs. It runs as a separate, delayed job, so a failing Backup can't hold Transactions back.
 - Sync is safe to repeat (ADR-0003). A Transaction's Remote timestamp is saved in Room before its first request, every insert/update is sent as the script's overwrite-or-append `update`, and a Transaction is only marked synced if its `localVersion` (raised by a SQLite trigger on every change) hasn't moved since Sync read it.
 
@@ -113,7 +113,7 @@ sequenceDiagram
     LogVM->>Repo: save/update(record, isSynced=false, syncAction=INSERT|UPDATE)
     Repo->>Room: insert/update
     Room-->>LogVM: local write complete
-    LogVM->>WM: SyncScheduler.requestSync() (APPEND_OR_REPLACE, plus a delayed BackupWorker)
+    Room-->>WM: SyncTriggers sees the unsynced row → SyncScheduler.requestSync() (APPEND_OR_REPLACE; a delayed BackupWorker too)
 
     WM->>Worker: run doWork()
     Worker->>Room: save a unique Remote timestamp on pending rows that lack one

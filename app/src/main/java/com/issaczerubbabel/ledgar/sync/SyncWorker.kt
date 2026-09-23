@@ -7,7 +7,6 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
-import com.issaczerubbabel.ledgar.data.remote.ApiService
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
@@ -18,8 +17,7 @@ import kotlinx.coroutines.flow.first
 class SyncWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted workerParams: WorkerParameters,
-    private val store: RoomTransactionSyncStore,
-    private val apiService: ApiService,
+    private val syncer: TransactionSyncer,
     private val preferenceRepository: ThemePreferenceRepository
 ) : CoroutineWorker(context, workerParams) {
 
@@ -27,7 +25,7 @@ class SyncWorker @AssistedInject constructor(
         val scriptUrl = preferenceRepository.scriptUrl.first()
             ?: return Result.failure(workDataOf(KEY_ERROR_MESSAGE to SyncUrlNotConfiguredException().message))
         return try {
-            when (val outcome = TransactionSyncer(store, apiService).sync(scriptUrl)) {
+            when (val outcome = syncer.sync(scriptUrl)) {
                 is TransactionSyncer.Outcome.Synced -> {
                     Log.i(TAG, "Transaction sync successful. processed=${outcome.count}")
                     Result.success(workDataOf(KEY_SYNCED_COUNT to outcome.count))

@@ -161,7 +161,7 @@ class LogViewModel @Inject constructor(
                 isBookmarked = baseRecord?.isBookmarked ?: false,
                 isSynced = false,
                 remoteTimestamp = baseRecord?.remoteTimestamp,
-                syncAction = if (isEditMode && baseRecord?.syncAction != "INSERT") "UPDATE" else "INSERT"
+                syncAction = if (isEditMode) "UPDATE" else "INSERT"
             )
 
             if (isEditMode) {
@@ -170,7 +170,6 @@ class LogViewModel @Inject constructor(
                 repository.save(record)
             }
 
-            syncScheduler.requestSync()
             saveSuccess = true
             if (!isEditMode) resetForm()
         }
@@ -185,14 +184,8 @@ class LogViewModel @Inject constructor(
                 return@launch
             }
 
-            repository.update(
-                current.copy(
-                    isSynced = false,
-                    syncAction = "DELETE"
-                )
-            )
+            repository.delete(current)
 
-            syncScheduler.requestSync()
             saveSuccess = true
         }
     }

@@ -11,7 +11,6 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
-import com.issaczerubbabel.ledgar.sync.SyncScheduler
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -65,7 +64,6 @@ data class HistoryUiState(
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
     private val repository: ExpenseRepository,
-    private val syncScheduler: SyncScheduler,
     accountRepository: AccountRepository,
     dropdownOptionRepository: DropdownOptionRepository
 ) : ViewModel() {
@@ -200,7 +198,6 @@ class HistoryViewModel @Inject constructor(
     fun delete(record: ExpenseRecord) {
         viewModelScope.launch {
             repository.delete(record)
-            syncScheduler.requestSync()
         }
     }
 
@@ -242,7 +239,6 @@ class HistoryViewModel @Inject constructor(
         viewModelScope.launch {
             repository.deleteTransactionsByIds(ids)
             clearSelection()
-            syncScheduler.requestSync()
         }
     }
 
@@ -251,7 +247,6 @@ class HistoryViewModel @Inject constructor(
         if (ids.isEmpty()) return
         viewModelScope.launch {
             repository.updateTransactionsDateByIds(ids = ids, newDate = newDate)
-            syncScheduler.requestSync()
             clearSelection()
         }
     }
@@ -261,7 +256,6 @@ class HistoryViewModel @Inject constructor(
         if (ids.isEmpty() || newCategory.isBlank()) return
         viewModelScope.launch {
             repository.updateTransactionsCategoryByIds(ids = ids, newCategory = newCategory)
-            syncScheduler.requestSync()
             clearSelection()
         }
     }
@@ -271,7 +265,6 @@ class HistoryViewModel @Inject constructor(
         if (ids.isEmpty()) return
         viewModelScope.launch {
             repository.updateTransactionsAssetByIds(ids = ids, accountId = accountId)
-            syncScheduler.requestSync()
             clearSelection()
         }
     }
@@ -281,7 +274,6 @@ class HistoryViewModel @Inject constructor(
         if (ids.isEmpty() || newDescription.isBlank()) return
         viewModelScope.launch {
             repository.updateTransactionsDescriptionByIds(ids = ids, newDescription = newDescription)
-            syncScheduler.requestSync()
             clearSelection()
         }
     }
@@ -289,7 +281,6 @@ class HistoryViewModel @Inject constructor(
     fun toggleBookmark(record: ExpenseRecord) {
         viewModelScope.launch {
             repository.setBookmarked(id = record.id, isBookmarked = !record.isBookmarked)
-            syncScheduler.requestSync()
         }
     }
 

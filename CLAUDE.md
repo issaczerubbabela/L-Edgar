@@ -30,7 +30,7 @@ Source root: `app/src/main/java/com/issaczerubbabel/ledgar/`
 - `data/remote` — Retrofit `ApiService` / DTOs for the Apps Script endpoint.
 - `data/repository` — Repository interfaces + impls; ViewModels talk only to repositories, never DAOs or Retrofit directly.
 - `data/preferences` — DataStore-backed preferences (theme, etc).
-- `sync` — `SyncScheduler` (the only place work is queued), `SyncWorker` + `TransactionSyncer` (Transactions), `BackupWorker` (accounts, dropdowns, budgets).
+- `sync` — `SyncTriggers` (started in `SheetSyncApp`; watches Room and decides when to sync/back up), `SyncScheduler` (the only place work is queued), `SyncWorker` + `TransactionSyncer` (Transactions), `BackupWorker` (accounts, dropdowns, budgets).
 - `di` — Hilt modules.
 - `ui/screens`, `ui/components`, `ui/navigation`, `ui/theme` — Compose screens and navigation graph.
 - `viewmodel` — StateFlow-based ViewModels per feature.
@@ -38,7 +38,7 @@ Source root: `app/src/main/java/com/issaczerubbabel/ledgar/`
 
 ### Data flow
 
-UI (Compose) → ViewModel (StateFlow) → Repository → Room (instant local write, marks `isSynced=false`) → ViewModel calls `SyncScheduler.requestSync()` → `SyncWorker` reads unsynced records → Retrofit `ApiService` → Apps Script web app → Google Sheet. Never enqueue `SyncWorker` with `REPLACE` (it cancels a Sync mid-request) or write a synced flag unconditionally: settle rows with `markSyncedIfUnchanged`, which checks the trigger-maintained `localVersion` (see ADR-0003). Deletes are soft (`syncAction=DELETE`) until the remote delete succeeds, then hard-deleted locally. `requestSync()` also schedules a delayed `BackupWorker` that backs up accounts, dropdown options and budgets, which supports Sheets-based restore/import.
+UI (Compose) → ViewModel (StateFlow) → Repository → Room (instant local write, marks `isSynced=false`) → `SyncTriggers` sees the unsynced row and calls `SyncScheduler.requestSync()` (ViewModels never schedule sync work themselves) → `SyncWorker` reads unsynced records → Retrofit `ApiService` → Apps Script web app → Google Sheet. Never enqueue `SyncWorker` with `REPLACE` (it cancels a Sync mid-request) or write a synced flag unconditionally: settle rows with `markSyncedIfUnchanged`, which checks the trigger-maintained `localVersion` (see ADR-0003). Deletes are soft (`syncAction=DELETE`) until the remote delete succeeds, then hard-deleted locally. Any change to accounts, dropdown options, budgets or transactions also makes `SyncTriggers` schedule a delayed `BackupWorker` that backs those lists up, which supports Sheets-based restore/import.
 
 ### Room model
 

@@ -6,7 +6,6 @@ import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.PermanentDeleteStrategy
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
-import com.issaczerubbabel.ledgar.sync.SyncScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -39,7 +38,6 @@ data class AddEditAccountUiState(
 @HiltViewModel
 class AddEditAccountViewModel @Inject constructor(
     private val accountRepository: AccountRepository,
-    private val syncScheduler: SyncScheduler,
     dropdownOptionRepository: DropdownOptionRepository
 ) : ViewModel() {
 
@@ -176,7 +174,6 @@ class AddEditAccountViewModel @Inject constructor(
                 )
             )
 
-            syncScheduler.requestSync()
             _saved.emit(Unit)
         }
     }
@@ -198,14 +195,12 @@ class AddEditAccountViewModel @Inject constructor(
                         includeInTotals = false
                     )
                 )
-                syncScheduler.requestSync()
                 _events.emit("Account has linked transactions, so it was archived (hidden) instead of deleted.")
                 _deleted.emit(Unit)
                 return@launch
             }
 
             accountRepository.delete(account)
-            syncScheduler.requestSync()
             _deleted.emit(Unit)
         }
     }
@@ -231,7 +226,6 @@ class AddEditAccountViewModel @Inject constructor(
                 return@launch
             }
 
-            syncScheduler.requestSync()
             _deleted.emit(Unit)
         }
     }

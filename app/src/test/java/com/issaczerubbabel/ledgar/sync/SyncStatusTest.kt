@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.sync
 
+import androidx.work.WorkInfo
 import androidx.work.WorkInfo.State
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -20,6 +21,12 @@ class SyncStatusTest {
             SyncStatus.Failed,
             syncStatusOf(listOf(SyncJob(State.ENQUEUED, 2), SyncJob(State.BLOCKED, 0)))
         )
+    }
+
+    @Test
+    fun `a job the system stopped is not a failure`() {
+        val stoppedForNetwork = SyncJob(State.ENQUEUED, runAttemptCount = 1, stopReason = WorkInfo.STOP_REASON_CONSTRAINT_CONNECTIVITY)
+        assertEquals(SyncStatus.Syncing, syncStatusOf(listOf(stoppedForNetwork)))
     }
 
     @Test

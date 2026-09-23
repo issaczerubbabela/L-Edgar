@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
-import com.issaczerubbabel.ledgar.sync.SyncScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -14,8 +13,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class BookmarksViewModel @Inject constructor(
-    private val repository: ExpenseRepository,
-    private val syncScheduler: SyncScheduler
+    private val repository: ExpenseRepository
 ) : ViewModel() {
 
     val bookmarkedTransactions: StateFlow<List<ExpenseRecord>> = repository
@@ -25,7 +23,6 @@ class BookmarksViewModel @Inject constructor(
     fun removeBookmark(id: Long) {
         viewModelScope.launch {
             repository.setBookmarked(id = id, isBookmarked = false)
-            syncScheduler.requestSync()
         }
     }
 }

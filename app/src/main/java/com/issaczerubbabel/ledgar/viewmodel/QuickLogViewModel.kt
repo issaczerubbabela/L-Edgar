@@ -8,7 +8,6 @@ import androidx.lifecycle.viewModelScope
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
-import com.issaczerubbabel.ledgar.sync.SyncScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -23,7 +22,6 @@ import javax.inject.Inject
 @HiltViewModel
 class QuickLogViewModel @Inject constructor(
     private val expenseRepository: ExpenseRepository,
-    private val syncScheduler: SyncScheduler,
     dropdownOptionRepository: DropdownOptionRepository
 ) : ViewModel() {
 
@@ -66,7 +64,6 @@ class QuickLogViewModel @Inject constructor(
                     )
                 )
             }.onSuccess {
-                syncScheduler.requestSync()
                 _saveSuccess.emit(Unit)
             }.onFailure {
                 errorMessage = it.message ?: "Failed to save transaction"

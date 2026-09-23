@@ -4,6 +4,9 @@ import androidx.room.*
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import kotlinx.coroutines.flow.Flow
 
+/** Identifies one version of a Transaction that is waiting to Sync. */
+data class PendingVersion(val id: Long, val localVersion: Long)
+
 @Dao
 interface ExpenseDao {
 
@@ -15,6 +18,26 @@ interface ExpenseDao {
 
     @Update
     suspend fun update(record: ExpenseRecord)
+
+    /**
+     * Saves an edit built from an earlier read without undoing what Sync did meanwhile: a Remote
+     * timestamp Sync assigned is kept, and a Transaction that never synced stays an `INSERT`.
+     */
+    @Transaction
+    suspend fun updateKeepingSyncState(record: ExpenseRecord) {
+        val current = getById(record.id) ?: return
+        val syncAction = when {
+            record.syncAction == "DELETE" -> "DELETE"
+            current.syncAction == "INSERT" -> "INSERT"
+            else -> record.syncAction
+        }
+        update(
+            record.copy(
+                remoteTimestamp = current.remoteTimestamp?.takeIf { it.isNotBlank() } ?: record.remoteTimestamp,
+                syncAction = syncAction
+            )
+        )
+    }
 
     @Query("SELECT * FROM expense_records WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): ExpenseRecord?
@@ -70,6 +93,9 @@ interface ExpenseDao {
     @Query("SELECT * FROM expense_records WHERE isSynced = 0")
     suspend fun getUnsyncedRecords(): List<ExpenseRecord>
 
+    @Query("SELECT id, localVersion FROM expense_records WHERE isSynced = 0 ORDER BY id")
+    fun observePendingVersions(): Flow<List<PendingVersion>>
+
     @Query(
         """
         UPDATE expense_records
@@ -89,9 +115,9 @@ interface ExpenseDao {
     )
     suspend fun markSyncedIfUnchanged(id: Long, version: Long): Int
 
-    /** Removes a Transaction whose delete has synced, unless it changed after Sync read it. */
+    /** Removes a deleted Transaction for good once the Sheet no longer has it, unless it changed since Sync read it. */
     @Query("DELETE FROM expense_records WHERE id = :id AND localVersion = :version AND syncAction = 'DELETE'")
-    suspend fun deleteSyncedDeleteIfUnchanged(id: Long, version: Long): Int
+    suspend fun finishDeleteIfUnchanged(id: Long, version: Long): Int
 
     @Delete
     suspend fun delete(record: ExpenseRecord)

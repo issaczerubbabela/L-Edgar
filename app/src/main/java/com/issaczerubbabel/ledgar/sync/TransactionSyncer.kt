@@ -6,7 +6,9 @@ import com.issaczerubbabel.ledgar.data.remote.SyncRecordDto
 import com.issaczerubbabel.ledgar.data.remote.SyncRequest
 import com.issaczerubbabel.ledgar.util.generateTimestampKey
 import com.issaczerubbabel.ledgar.util.normalizeTimestampKey
+import java.time.Clock
 import java.time.LocalDateTime
+import javax.inject.Inject
 
 /**
  * Sends pending Transaction changes so that repeating a Sync can never duplicate a row.
@@ -16,10 +18,10 @@ import java.time.LocalDateTime
  * repeat even on scripts deployed before this change. It relies on the Remote timestamp being saved
  * in Room before the first attempt, so a retry after a lost reply targets the same row.
  */
-class TransactionSyncer(
+class TransactionSyncer @Inject constructor(
     private val store: TransactionSyncStore,
     private val api: ApiService,
-    private val now: () -> LocalDateTime = LocalDateTime::now
+    private val clock: Clock
 ) {
     sealed interface Outcome {
         data class Synced(val count: Int) : Outcome
@@ -49,11 +51,11 @@ class TransactionSyncer(
         if (missing.isEmpty()) return
 
         val inUse = store.remoteTimestampsInUse().toMutableSet()
-        var candidate = now().withNano(0)
+        var candidate = LocalDateTime.now(clock).withNano(0)
         missing.forEach { record ->
             if (record.syncAction.equals(DELETE, ignoreCase = true)) {
                 // Never reached the Sheet: nothing to delete there.
-                store.deleteIfUnchanged(record.id, record.localVersion)
+                store.finishDeleteIfUnchanged(record.id, record.localVersion)
                 return@forEach
             }
             while (!inUse.add(generateTimestampKey(candidate))) {
@@ -91,7 +93,7 @@ class TransactionSyncer(
         if (!alreadyGone && (!response.isSuccessful || !body?.status.equals("ok", ignoreCase = true))) {
             return "Transaction delete failed (HTTP ${response.code()}): ${body?.message ?: "unknown error"}"
         }
-        store.deleteIfUnchanged(record.id, record.localVersion)
+        store.finishDeleteIfUnchanged(record.id, record.localVersion)
         return null
     }
 

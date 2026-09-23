@@ -34,7 +34,9 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Account, dropdown and budget backups now run separately and can no longer stop transactions from syncing",
             "Quick log entries, bookmark changes and History bulk edits now sync straight away",
             "Permanently deleting an account with its transactions now removes them from Google Sheets too, so an import no longer brings them back",
-            "Deleting a transaction that is already gone from the Sheet no longer leaves sync stuck retrying"
+            "Deleting a transaction that is already gone from the Sheet no longer leaves sync stuck retrying",
+            "Saving a budget no longer interrupts a sync in progress, and budget and dropdown changes are now backed up automatically",
+            "Changes that hadn't synced when the app was closed now sync as soon as it starts again"
         ),
         qol = listOf(
             "Quick Settings tile click now stays in quick-entry flow and updates tile state without opening the main app tabs",
@@ -49,7 +51,7 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Insights card visuals refined: removed redundant chart titles, aligned chart background with card surface, simplified daily x-axis labels, and removed chart grid guidelines",
             "Added .tmp and .tmp_vico_src to gitignore for local artifact cleanup",
             "Conflict resolution now emits per-action audit snackbars with exact resolved and remaining counts",
-            "Added developer docs: a CONTEXT.md glossary of app terms, architecture decision records, and issue-tracker notes for coding agents",
+            "Added developer docs: a CONTEXT.md glossary of app terms, architecture decision records (including the sync design), and issue-tracker notes for coding agents",
             "Debug builds now install as a separate \"L.Edgar (Debug)\" app next to the release app, and can default to a test Apps Script from APPS_SCRIPT_URL_DEBUG"
         )
     ),

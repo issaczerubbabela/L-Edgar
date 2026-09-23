@@ -39,7 +39,7 @@ class ExpenseRepositoryImpl @Inject constructor(
 
     override suspend fun getById(id: Long): ExpenseRecord? = dao.getById(id)
 
-    override suspend fun update(record: ExpenseRecord) = dao.update(record)
+    override suspend fun update(record: ExpenseRecord) = dao.updateKeepingSyncState(record)
 
     override suspend fun hardDeleteById(id: Long) = dao.hardDeleteById(id)
 

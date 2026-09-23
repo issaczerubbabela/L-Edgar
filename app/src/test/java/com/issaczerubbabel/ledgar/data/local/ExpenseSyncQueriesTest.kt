@@ -86,10 +86,24 @@ class ExpenseSyncQueriesTest {
         dao.markTransactionDeletedById(id)
         val version = dao.getById(id)!!.localVersion
 
-        assertEquals(0, dao.deleteSyncedDeleteIfUnchanged(id, version - 1))
+        assertEquals(0, dao.finishDeleteIfUnchanged(id, version - 1))
         assertNotNull(dao.getById(id))
-        assertEquals(1, dao.deleteSyncedDeleteIfUnchanged(id, version))
+        assertEquals(1, dao.finishDeleteIfUnchanged(id, version))
         assertNull(dao.getById(id))
+    }
+
+    @Test
+    fun `an edit saved from an earlier read keeps the timestamp Sync assigned meanwhile`() = runBlocking {
+        val id = dao.insert(transaction())
+        val readByTheEditScreen = dao.getById(id)!!
+        dao.assignRemoteTimestamp(id, "9/24/2026 10:00:00")
+
+        dao.updateKeepingSyncState(readByTheEditScreen.copy(amount = 80.0, syncAction = "UPDATE"))
+
+        val saved = dao.getById(id)!!
+        assertEquals(80.0, saved.amount, 0.0)
+        assertEquals("9/24/2026 10:00:00", saved.remoteTimestamp)
+        assertEquals("a Transaction that never synced stays an insert", "INSERT", saved.syncAction)
     }
 
     @Test

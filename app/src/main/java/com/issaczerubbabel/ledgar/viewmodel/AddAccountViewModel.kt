@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
-import com.issaczerubbabel.ledgar.sync.SyncScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,7 +33,6 @@ const val ACCOUNT_ROUTE_ADD = "add_account"
 @HiltViewModel
 class AddAccountViewModel @Inject constructor(
     private val accountRepository: AccountRepository,
-    private val syncScheduler: SyncScheduler,
     dropdownOptionRepository: DropdownOptionRepository
 ) : ViewModel() {
 
@@ -109,7 +107,6 @@ class AddAccountViewModel @Inject constructor(
                     displayOrder = nextDisplayOrder
                 )
             )
-            syncScheduler.requestSync()
             _saved.emit(Unit)
         }
     }
