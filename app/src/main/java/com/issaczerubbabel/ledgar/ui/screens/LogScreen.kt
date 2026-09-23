@@ -20,7 +20,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.viewmodel.LogViewModel
-import com.issaczerubbabel.ledgar.viewmodel.SyncStatusUi
+import com.issaczerubbabel.ledgar.sync.SyncStatus
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -62,12 +62,6 @@ fun LogScreen(
         vm.errorMessage?.let {
             snackbarHostState.showSnackbar(it)
             vm.clearError()
-        }
-    }
-    LaunchedEffect(vm.syncInfoMessage) {
-        vm.syncInfoMessage?.let {
-            snackbarHostState.showSnackbar(it)
-            vm.clearSyncInfoMessage()
         }
     }
 
@@ -280,31 +274,31 @@ fun LogScreen(
 }
 
 @Composable
-private fun SyncStatusIndicator(status: SyncStatusUi, onRetry: () -> Unit) {
+private fun SyncStatusIndicator(status: SyncStatus, onRetry: () -> Unit) {
     val (text, containerColor, contentColor) = when (status) {
-        SyncStatusUi.Idle -> Triple(
+        SyncStatus.Idle -> Triple(
             "Sync idle",
             MaterialTheme.colorScheme.surfaceVariant,
             MaterialTheme.colorScheme.onSurfaceVariant
         )
-        SyncStatusUi.Syncing -> Triple(
+        SyncStatus.Syncing -> Triple(
             "Syncing...",
             MaterialTheme.colorScheme.secondaryContainer,
             MaterialTheme.colorScheme.onSecondaryContainer
         )
-        SyncStatusUi.Synced -> Triple(
+        SyncStatus.Synced -> Triple(
             "Synced",
             MaterialTheme.colorScheme.tertiaryContainer,
             MaterialTheme.colorScheme.onTertiaryContainer
         )
-        SyncStatusUi.Failed -> Triple(
+        SyncStatus.Failed -> Triple(
             "Retry sync",
             MaterialTheme.colorScheme.errorContainer,
             MaterialTheme.colorScheme.onErrorContainer
         )
     }
 
-    val isRetryEnabled = status == SyncStatusUi.Failed
+    val isRetryEnabled = status == SyncStatus.Failed
 
     SuggestionChip(
         onClick = onRetry,

@@ -27,7 +27,14 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Account balance math now compares transaction timestamps against precise As-Of values, including same-day hour/minute boundaries",
             "Quick Settings quick-add now runs in an isolated transient task, so dismissing the sheet no longer reveals the main app behind it",
             "Removed legacy duplicate-skip resolution plumbing and standardized Sheets conflict handling on timestamp-based conflict flow",
-            "Fixed Google Sheets import crash by removing non-unique conflict list keys so the Conflict Resolution sheet opens reliably"
+            "Fixed Google Sheets import crash by removing non-unique conflict list keys so the Conflict Resolution sheet opens reliably",
+            "Fixed duplicate rows in Google Sheets: a retried or restarted sync now overwrites its own row instead of appending a copy",
+            "Saving several transactions quickly no longer cancels the sync already in progress, and a replaced sync no longer shows as Sync failed",
+            "Edits, deletes and bookmark changes made while a sync is running are no longer lost or undone",
+            "Account, dropdown and budget backups now run separately and can no longer stop transactions from syncing",
+            "Quick log entries, bookmark changes and History bulk edits now sync straight away",
+            "Permanently deleting an account with its transactions now removes them from Google Sheets too, so an import no longer brings them back",
+            "Deleting a transaction that is already gone from the Sheet no longer leaves sync stuck retrying"
         ),
         qol = listOf(
             "Quick Settings tile click now stays in quick-entry flow and updates tile state without opening the main app tabs",

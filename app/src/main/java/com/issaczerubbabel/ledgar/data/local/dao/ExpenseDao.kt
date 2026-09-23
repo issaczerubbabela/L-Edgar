@@ -70,13 +70,41 @@ interface ExpenseDao {
     @Query("SELECT * FROM expense_records WHERE isSynced = 0")
     suspend fun getUnsyncedRecords(): List<ExpenseRecord>
 
-    @Query("UPDATE expense_records SET isSynced = 1, syncAction = 'NONE' WHERE id IN (:ids)")
-    suspend fun markAsSynced(ids: List<Long>)
+    @Query(
+        """
+        UPDATE expense_records
+        SET remoteTimestamp = :timestamp
+        WHERE id = :id AND (remoteTimestamp IS NULL OR TRIM(remoteTimestamp) = '')
+        """
+    )
+    suspend fun assignRemoteTimestamp(id: Long, timestamp: String): Int
+
+    /** Settles a synced insert/update, unless the Transaction changed after Sync read it. */
+    @Query(
+        """
+        UPDATE expense_records
+        SET isSynced = 1, syncAction = 'NONE'
+        WHERE id = :id AND localVersion = :version AND syncAction != 'DELETE'
+        """
+    )
+    suspend fun markSyncedIfUnchanged(id: Long, version: Long): Int
+
+    /** Removes a Transaction whose delete has synced, unless it changed after Sync read it. */
+    @Query("DELETE FROM expense_records WHERE id = :id AND localVersion = :version AND syncAction = 'DELETE'")
+    suspend fun deleteSyncedDeleteIfUnchanged(id: Long, version: Long): Int
 
     @Delete
     suspend fun delete(record: ExpenseRecord)
 
-    @Query("UPDATE expense_records SET isBookmarked = :isBookmarked WHERE id = :id")
+    @Query(
+        """
+        UPDATE expense_records
+        SET isBookmarked = :isBookmarked,
+            isSynced = 0,
+            syncAction = CASE WHEN syncAction IN ('INSERT', 'DELETE') THEN syncAction ELSE 'UPDATE' END
+        WHERE id = :id
+        """
+    )
     suspend fun updateBookmarkStatus(id: Long, isBookmarked: Boolean)
 
     @Query(
@@ -106,7 +134,7 @@ interface ExpenseDao {
         UPDATE expense_records
         SET date = :newDate,
             isSynced = 0,
-            syncAction = 'UPDATE'
+            syncAction = CASE WHEN syncAction IN ('INSERT', 'DELETE') THEN syncAction ELSE 'UPDATE' END
         WHERE id IN (:ids)
         """
     )
@@ -117,7 +145,7 @@ interface ExpenseDao {
         UPDATE expense_records
         SET category = :newCategory,
             isSynced = 0,
-            syncAction = 'UPDATE'
+            syncAction = CASE WHEN syncAction IN ('INSERT', 'DELETE') THEN syncAction ELSE 'UPDATE' END
         WHERE id IN (:ids)
         """
     )
@@ -130,7 +158,7 @@ interface ExpenseDao {
             fromAccountId = CASE WHEN type = 'Expense' THEN :accountId ELSE fromAccountId END,
             toAccountId = CASE WHEN type = 'Income' THEN :accountId ELSE toAccountId END,
             isSynced = 0,
-            syncAction = 'UPDATE'
+            syncAction = CASE WHEN syncAction IN ('INSERT', 'DELETE') THEN syncAction ELSE 'UPDATE' END
         WHERE id IN (:ids)
         """
     )
@@ -141,7 +169,7 @@ interface ExpenseDao {
         UPDATE expense_records
         SET description = :newDescription,
             isSynced = 0,
-            syncAction = 'UPDATE'
+            syncAction = CASE WHEN syncAction IN ('INSERT', 'DELETE') THEN syncAction ELSE 'UPDATE' END
         WHERE id IN (:ids)
         """
     )
@@ -152,11 +180,14 @@ interface ExpenseDao {
 
     @Query(
         """
-        DELETE FROM expense_records
-        WHERE accountId = :accountId OR fromAccountId = :accountId OR toAccountId = :accountId
+        UPDATE expense_records
+        SET isSynced = 0,
+            syncAction = 'DELETE'
+        WHERE (accountId = :accountId OR fromAccountId = :accountId OR toAccountId = :accountId)
+          AND syncAction != 'DELETE'
         """
     )
-    suspend fun deleteLinkedTransactionsForAccount(accountId: Long)
+    suspend fun markLinkedTransactionsDeletedForAccount(accountId: Long)
 
     @Query(
         """

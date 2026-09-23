@@ -66,9 +66,9 @@ graph TD
 
 ### Background Execution
 
-- WorkManager + Hilt-injected SyncWorker.
-- SyncWorker sends local unsynced records and then backs up dropdowns and budgets.
-- Worker uses retry semantics on failure.
+- All work is queued through `SyncScheduler`. `SyncWorker` sends pending Transaction changes. It's queued with `APPEND_OR_REPLACE`, so a running Sync is never cancelled, and it retries with exponential backoff.
+- `BackupWorker` replaces the Sheet's accounts, dropdowns and budgets tabs. It runs as a separate, delayed job, so a failing Backup can't hold Transactions back.
+- Sync is safe to repeat (ADR-0003). A Transaction's Remote timestamp is saved in Room before its first request, every insert/update is sent as the script's overwrite-or-append `update`, and a Transaction is only marked synced if its `localVersion` (raised by a SQLite trigger on every change) hasn't moved since Sync read it.
 
 ## 3. Navigation Architecture
 
@@ -113,31 +113,28 @@ sequenceDiagram
     LogVM->>Repo: save/update(record, isSynced=false, syncAction=INSERT|UPDATE)
     Repo->>Room: insert/update
     Room-->>LogVM: local write complete
-    LogVM->>WM: enqueue unique SyncWorker
+    LogVM->>WM: SyncScheduler.requestSync() (APPEND_OR_REPLACE, plus a delayed BackupWorker)
 
     WM->>Worker: run doWork()
-    Worker->>Repo: getUnsynced()
-    Repo-->>Worker: unsynced records
+    Worker->>Room: save a unique Remote timestamp on pending rows that lack one
+    Worker->>Room: read pending rows (with localVersion)
 
-    alt INSERT/UPDATE exists
-        Worker->>API: syncRecords(action, records)
+    alt INSERT/UPDATE exists (batches of 20)
+        Worker->>API: syncRecords(update, records)
         API->>GAS: POST
-        GAS->>Sheet: append/update rows
+        GAS->>Sheet: overwrite row with that timestamp, or append
         GAS-->>API: ok
         API-->>Worker: ok
-        Worker->>Repo: markSynced(ids)
+        Worker->>Room: markSyncedIfUnchanged(id, localVersion)
     end
 
     alt DELETE exists
         Worker->>API: syncRecords(delete, targetTimestamp)
         API->>GAS: POST delete
         GAS->>Sheet: delete row by timestamp
-        GAS-->>API: ok/not found
-        Worker->>Repo: hardDeleteById(id)
+        GAS-->>API: ok (count 0 = already gone)
+        Worker->>Room: deleteSyncedDeleteIfUnchanged(id, localVersion)
     end
-
-    Worker->>API: backup dropdowns
-    Worker->>API: backup budgets
 ```
 
 ## 5. Import Flows

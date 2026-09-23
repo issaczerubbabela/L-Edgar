@@ -63,8 +63,9 @@ All writes are committed locally first (Room), then synchronized to Google Sheet
 - Offline-first local persistence via Room.
 - WorkManager + Hilt worker for background sync.
 - Sync supports insert/update/delete actions.
+- Sync is safe to retry: a lost reply or a restarted job never duplicates a row, and edits made during a Sync are never lost.
 - Idempotent delete handling for already-removed remote rows.
-- Sync also backs up dropdown options and budgets to Google Sheets endpoint.
+- A separate background Backup copies accounts, dropdown options and budgets to the Sheet.
 
 ### Quick Entry Surfaces
 

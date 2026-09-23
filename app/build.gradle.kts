@@ -55,6 +55,8 @@ android {
     composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
 
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
+
+    testOptions { unitTests.isIncludeAndroidResources = true }
 }
 
 dependencies {
@@ -99,4 +101,6 @@ dependencies {
     implementation(libs.androidx.biometric)
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
 }

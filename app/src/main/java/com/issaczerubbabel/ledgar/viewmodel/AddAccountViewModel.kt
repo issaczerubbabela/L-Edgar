@@ -2,16 +2,10 @@ package com.issaczerubbabel.ledgar.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.Constraints
-import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import androidx.work.workDataOf
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
-import com.issaczerubbabel.ledgar.sync.SyncWorker
+import com.issaczerubbabel.ledgar.sync.SyncScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,7 +34,7 @@ const val ACCOUNT_ROUTE_ADD = "add_account"
 @HiltViewModel
 class AddAccountViewModel @Inject constructor(
     private val accountRepository: AccountRepository,
-    private val workManager: WorkManager,
+    private val syncScheduler: SyncScheduler,
     dropdownOptionRepository: DropdownOptionRepository
 ) : ViewModel() {
 
@@ -115,22 +109,8 @@ class AddAccountViewModel @Inject constructor(
                     displayOrder = nextDisplayOrder
                 )
             )
-            enqueueAccountBackupSync()
+            syncScheduler.requestSync()
             _saved.emit(Unit)
         }
-    }
-
-    private fun enqueueAccountBackupSync() {
-        val request = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .build()
-            )
-            .setInputData(workDataOf(SyncWorker.KEY_BACKUP_ACCOUNTS to true))
-            .addTag(SyncWorker.TAG)
-            .build()
-
-        workManager.enqueueUniqueWork(SyncWorker.TAG, ExistingWorkPolicy.REPLACE, request)
     }
 }
