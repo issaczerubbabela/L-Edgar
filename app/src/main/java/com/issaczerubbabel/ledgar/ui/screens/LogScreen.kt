@@ -47,7 +47,6 @@ private enum class LogSheet { Category, Account, FromAccount, ToAccount, Note }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LogScreen(
-    innerPadding: PaddingValues,
     showEnterAppButton: Boolean = false,
     onEnterApp: () -> Unit = {},
     onBack: () -> Unit = {},
@@ -103,7 +102,6 @@ fun LogScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(scaffoldPadding)
-                .padding(bottom = innerPadding.calculateBottomPadding())
         ) {
             LogTopBar(
                 isEditMode = vm.isEditMode,

@@ -508,7 +508,6 @@ fun AppNavigation() {
                 )
             ) {
                 LogScreen(
-                    innerPadding = innerPadding,
                     showEnterAppButton = isRootLogScreen,
                     onEnterApp = enterAppFromLog,
                     onBack = {
