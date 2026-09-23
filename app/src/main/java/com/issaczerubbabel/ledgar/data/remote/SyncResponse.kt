@@ -6,8 +6,5 @@ package com.issaczerubbabel.ledgar.data.remote
 data class SyncResponse(
     val status: String? = null,
     val count: Int? = null,
-    val message: String? = null,
-    /** Set by scripts that recognise the target, e.g. "bucket_budgets_backed_up". */
-    val type: String? = null,
-    val action: String? = null
+    val message: String? = null
 )

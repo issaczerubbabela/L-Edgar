@@ -7,9 +7,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.dao.AccountDao
-import com.issaczerubbabel.ledgar.data.local.dao.BucketBudgetDao
 import com.issaczerubbabel.ledgar.data.local.dao.BudgetDao
-import com.issaczerubbabel.ledgar.data.local.migration.BucketBudgetMigration
 import com.issaczerubbabel.ledgar.data.local.dao.DropdownOptionDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
 import dagger.Module
@@ -189,7 +187,6 @@ object DatabaseModule {
             .addMigrations(MIGRATION_13_14)
             .addMigrations(MIGRATION_14_15)
             .addMigrations(MIGRATION_15_16)
-            .addMigrations(BucketBudgetMigration.MIGRATION_16_17)
             .fallbackToDestructiveMigration()
             .addCallback(callback)
             .build()
@@ -200,9 +197,6 @@ object DatabaseModule {
 
     @Provides
     fun provideBudgetDao(db: SheetSyncDatabase): BudgetDao = db.budgetDao()
-
-    @Provides
-    fun provideBucketBudgetDao(db: SheetSyncDatabase): BucketBudgetDao = db.bucketBudgetDao()
 
     @Provides
     fun provideAccountDao(db: SheetSyncDatabase): AccountDao = db.accountDao()

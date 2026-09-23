@@ -42,11 +42,3 @@ data class CategoryTotal(
     val totalAmount: Double,
     val assignedColor: Color
 )
-
-data class AccountsBreakdownUi(
-    val cashAndAccountsExpense: Double = 0.0,
-    val cardExpense: Double = 0.0,
-    val transferTotal: Double = 0.0,
-    /** Null when the preceding period has no spending to compare against. */
-    val changePercent: Int? = null
-)

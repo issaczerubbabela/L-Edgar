@@ -60,9 +60,6 @@ val DOT_PALETTE = listOf(
     Color(0xFF8D6E63), // brown
 )
 
-/** Colour for a stored bucket colourIndex; wraps so any stored value is safe. */
-fun bucketColor(index: Int): Color = DOT_PALETTE[Math.floorMod(index, DOT_PALETTE.size)]
-
 fun categoryDotColor(category: String): Color =
     DOT_PALETTE[Math.abs(category.hashCode()) % DOT_PALETTE.size]
 val Teal80    = Color(0xFF80CBC4)

@@ -35,8 +35,6 @@ import com.issaczerubbabel.ledgar.ui.theme.AppThemeOption
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseRed
 import com.issaczerubbabel.ledgar.ui.theme.IncomeGreen
 import com.issaczerubbabel.ledgar.data.preferences.AppLockAuthMode
-import com.issaczerubbabel.ledgar.ui.components.ExportDialog
-import com.issaczerubbabel.ledgar.viewmodel.ExportViewModel
 import com.issaczerubbabel.ledgar.viewmodel.ImportState
 import com.issaczerubbabel.ledgar.viewmodel.SettingsUiEvent
 import com.issaczerubbabel.ledgar.viewmodel.SettingsViewModel
@@ -56,11 +54,9 @@ fun SettingsScreen(
     onNavigateToDropdownManagement: () -> Unit,
     onNavigateToAppsScriptSetup: () -> Unit,
     onNavigateToChangelog: () -> Unit,
-    vm: SettingsViewModel = hiltViewModel(),
-    exportVm: ExportViewModel = hiltViewModel()
+    vm: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
-    val exportState by exportVm.uiState.collectAsStateWithLifecycle()
     val sheetsState by vm.sheetsImportState.collectAsStateWithLifecycle()
     val csvState by vm.csvImportState.collectAsStateWithLifecycle()
     val backupState by vm.backupState.collectAsStateWithLifecycle()
@@ -98,41 +94,6 @@ fun SettingsScreen(
 
     val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { vm.importFromCsv(it) }
-    }
-
-    val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("text/csv")
-    ) { uri ->
-        uri?.let { exportVm.exportDataToUri(it) }
-    }
-
-    LaunchedEffect(exportState.pendingFileName) {
-        val fileName = exportState.pendingFileName ?: return@LaunchedEffect
-        exportLauncher.launch(fileName)
-        exportVm.consumeExportRequest()
-    }
-
-    LaunchedEffect(exportState.statusMessage) {
-        val message = exportState.statusMessage ?: return@LaunchedEffect
-        snackbarHostState.showSnackbar(message)
-        exportVm.clearStatusMessage()
-    }
-
-    if (exportState.showDialog) {
-        ExportDialog(
-            selected = exportState.selectedInterval,
-            anchorMonth = exportState.anchorMonth,
-            canPickLaterMonth = exportState.canPickLaterMonth,
-            customStart = exportState.customStartDateInput,
-            customEnd = exportState.customEndDateInput,
-            onSelect = exportVm::selectInterval,
-            onPreviousMonth = exportVm::previousMonth,
-            onNextMonth = exportVm::nextMonth,
-            onStartChanged = exportVm::updateCustomStart,
-            onEndChanged = exportVm::updateCustomEnd,
-            onDismiss = exportVm::closeDialog,
-            onConfirm = exportVm::requestExportDocument
-        )
     }
 
     // Reset confirmation dialog
@@ -590,19 +551,6 @@ fun SettingsScreen(
                     onRun = { csvLauncher.launch("text/*") },
                     onDismiss = vm::resetCsvState
                 )
-            }
-
-            SettingsListItem(
-                title = "Export to CSV",
-                onClick = exportVm::openDialog
-            ) {
-                IconButton(onClick = exportVm::openDialog) {
-                    Icon(
-                        imageVector = Icons.Filled.TableChart,
-                        contentDescription = "Export transactions to CSV",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
             }
 
             SettingsListItem(

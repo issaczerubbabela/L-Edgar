@@ -2,8 +2,6 @@ package com.issaczerubbabel.ledgar.di
 
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.AccountRepositoryImpl
-import com.issaczerubbabel.ledgar.data.repository.BucketBudgetRepository
-import com.issaczerubbabel.ledgar.data.repository.BucketBudgetRepositoryImpl
 import com.issaczerubbabel.ledgar.data.repository.BudgetRepository
 import com.issaczerubbabel.ledgar.data.repository.BudgetRepositoryImpl
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
@@ -27,10 +25,6 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindBudgetRepository(impl: BudgetRepositoryImpl): BudgetRepository
-
-    @Binds
-    @Singleton
-    abstract fun bindBucketBudgetRepository(impl: BucketBudgetRepositoryImpl): BucketBudgetRepository
 
     @Binds
     @Singleton
