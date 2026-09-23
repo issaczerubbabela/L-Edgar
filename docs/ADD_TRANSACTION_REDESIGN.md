@@ -58,6 +58,41 @@ entry screen should feel, while keeping every field and validation rule the old 
   a locked user. Since the bottom of the screen is now the keypad, that button moved into the
   top bar instead of its old bottom-center position.
 
+## Interaction polish pass
+
+After the initial rebuild, a second pass added tactile feedback and transitions the static
+first version lacked (informed by looking at how Buckwheat's own editor/keyboard handles
+sizing and motion — same techniques, our own values and code, not reused source):
+
+- **`NumericKeypad`** — every key (`KeyboardSurface` in `NumericKeypad.kt`) morphs its corner
+  radius between an idle and a pressed value via `animateDpAsState`, driven by
+  `collectIsPressedAsState()` on its own `MutableInteractionSource`, so presses read as a
+  tactile "squish" rather than a flat ripple. The commit key's background now fades between
+  its enabled/disabled colors with `animateColorAsState` instead of snapping the instant
+  `commitEnabled` flips (e.g. on the first digit typed).
+- **`AmountDisplay`** — pulses briefly (scale `1f → 1.06f → 1f` over ~250ms) on a successful
+  save, driven by an `Animatable` keyed to a counter that increments in the existing
+  `LaunchedEffect(vm.saveSuccess)` block, so there's a visible "it worked" moment beyond the
+  sync chip changing color.
+- **`ChipRow`** — given a `heightIn(min = 44.dp)` for consistent height regardless of chip
+  label length, and the category/account ↔ From/To chip swap on type change now runs through
+  `AnimatedContent` (150ms fade + horizontal slide) instead of relabeling instantly.
+- **`OptionPickerSheet`** — the search field ↔ inline "add" field swap animates the same way,
+  and the dashed "+ Add" chip fades and scales in/out instead of appearing/disappearing
+  abruptly.
+
+This was a Compose-only pass — no ViewModel, data, or validation changes.
+
+## Layout fix: keypad height must be explicit
+
+`NumericKeypad`'s commit key spans three rows via a `ColumnScope.weight(1f)`, which only
+resolves against a *bounded* parent height. The first version left the outer `Row` to wrap
+its content, so on a real device the commit key ballooned to fill whatever space Compose
+handed the row, squeezing `AmountDisplay`'s own `weight(1f)` down to zero and making the
+amount invisible. Fixed by giving the row an explicit `KEYPAD_HEIGHT` (four key rows plus
+gaps) so the weighted commit key has something real to resolve against. If this component is
+touched again, keep that height explicit — don't let the row go back to wrapping its content.
+
 ## Deferred: budget preview
 
 An earlier design pass (see the four mockup artifacts linked below) explored a per-category

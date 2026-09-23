@@ -1,5 +1,15 @@
 package com.issaczerubbabel.ledgar.ui.components
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -79,30 +89,39 @@ fun OptionPickerSheet(
         ) {
             Text(title, style = MaterialTheme.typography.titleMedium)
 
-            if (isAdding) {
-                Row(
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = newOptionName,
-                        onValueChange = { newOptionName = it },
-                        label = { Text("New $title") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    IconButton(onClick = ::confirmAdd) {
-                        Icon(Icons.Filled.Check, contentDescription = "Add $title")
+            AnimatedContent(
+                targetState = isAdding,
+                transitionSpec = {
+                    (fadeIn(tween(150)) + slideInHorizontally(tween(150)) { width -> width / 6 })
+                        .togetherWith(fadeOut(tween(150)) + slideOutHorizontally(tween(150)) { width -> -width / 6 })
+                },
+                label = "picker-search-or-add"
+            ) { adding ->
+                if (adding) {
+                    Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = newOptionName,
+                            onValueChange = { newOptionName = it },
+                            label = { Text("New $title") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = ::confirmAdd) {
+                            Icon(Icons.Filled.Check, contentDescription = "Add $title")
+                        }
                     }
+                } else {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Search…") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
-            } else {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text("Search…") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
 
             FlowRow(
@@ -116,7 +135,11 @@ fun OptionPickerSheet(
                         onClick = { onSelect(option) }
                     )
                 }
-                if (!isAdding && onCreate != null) {
+                AnimatedVisibility(
+                    visible = !isAdding && onCreate != null,
+                    enter = fadeIn(tween(150)) + scaleIn(tween(150), initialScale = 0.85f),
+                    exit = fadeOut(tween(100)) + scaleOut(tween(100), targetScale = 0.85f)
+                ) {
                     AddOptionChip(onClick = { isAdding = true })
                 }
             }

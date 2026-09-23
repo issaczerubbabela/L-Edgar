@@ -31,7 +31,9 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Quick Settings quick-add now runs in an isolated transient task, so dismissing the sheet no longer reveals the main app behind it",
             "Removed legacy duplicate-skip resolution plumbing and standardized Sheets conflict handling on timestamp-based conflict flow",
             "Fixed Google Sheets import crash by removing non-unique conflict list keys so the Conflict Resolution sheet opens reliably",
-            "Quick Add now enqueues a sync after saving, instead of leaving the record unsynced until some other action triggered a sync run"
+            "Quick Add now enqueues a sync after saving, instead of leaving the record unsynced until some other action triggered a sync run",
+            "Fixed the Add Transaction keypad's commit key ballooning to fill the screen and squeezing the amount display to nothing, by giving the keypad row an explicit height",
+            "Add Transaction keypad keys now morph their corner radius on press for tactile feedback, the commit key fades smoothly between its enabled/disabled colors, the amount pulses briefly on a successful save, and the category/account chip row and the picker sheet's search-to-add-option swap now animate instead of snapping"
         ),
         qol = listOf(
             "Quick Settings tile click now stays in quick-entry flow and updates tile state without opening the main app tabs",

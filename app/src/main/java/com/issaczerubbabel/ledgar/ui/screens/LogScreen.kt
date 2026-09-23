@@ -1,6 +1,17 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.using
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -12,6 +23,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -47,6 +59,7 @@ fun LogScreen(
     var showDatePicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var activeSheet by remember { mutableStateOf<LogSheet?>(null) }
+    var savePulseSignal by remember { mutableIntStateOf(0) }
     val accounts by vm.accounts.collectAsStateWithLifecycle()
     val expenseCategories by vm.expenseCategories.collectAsStateWithLifecycle()
     val incomeCategories by vm.incomeCategories.collectAsStateWithLifecycle()
@@ -62,6 +75,7 @@ fun LogScreen(
 
     LaunchedEffect(vm.saveSuccess) {
         if (vm.saveSuccess) {
+            savePulseSignal++
             if (vm.isEditMode) {
                 onSaved()
             } else {
@@ -130,6 +144,7 @@ fun LogScreen(
             AmountDisplay(
                 amount = vm.amount,
                 type = vm.selectedType,
+                pulseSignal = savePulseSignal,
                 modifier = Modifier.weight(1f)
             )
 
@@ -376,7 +391,12 @@ private fun TypeRow(selectedType: String, onSelect: (String) -> Unit) {
 }
 
 @Composable
-private fun AmountDisplay(amount: String, type: String, modifier: Modifier = Modifier) {
+private fun AmountDisplay(
+    amount: String,
+    type: String,
+    pulseSignal: Int,
+    modifier: Modifier = Modifier
+) {
     val color = when (type) {
         "Expense" -> ExpenseOrange
         "Income" -> IncomeBlue
@@ -390,10 +410,18 @@ private fun AmountDisplay(amount: String, type: String, modifier: Modifier = Mod
     }
     val fontSize = responsiveTextSize(baseSp = baseSp, minSp = 36f, maxSp = 104f)
 
+    val pulseScale = remember { Animatable(1f) }
+    LaunchedEffect(pulseSignal) {
+        if (pulseSignal == 0) return@LaunchedEffect
+        pulseScale.animateTo(1.06f, tween(durationMillis = 90, easing = LinearEasing))
+        pulseScale.animateTo(1f, tween(durationMillis = 160, easing = LinearEasing))
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = 20.dp)
+            .scale(pulseScale.value),
         contentAlignment = Alignment.CenterEnd
     ) {
         Row(verticalAlignment = Alignment.Bottom) {
@@ -441,15 +469,29 @@ private fun ChipRow(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
+            .heightIn(min = 44.dp)
             .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        if (selectedType == "Transfer") {
-            TransactionChip(label = fromLabel, filled = hasFromValue, onClick = onFromAccountClick)
-            TransactionChip(label = toLabel, filled = hasToValue, onClick = onToAccountClick)
-        } else {
-            TransactionChip(label = categoryLabel, filled = hasCategoryValue, onClick = onCategoryClick)
-            TransactionChip(label = accountLabel, filled = hasAccountValue, onClick = onAccountClick)
+        AnimatedContent(
+            targetState = selectedType == "Transfer",
+            transitionSpec = {
+                (fadeIn(tween(150)) + slideInHorizontally(tween(150)) { width -> width / 6 })
+                    .togetherWith(fadeOut(tween(150)) + slideOutHorizontally(tween(150)) { width -> -width / 6 })
+                    .using(SizeTransform(clip = false))
+            },
+            label = "chip-type-swap"
+        ) { isTransfer ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (isTransfer) {
+                    TransactionChip(label = fromLabel, filled = hasFromValue, onClick = onFromAccountClick)
+                    TransactionChip(label = toLabel, filled = hasToValue, onClick = onToAccountClick)
+                } else {
+                    TransactionChip(label = categoryLabel, filled = hasCategoryValue, onClick = onCategoryClick)
+                    TransactionChip(label = accountLabel, filled = hasAccountValue, onClick = onAccountClick)
+                }
+            }
         }
         TransactionChip(
             label = if (hasNote) "Note added" else "+ Note",

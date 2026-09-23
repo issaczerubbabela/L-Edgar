@@ -1,9 +1,16 @@
 package com.issaczerubbabel.ledgar.ui.components
 
+import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -20,9 +27,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -32,7 +42,8 @@ import com.issaczerubbabel.ledgar.util.KeypadAction
 
 private val KEY_ROW_HEIGHT = 64.dp
 private val KEY_GAP = 8.dp
-private val KEY_SHAPE = RoundedCornerShape(14.dp)
+private val KEY_RADIUS_IDLE = 22.dp
+private val KEY_RADIUS_PRESSED = 10.dp
 private const val KEYPAD_ROWS = 4
 private val KEYPAD_HEIGHT = (KEY_ROW_HEIGHT * KEYPAD_ROWS) + (KEY_GAP * (KEYPAD_ROWS - 1))
 
@@ -102,14 +113,12 @@ fun NumericKeypad(
                 .fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(KEY_GAP)
         ) {
-            Box(
+            KeyboardSurface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(KEY_ROW_HEIGHT)
-                    .clip(KEY_SHAPE)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { act(KeypadAction.Backspace) },
-                contentAlignment = Alignment.Center
+                    .height(KEY_ROW_HEIGHT),
+                background = MaterialTheme.colorScheme.surfaceVariant,
+                onClick = { act(KeypadAction.Backspace) }
             ) {
                 Icon(
                     imageVector = Icons.Filled.Backspace,
@@ -117,20 +126,23 @@ fun NumericKeypad(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Box(
+
+            val commitBackground by animateColorAsState(
+                targetValue = if (commitEnabled) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+                animationSpec = tween(200),
+                label = "commitBackground"
+            )
+            KeyboardSurface(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth()
-                    .clip(KEY_SHAPE)
-                    .background(
-                        if (commitEnabled) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
-                    )
-                    .clickable(enabled = commitEnabled) {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onCommit()
-                    },
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth(),
+                background = commitBackground,
+                enabled = commitEnabled,
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onCommit()
+                }
             ) {
                 Icon(
                     imageVector = Icons.Filled.Check,
@@ -140,6 +152,42 @@ fun NumericKeypad(
             }
         }
     }
+}
+
+/**
+ * Shared key surface: morphs its corner radius from [KEY_RADIUS_IDLE] to
+ * [KEY_RADIUS_PRESSED] while held, via [animateDpAsState] on the pressed interaction state, so
+ * every key gets the same tactile "squish" feedback instead of a flat ripple alone.
+ */
+@Composable
+private fun KeyboardSurface(
+    modifier: Modifier = Modifier,
+    background: Color,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+    content: @Composable BoxScope.() -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val cornerRadius by animateDpAsState(
+        targetValue = if (isPressed) KEY_RADIUS_PRESSED else KEY_RADIUS_IDLE,
+        animationSpec = tween(120),
+        label = "keyCornerRadius"
+    )
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(background)
+            .clickable(
+                enabled = enabled,
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center,
+        content = content
+    )
 }
 
 @Composable
@@ -160,13 +208,10 @@ private fun DigitKey(value: Int, modifier: Modifier = Modifier, onClick: () -> U
 
 @Composable
 private fun SymbolKey(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Box(
-        modifier = modifier
-            .fillMaxHeight()
-            .clip(KEY_SHAPE)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
+    KeyboardSurface(
+        modifier = modifier.fillMaxHeight(),
+        background = MaterialTheme.colorScheme.surfaceVariant,
+        onClick = onClick
     ) {
         Text(
             text = label,
