@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.preferences.CashFlowChartStyle
+import com.issaczerubbabel.ledgar.ui.components.SingleDatePickerDialog
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseRed
 import com.issaczerubbabel.ledgar.ui.theme.IncomeGreen
 import com.issaczerubbabel.ledgar.viewmodel.AccountsBreakdownUi
@@ -547,45 +548,6 @@ private fun TopRightFilterDropdown(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SingleDatePickerDialog(
-    initialDate: LocalDate,
-    onDismiss: () -> Unit,
-    onConfirm: (LocalDate) -> Unit
-) {
-    val initialMillis = remember(initialDate) {
-        initialDate
-            .atStartOfDay(ZoneId.systemDefault())
-            .toInstant()
-            .toEpochMilli()
-    }
-    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
-
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val selectedMillis = datePickerState.selectedDateMillis
-                    if (selectedMillis != null) {
-                        onConfirm(selectedMillis.toLocalDate())
-                    }
-                }
-            ) {
-                Text("OK")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    ) {
-        DatePicker(state = datePickerState)
-    }
-}
-
 private fun StatsScope.label(): String {
     return when (this) {
         StatsScope.WEEKLY -> "Weekly"
@@ -627,12 +589,6 @@ private fun CashFlowChartStyle.hintLabel(): String {
         CashFlowChartStyle.BAR -> "Bars"
         CashFlowChartStyle.LINE -> "Lines"
     }
-}
-
-private fun Long.toLocalDate(): LocalDate {
-    return Instant.ofEpochMilli(this)
-        .atZone(ZoneId.systemDefault())
-        .toLocalDate()
 }
 
 private fun formatIsoDate(date: LocalDate): String = date.toString()
