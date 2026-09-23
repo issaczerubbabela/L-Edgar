@@ -43,14 +43,13 @@ import com.issaczerubbabel.ledgar.viewmodel.DayGroup
 import com.issaczerubbabel.ledgar.viewmodel.HistoryViewModel
 import com.issaczerubbabel.ledgar.viewmodel.MonthlyViewModel
 import com.issaczerubbabel.ledgar.viewmodel.PeriodSummary
-import com.issaczerubbabel.ledgar.viewmodel.TotalViewModel
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.launch
 
-private val TABS = listOf("Daily", "Calendar", "Monthly", "Total")
+private val TABS = listOf("Daily", "Calendar", "Monthly")
 private val monthNames = listOf(
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
@@ -119,16 +118,13 @@ fun HistoryScreen(
     onNavigateToBookmarks: () -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToFilterSelection: () -> Unit,
-    onNavigateToBudgetSetting: () -> Unit,
     vm: HistoryViewModel = hiltViewModel(),
     monthlyVm: MonthlyViewModel = hiltViewModel(),
-    totalVm: TotalViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
     val accounts by vm.accounts.collectAsStateWithLifecycle()
     val categories by vm.categories.collectAsStateWithLifecycle()
     val monthlyState by monthlyVm.uiState.collectAsStateWithLifecycle()
-    val totalState by totalVm.uiState.collectAsStateWithLifecycle()
     var selectedTab by remember { mutableIntStateOf(0) }
     val pagerState = rememberPagerState(pageCount = { TABS.size })
     var showMonthPicker by remember { mutableStateOf(false) }
@@ -178,17 +174,14 @@ fun HistoryScreen(
 
     val periodLabel = when (selectedTab) {
         2 -> monthlyState.selectedYear.toString()
-        3 -> totalState.periodLabel
         else -> state.monthLabel
     }
     val onPrevPeriod = when (selectedTab) {
         2 -> monthlyVm::prevYear
-        3 -> totalVm::prevMonth
         else -> vm::prevMonth
     }
     val onNextPeriod = when (selectedTab) {
         2 -> monthlyVm::nextYear
-        3 -> totalVm::nextMonth
         else -> vm::nextMonth
     }
     val canOpenMonthPicker = selectedTab == 0 || selectedTab == 1
@@ -237,7 +230,6 @@ fun HistoryScreen(
             // Single pinned summary row below tabs
             val pinnedSummary = when (selectedTab) {
                 2 -> monthlyState.summary
-                3 -> totalState.summary
                 else -> state.summary
             }
             SummaryBar(pinnedSummary)
@@ -258,12 +250,6 @@ fun HistoryScreen(
                         2 -> MonthlyTabScreen(
                             monthGroups = monthlyState.monthGroups,
                             onToggleExpand = monthlyVm::toggleMonthExpanded,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        3 -> TotalTabScreen(
-                            state = totalState,
-                            onToggleBudget = totalVm::toggleBudgetSection,
-                            onNavigateBudgetSetting = onNavigateToBudgetSetting,
                             modifier = Modifier.fillMaxSize()
                         )
                         else -> DailyContent(

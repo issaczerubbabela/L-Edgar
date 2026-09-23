@@ -30,6 +30,8 @@ data class CycleSummary(
     val dayNumber: Int,
     val daysLeft: Int,
     val daysOverdue: Int,
+    /** Days until a future-dated cycle begins; zero once it has started. */
+    val daysUntilStart: Int,
     /** 0..1, where the pace tick sits. */
     val elapsedFraction: Float,
     val totalSpent: Double,

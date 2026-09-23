@@ -57,6 +57,14 @@ class CycleCalendarTest {
     }
 
     @Test
+    fun aFutureCycleCountsDaysUntilItStartsAndZeroOnceItHas() {
+        assertEquals(3, CycleCalendar.daysUntilStart(start, start.minusDays(3)))
+        assertEquals(1, CycleCalendar.daysUntilStart(start, start.minusDays(1)))
+        assertEquals(0, CycleCalendar.daysUntilStart(start, start))
+        assertEquals(0, CycleCalendar.daysUntilStart(start, start.plusDays(10)))
+    }
+
+    @Test
     fun defaultEndIsOneMonthOnLessADay() {
         assertEquals(LocalDate.of(2026, 10, 25), CycleCalendar.defaultEnd(LocalDate.of(2026, 9, 26)))
         // Month lengths clamp rather than throwing: 31 Jan + 1 month = 28 Feb, less a day.

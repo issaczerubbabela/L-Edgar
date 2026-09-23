@@ -67,6 +67,10 @@ class BucketBudgetRepositoryImpl @Inject constructor(
             StartCycleResult.Started(newCycleId)
         }
 
+    override fun observeCycle(cycleId: Long): Flow<BudgetCycle?> = dao.observeCycle(cycleId)
+
+    override fun observeBucket(bucketId: Long): Flow<BudgetBucket?> = dao.observeBucket(bucketId)
+
     override fun observeBuckets(cycleId: Long): Flow<List<BudgetBucket>> = dao.observeBuckets(cycleId)
 
     override suspend fun getBuckets(cycleId: Long): List<BudgetBucket> = dao.getBuckets(cycleId)
@@ -89,4 +93,15 @@ class BucketBudgetRepositoryImpl @Inject constructor(
 
     override suspend fun unassignCategory(cycleId: Long, category: String) =
         dao.unassignCategory(cycleId, category.trim())
+
+    override suspend fun setBucketCategories(cycleId: Long, bucketId: Long, categories: Set<String>) {
+        val wanted = categories.map { it.trim() }.filter { it.isNotBlank() }
+        val wantedKeys = wanted.map { it.lowercase() }.toSet()
+        db.withTransaction {
+            dao.getCategoryAssignments(cycleId)
+                .filter { it.bucketId == bucketId && it.category.trim().lowercase() !in wantedKeys }
+                .forEach { dao.unassignCategory(cycleId, it.category) }
+            dao.assignCategories(wanted.map { BucketCategory(cycleId = cycleId, bucketId = bucketId, category = it) })
+        }
+    }
 }

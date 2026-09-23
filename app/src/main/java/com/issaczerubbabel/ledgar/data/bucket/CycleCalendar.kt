@@ -17,6 +17,10 @@ object CycleCalendar {
     fun dayNumber(start: LocalDate, end: LocalDate, today: LocalDate): Int =
         (ChronoUnit.DAYS.between(start, today) + 1).toInt().coerceIn(0, totalDays(start, end))
 
+    /** Whole days until the cycle begins; zero once it has started. */
+    fun daysUntilStart(start: LocalDate, today: LocalDate): Int =
+        ChronoUnit.DAYS.between(today, start).toInt().coerceAtLeast(0)
+
     /** Days remaining after today, so the last day reads as 0 left. Never negative. */
     fun daysLeft(end: LocalDate, today: LocalDate): Int =
         ChronoUnit.DAYS.between(today, end).toInt().coerceAtLeast(0)

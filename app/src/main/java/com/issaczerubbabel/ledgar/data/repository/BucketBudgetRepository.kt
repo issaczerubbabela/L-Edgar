@@ -11,6 +11,7 @@ import java.time.LocalDate
 interface BucketBudgetRepository {
     // Cycles
     fun observeRunningCycle(): Flow<BudgetCycle?>
+    fun observeCycle(cycleId: Long): Flow<BudgetCycle?>
     suspend fun getRunningCycle(): BudgetCycle?
     fun observeAllCycles(): Flow<List<BudgetCycle>>
     suspend fun getCycle(cycleId: Long): BudgetCycle?
@@ -25,6 +26,7 @@ interface BucketBudgetRepository {
     suspend fun startCycle(request: StartCycleRequest, today: LocalDate = LocalDate.now()): StartCycleResult
 
     // Buckets
+    fun observeBucket(bucketId: Long): Flow<BudgetBucket?>
     fun observeBuckets(cycleId: Long): Flow<List<BudgetBucket>>
     suspend fun getBuckets(cycleId: Long): List<BudgetBucket>
     suspend fun insertBucket(bucket: BudgetBucket): Long
@@ -38,4 +40,10 @@ interface BucketBudgetRepository {
     /** Moves the category into the bucket, taking it out of whichever bucket held it before. */
     suspend fun assignCategory(cycleId: Long, bucketId: Long, category: String)
     suspend fun unassignCategory(cycleId: Long, category: String)
+
+    /**
+     * Makes [categories] exactly the set routed into this bucket: anything else it held is released
+     * to Unbucketed, and anything listed is moved in from whichever bucket held it.
+     */
+    suspend fun setBucketCategories(cycleId: Long, bucketId: Long, categories: Set<String>)
 }

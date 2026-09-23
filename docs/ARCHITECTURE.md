@@ -36,8 +36,9 @@ graph TD
 
 - Built with Jetpack Compose + Navigation.
 - Primary top-level destinations:
-  - Trans (History: Daily, Calendar, Monthly, Total)
+  - Trans (History: Daily, Calendar, Monthly)
   - Stats (Insights)
+  - Budget (salary-cycle buckets; sub-screens: Start cycle, Plan buckets, Bucket detail)
   - Accounts
   - More (Settings)
 - Form-heavy flows are managed in ViewModels with reactive state.
@@ -76,11 +77,14 @@ graph TD
 flowchart TD
     A[App Start] --> B[Trans / History]
     A --> C[Stats / Insights]
+    A --> BG[Budget]
     A --> D[Accounts]
     A --> E[More / Settings]
 
     B --> B1[Log Transaction]
-    B --> B2[Budget Setting]
+    BG --> BG1[Start Cycle]
+    BG --> BG2[Plan Buckets]
+    BG --> BG3[Bucket Detail]
 
     D --> D1[Add Account]
     D --> D2[Account Detail]

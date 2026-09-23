@@ -26,6 +26,9 @@ interface BucketBudgetDao {
     suspend fun getCycle(cycleId: Long): BudgetCycle?
 
     /** The running cycle: the newest one that has not been closed. */
+    @Query("SELECT * FROM budget_cycles WHERE id = :cycleId")
+    fun observeCycle(cycleId: Long): Flow<BudgetCycle?>
+
     @Query("SELECT * FROM budget_cycles WHERE closedAt IS NULL ORDER BY startDate DESC, id DESC LIMIT 1")
     fun observeRunningCycle(): Flow<BudgetCycle?>
 
@@ -52,6 +55,9 @@ interface BucketBudgetDao {
 
     @Delete
     suspend fun deleteBucket(bucket: BudgetBucket)
+
+    @Query("SELECT * FROM budget_buckets WHERE id = :bucketId")
+    fun observeBucket(bucketId: Long): Flow<BudgetBucket?>
 
     @Query("SELECT * FROM budget_buckets WHERE cycleId = :cycleId ORDER BY sortOrder ASC, id ASC")
     fun observeBuckets(cycleId: Long): Flow<List<BudgetBucket>>

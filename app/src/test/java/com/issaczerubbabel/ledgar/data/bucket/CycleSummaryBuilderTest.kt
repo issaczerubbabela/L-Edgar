@@ -205,6 +205,26 @@ class CycleSummaryBuilderTest {
     }
 
     @Test
+    fun aCycleThatHasNotStartedYetReportsDaysUntilItBegins() {
+        val summary = build(
+            cycle = cycle(start = "2026-09-25", end = "2026-10-24"),
+            buckets = emptyList(), assignments = emptyList(), records = emptyList(),
+            today = LocalDate.of(2026, 9, 24)
+        )
+
+        assertEquals(1, summary.daysUntilStart)
+        assertEquals(0, summary.dayNumber)
+        assertEquals(0f, summary.elapsedFraction, 0f)
+    }
+
+    @Test
+    fun aCycleUnderwayHasNoDaysUntilStart() {
+        val summary = build(buckets = emptyList(), assignments = emptyList(), records = emptyList())
+
+        assertEquals(0, summary.daysUntilStart)
+    }
+
+    @Test
     fun overAllocatingShowsAsANegativeUnallocated() {
         val summary = build(
             buckets = listOf(bucket(1, "A", 50000.0), bucket(2, "B", 24500.0)),

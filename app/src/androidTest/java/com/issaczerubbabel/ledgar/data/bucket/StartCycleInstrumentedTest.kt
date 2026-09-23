@@ -198,6 +198,48 @@ class StartCycleInstrumentedTest {
     }
 
     @Test
+    fun settingABucketsCategoriesMakesThemExactlyThatSetAndReleasesTheRest() = runBlocking {
+        val cycleId = seedRunningCycle()
+        val essentials = repo.getBuckets(cycleId).first { it.name == "Essentials" }
+        val eatingOut = repo.getBuckets(cycleId).first { it.name == "Eating Out" }
+
+        // Essentials held Rent and Utilities. Now it should hold Utilities and Restaurants (which
+        // lives in Eating Out): Rent is released, Restaurants moves across.
+        repo.setBucketCategories(cycleId, essentials.id, setOf("Utilities", "restaurants"))
+
+        val routing = repo.getCategoryAssignments(cycleId).associate { it.category.lowercase() to it.bucketId }
+        assertEquals(essentials.id, routing["utilities"])
+        assertEquals(essentials.id, routing["restaurants"])
+        assertNull(routing["rent"])
+        // Eating Out lost its only category to the move, and nothing was duplicated.
+        assertTrue(repo.getCategoryAssignments(cycleId).none { it.bucketId == eatingOut.id })
+        assertEquals(2, repo.getCategoryAssignments(cycleId).size)
+    }
+
+    @Test
+    fun anEmptySetReleasesEverythingTheBucketHeld() = runBlocking {
+        val cycleId = seedRunningCycle()
+        val essentials = repo.getBuckets(cycleId).first { it.name == "Essentials" }
+
+        repo.setBucketCategories(cycleId, essentials.id, emptySet())
+
+        assertTrue(repo.getCategoryAssignments(cycleId).none { it.bucketId == essentials.id })
+        assertEquals(1, repo.getCategoryAssignments(cycleId).size) // Restaurants, in Eating Out, is untouched
+    }
+
+    @Test
+    fun deletingABucketReleasesItsCategoriesToUnbucketed() = runBlocking {
+        val cycleId = seedRunningCycle()
+        val essentials = repo.getBuckets(cycleId).first { it.name == "Essentials" }
+
+        repo.deleteBucket(essentials)
+
+        assertEquals(1, repo.getBuckets(cycleId).size)
+        assertNull(repo.getCategoryAssignments(cycleId).firstOrNull { it.category == "Rent" })
+        assertNull(repo.getCategoryAssignments(cycleId).firstOrNull { it.category == "Utilities" })
+    }
+
+    @Test
     fun unassigningPutsACategoryBackToUnbucketed() = runBlocking {
         val cycleId = seedRunningCycle()
 

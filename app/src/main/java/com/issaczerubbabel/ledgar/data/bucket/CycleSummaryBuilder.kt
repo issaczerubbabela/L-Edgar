@@ -53,6 +53,7 @@ object CycleSummaryBuilder {
             dayNumber = CycleCalendar.dayNumber(start, end, today),
             daysLeft = daysLeft,
             daysOverdue = daysOverdue,
+            daysUntilStart = CycleCalendar.daysUntilStart(start, today),
             elapsedFraction = CycleCalendar.elapsedFraction(start, end, today),
             totalSpent = totalSpent,
             leftToSpend = leftToSpend,

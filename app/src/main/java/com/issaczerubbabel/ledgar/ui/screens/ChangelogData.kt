@@ -20,7 +20,12 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Added advanced Sheets sync conflict resolution UI",
             "Salary-cycle bucket budgeting data layer: new budget_cycles, budget_buckets and bucket_categories tables, with a unique (cycle, category) constraint so a category can belong to only one bucket and bucket totals always reconcile",
             "Existing per-category budgets are carried into the new bucket model on upgrade: the most recent budgeted month becomes the first running cycle, with each category budget as its own bucket",
-            "Salary-cycle engine: starting a new cycle atomically closes the running one, opens the next and can carry the buckets and category routing across; a late start stretches the old cycle over the gap it was absorbing and a backdated start trims it, so spend from the real payday moves into the new cycle"
+            "Salary-cycle engine: starting a new cycle atomically closes the running one, opens the next and can carry the buckets and category routing across; a late start stretches the old cycle over the gap it was absorbing and a backdated start trims it, so spend from the real payday moves into the new cycle",
+            "New Budget tab in the bottom bar (Trans., Stats, Budget, Accounts, More): the salary cycle as a ribbon with today marked, the amount left to spend, daily pace, what is unallocated, and each bucket as a bar with a tick for where an even pace would be, so a bar reads as ahead or behind rather than just full or empty. Overspent buckets are striped and flagged with an icon and words, not colour alone",
+            "Start new cycle screen: pick payday and the end date by hand, prefill the spendable amount from the last cycle, accept a detected salary with one tap, and choose whether to carry over your buckets. Starting a cycle in the past or after payday closes the old one cleanly, and mistakes are explained on the field that caused them",
+            "Plan your buckets screen: an always-visible Unallocated figure that turns red when you over-allocate without ever blocking a save, plus steppers and typed amounts for each bucket, an editable spendable amount, and new buckets",
+            "Bucket detail and editor: see where a bucket's money went by category, and edit its name, note, emoji, colour, allocation and categories. Choosing a category held by another bucket moves it, so a category is only ever in one bucket",
+            "Browse past cycles from the Budget header. Closed cycles keep their frozen numbers and cannot be edited"
         ),
         fixes = listOf(
             "Cash Flow chart now refreshes plotted series correctly when switching top period months, preventing stale bars/lines and stale Y-axis scale carryover",
@@ -34,7 +39,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Accounts transfer total now counts transactions whose type is Transfer, instead of any transaction with the word \"transfer\" in its category or description, which both missed real transfers and counted unrelated expenses",
             "Export dialog no longer shows its date-format hint in the error colour before anything has been typed; it only turns red once an entered range is actually invalid",
             "Fixed the Trans. tab pager getting stuck between pages after tapping a distant tab (for example Daily to Total): the pager's intermediate pages were being written back into the selected tab, which cancelled the scroll animation part-way",
-            "Accounts card: card and cash spending is now split by the group of the account each expense was paid from (Card, Debit Card, Cash and so on). It previously read a payment-mode field the app never saves, so the card total was always zero and every expense counted as cash"
+            "Accounts card: card and cash spending is now split by the group of the account each expense was paid from (Card, Debit Card, Cash and so on). It previously read a payment-mode field the app never saves, so the card total was always zero and every expense counted as cash",
+            "The date picker on Insights now opens on the day you already selected. It was converting the initial date in the device time zone while the picker works in UTC, so in time zones ahead of UTC it highlighted the previous day"
         ),
         qol = listOf(
             "Quick Settings tile click now stays in quick-entry flow and updates tile state without opening the main app tabs",
@@ -52,6 +58,10 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Database upgrade to v17 keeps the old budgets table and its Sheets backup untouched, so existing backups still restore and there is a rollback path; the upgrade was verified against a real device database",
             "Cycle summaries derive spent, remaining, daily pace, overdue days and unbucketed spend from the expense ledger rather than storing them, so moving a category or backdating a cycle can never leave stale totals",
             "Added on-device instrumented tests that exercise the cycle transaction against a real in-memory Room database, run with am instrument so they never touch app data",
+            "Total tab removed from the Trans. pager (Daily, Calendar and Monthly remain): its budget section is replaced by the Budget tab, and the old budget-setting screen that only it linked to is gone. The legacy budgets table and its Sheets backup are kept untouched for restores",
+            "Budget tab stays highlighted while you are on its sub-screens (Start cycle, Plan buckets, bucket detail)",
+            "Amount and name dialogs in Plan buckets open with the field focused and ready to type, and a zero amount starts blank instead of with a stray 0",
+            "Rupee amounts on the Budget screens use Indian digit grouping (₹1,20,000) and tabular digits so figures line up as they change",
             "Export moved out of the Total tab into Settings, directly below Import from CSV, so every data import and export action now lives in one place",
             "Export renamed from \"Export data to Excel\" to \"Export to CSV\" to match the file it actually produces, replacing the stale \"Money Manager - Excel\" dialog title",
             "Export dialog now has its own month picker, so any past month can be exported without leaving Settings, and each interval option is labelled with the exact range it will produce (Sep 2026, Jul – Sep 2026, 2026, 2025) instead of a generic name",
