@@ -16,9 +16,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.TrendingFlat
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
@@ -47,6 +51,10 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.preferences.CashFlowChartStyle
+import com.issaczerubbabel.ledgar.ui.components.SingleDatePickerDialog
+import com.issaczerubbabel.ledgar.ui.theme.ExpenseRed
+import com.issaczerubbabel.ledgar.ui.theme.IncomeGreen
+import com.issaczerubbabel.ledgar.viewmodel.AccountsBreakdownUi
 import com.issaczerubbabel.ledgar.viewmodel.CashFlowGranularity
 import com.issaczerubbabel.ledgar.viewmodel.StatsBreakdownTab
 import com.issaczerubbabel.ledgar.viewmodel.StatsDateRange
@@ -77,6 +85,7 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
     val cashFlowChartStyle by vm.cashFlowChartStyle.collectAsStateWithLifecycle()
     val useCompressedScale by vm.useCompressedScale.collectAsStateWithLifecycle()
     val isLoading by vm.isLoading.collectAsStateWithLifecycle()
+    val accountsBreakdown by vm.accountsBreakdown.collectAsStateWithLifecycle()
 
     var showAnchorDatePicker by remember { mutableStateOf(false) }
     var showCustomStartPicker by remember { mutableStateOf(false) }
@@ -302,6 +311,13 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
                 }
             }
 
+            item {
+                AccountsBreakdownCard(
+                    breakdown = accountsBreakdown,
+                    formatRupee = vm::formatRupee
+                )
+            }
+
             item { Spacer(Modifier.height(72.dp)) }
         }
     }
@@ -336,6 +352,113 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
                 vm.updateCustomPeriodEnd(selectedDate)
                 showCustomEndPicker = false
             }
+        )
+    }
+}
+
+@Composable
+private fun AccountsBreakdownCard(
+    breakdown: AccountsBreakdownUi,
+    formatRupee: (Double) -> String
+) {
+    Card(
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Accounts",
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Spending vs previous period",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+
+                val change = breakdown.changePercent
+                if (change == null) {
+                    Text(
+                        text = "No earlier data",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                } else {
+                    val trendColor = when {
+                        change > 0 -> ExpenseRed
+                        change < 0 -> IncomeGreen
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = when {
+                                change > 0 -> Icons.Filled.TrendingUp
+                                change < 0 -> Icons.Filled.TrendingDown
+                                else -> Icons.Filled.TrendingFlat
+                            },
+                            contentDescription = null,
+                            tint = trendColor
+                        )
+                        Text(
+                            text = when {
+                                change > 0 -> "+$change%"
+                                else -> "$change%"
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                            color = trendColor,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            AccountsBreakdownLine("Expenses (Cash, Accounts)", formatRupee(breakdown.cashAndAccountsExpense))
+            AccountsBreakdownLine("Expenses (Card)", formatRupee(breakdown.cardExpense))
+            AccountsBreakdownLine("Transfers", formatRupee(breakdown.transferTotal))
+        }
+    }
+}
+
+@Composable
+private fun AccountsBreakdownLine(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 1,
+            softWrap = false
         )
     }
 }
@@ -425,45 +548,6 @@ private fun TopRightFilterDropdown(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SingleDatePickerDialog(
-    initialDate: LocalDate,
-    onDismiss: () -> Unit,
-    onConfirm: (LocalDate) -> Unit
-) {
-    val initialMillis = remember(initialDate) {
-        initialDate
-            .atStartOfDay(ZoneId.systemDefault())
-            .toInstant()
-            .toEpochMilli()
-    }
-    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
-
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val selectedMillis = datePickerState.selectedDateMillis
-                    if (selectedMillis != null) {
-                        onConfirm(selectedMillis.toLocalDate())
-                    }
-                }
-            ) {
-                Text("OK")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    ) {
-        DatePicker(state = datePickerState)
-    }
-}
-
 private fun StatsScope.label(): String {
     return when (this) {
         StatsScope.WEEKLY -> "Weekly"
@@ -505,12 +589,6 @@ private fun CashFlowChartStyle.hintLabel(): String {
         CashFlowChartStyle.BAR -> "Bars"
         CashFlowChartStyle.LINE -> "Lines"
     }
-}
-
-private fun Long.toLocalDate(): LocalDate {
-    return Instant.ofEpochMilli(this)
-        .atZone(ZoneId.systemDefault())
-        .toLocalDate()
 }
 
 private fun formatIsoDate(date: LocalDate): String = date.toString()

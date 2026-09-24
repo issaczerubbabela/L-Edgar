@@ -6,6 +6,7 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.issaczerubbabel.ledgar.data.bucket.BucketBackupMapper
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
 import com.issaczerubbabel.ledgar.data.remote.ApiService
 import com.issaczerubbabel.ledgar.data.remote.AccountSyncDto
@@ -13,6 +14,7 @@ import com.issaczerubbabel.ledgar.data.remote.BudgetSyncDto
 import com.issaczerubbabel.ledgar.data.remote.DropdownSyncDto
 import com.issaczerubbabel.ledgar.data.remote.SyncRequest
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
+import com.issaczerubbabel.ledgar.data.repository.BucketBudgetRepository
 import com.issaczerubbabel.ledgar.data.repository.BudgetRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
@@ -32,6 +34,7 @@ class SyncWorker @AssistedInject constructor(
     private val accountRepository: AccountRepository,
     private val dropdownOptionRepository: DropdownOptionRepository,
     private val budgetRepository: BudgetRepository,
+    private val bucketBudgetRepository: BucketBudgetRepository,
     private val apiService: ApiService,
     private val preferenceRepository: ThemePreferenceRepository
 ) : CoroutineWorker(context, workerParams) {
@@ -59,6 +62,10 @@ class SyncWorker @AssistedInject constructor(
 
             val budgetBackupCount = backupBudgets(scriptUrl) ?: run {
                 return Result.failure(workDataOf(KEY_ERROR_MESSAGE to (lastSyncError ?: "Budget backup failed")))
+            }
+
+            val bucketBackupCount = backupBucketBudgets(scriptUrl) ?: run {
+                return Result.failure(workDataOf(KEY_ERROR_MESSAGE to (lastSyncError ?: "Bucket backup failed")))
             }
 
             if (backupOnly) {
@@ -91,6 +98,7 @@ class SyncWorker @AssistedInject constructor(
                 workDataOf(
                     KEY_DROPDOWN_BACKUP_COUNT to dropdownBackupCount,
                     KEY_BUDGET_BACKUP_COUNT to budgetBackupCount,
+                    KEY_BUCKET_BACKUP_COUNT to bucketBackupCount,
                     KEY_ACCOUNTS_BACKUP_COUNT to accountsBackupCount
                 )
             )
@@ -290,6 +298,41 @@ class SyncWorker @AssistedInject constructor(
         return null
     }
 
+    /**
+     * Backs up salary cycles, buckets and their categories. Returns the number of cycles sent, 0 when
+     * there is nothing to send, [SCRIPT_OUTDATED] when the deployed script does not know the target,
+     * or null when the request genuinely failed.
+     *
+     * An outdated script must not fail the whole sync, which would stop transactions syncing for
+     * anyone who updated the app but has not redeployed the script. Cycles go in `cycles` with
+     * `records` empty, so an old script has nothing to file as transactions.
+     */
+    private suspend fun backupBucketBudgets(scriptUrl: String): Int? {
+        val payload = BucketBackupMapper.toSyncDtos(bucketBudgetRepository.getBackupSnapshot())
+        if (payload.isEmpty()) {
+            Log.i(TAG, "Skipping bucket backup: local payload is empty")
+            return 0
+        }
+
+        val response = apiService.syncRecords(
+            scriptUrl,
+            SyncRequest(action = "backup", target = "bucket_budgets", records = emptyList(), cycles = payload)
+        )
+        val body = response.body()
+        if (response.isSuccessful && body?.status.equals("ok", ignoreCase = true)) {
+            if (body?.type == BUCKET_BACKUP_TYPE) {
+                Log.i(TAG, "Bucket backup successful. cycles=${payload.size}")
+                return payload.size
+            }
+            Log.w(TAG, "Bucket backup skipped: the deployed Apps Script predates bucket budgets and needs redeploying")
+            return SCRIPT_OUTDATED
+        }
+
+        lastSyncError = "Bucket backup failed (HTTP ${response.code()}): ${body?.message ?: "unknown error"}"
+        Log.w(TAG, "Bucket backup failed: HTTP ${response.code()}, status=${body?.status}, message=${body?.message}")
+        return null
+    }
+
     private suspend fun backupAccounts(
         accounts: List<com.issaczerubbabel.ledgar.data.local.entity.AccountRecord>,
         scriptUrl: String
@@ -339,6 +382,11 @@ class SyncWorker @AssistedInject constructor(
         const val KEY_BACKUP_ACCOUNTS = "backupAccounts"
         const val KEY_DROPDOWN_BACKUP_COUNT = "dropdownBackupCount"
         const val KEY_BUDGET_BACKUP_COUNT = "budgetBackupCount"
+        const val KEY_BUCKET_BACKUP_COUNT = "bucketBackupCount"
+
+        /** Reported instead of a count when the deployed script does not understand bucket budgets. */
+        const val SCRIPT_OUTDATED = -1
+        private const val BUCKET_BACKUP_TYPE = "bucket_budgets_backed_up"
         const val KEY_ACCOUNTS_BACKUP_COUNT = "accountsBackupCount"
         const val KEY_ERROR_MESSAGE = "errorMessage"
     }
