@@ -13,6 +13,7 @@ import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.MenuBook
@@ -42,14 +43,17 @@ import androidx.navigation.navArgument
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tune
+import com.issaczerubbabel.ledgar.ui.screens.BucketDetailScreen
+import com.issaczerubbabel.ledgar.ui.screens.BudgetHomeScreen
 import com.issaczerubbabel.ledgar.ui.screens.HistoryScreen
+import com.issaczerubbabel.ledgar.ui.screens.PlanBucketsScreen
+import com.issaczerubbabel.ledgar.ui.screens.StartCycleScreen
 import com.issaczerubbabel.ledgar.ui.screens.InsightsScreen
 import com.issaczerubbabel.ledgar.ui.screens.LogScreen
 import com.issaczerubbabel.ledgar.ui.screens.AccountDetailScreen
 import com.issaczerubbabel.ledgar.ui.screens.AccountsScreen
 import com.issaczerubbabel.ledgar.ui.screens.AddAccountScreen
 import com.issaczerubbabel.ledgar.ui.screens.BookmarksScreen
-import com.issaczerubbabel.ledgar.ui.screens.BudgetSettingScreen
 import com.issaczerubbabel.ledgar.ui.screens.DropdownManagementScreen
 import com.issaczerubbabel.ledgar.ui.screens.FilterSelectionScreen
 import com.issaczerubbabel.ledgar.ui.screens.FilteredTransactionsScreen
@@ -79,18 +83,24 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     )
     object Bookmarks : Screen("bookmarks", "Bookmarks", Icons.Filled.Star)
     object Stats : Screen("stats", "Stats", Icons.Filled.BarChart)
+    object Budget : Screen("budget", "Budget", Icons.Filled.AccountBalanceWallet)
+    object StartCycle : Screen("start_cycle", "StartCycle", Icons.Filled.AccountBalanceWallet)
+    object PlanBuckets : Screen("plan_buckets", "PlanBuckets", Icons.Filled.AccountBalanceWallet)
+    object BucketDetail : Screen("bucket/{bucketId}", "BucketDetail", Icons.Filled.AccountBalanceWallet)
     object Accounts : Screen("accounts", "Accounts", Icons.Filled.Paid)
     object AccountDetail : Screen("account_detail/{accountId}", "AccountDetail", Icons.Filled.Paid)
     object OverallAccountStats : Screen("overall_account_stats", "OverallAccountStats", Icons.Filled.BarChart)
     object AddAccount : Screen(ACCOUNT_ROUTE_ADD, "AddAccount", Icons.Filled.Paid)
     object More : Screen("more", "More", Icons.Filled.MoreHoriz)
-    object BudgetSetting : Screen("budget_setting", "BudgetSetting", Icons.Filled.Settings)
     object DropdownManagement : Screen("dropdown_management", "DropdownManagement", Icons.Filled.Settings)
     object AppsScriptSetup : Screen("apps_script_setup", "AppsScriptSetup", Icons.Filled.Settings)
     object Changelog : Screen("changelog", "Changelog", Icons.Filled.Settings)
 }
 
 private const val LOG_BASE_ROUTE = "log"
+
+/** Screens reached from the Budget tab; the tab stays highlighted while you are on them. */
+private val BUDGET_SUB_ROUTES = setOf(Screen.StartCycle.route, Screen.PlanBuckets.route, Screen.BucketDetail.route)
 private const val FILTERED_BASE_ROUTE = "filtered_transactions"
 private const val APP_LOCK_AUTHENTICATORS =
     BiometricManager.Authenticators.BIOMETRIC_WEAK or
@@ -175,7 +185,7 @@ private fun filteredTransactionsRoute(
     return "$FILTERED_BASE_ROUTE?year=$year&month=$month&incomeIds=$income&expenseIds=$expense&accountIds=$accounts"
 }
 
-val bottomNavItems = listOf(Screen.Trans, Screen.Stats, Screen.Accounts, Screen.More)
+val bottomNavItems = listOf(Screen.Trans, Screen.Stats, Screen.Budget, Screen.Accounts, Screen.More)
 
 @Composable
 fun AppNavigation() {
@@ -434,7 +444,8 @@ fun AppNavigation() {
                     tonalElevation = 0.dp
                 ) {
                     bottomNavItems.forEach { screen ->
-                        val selected = currentDest?.hierarchy?.any { it.route == screen.route } == true
+                        val selected = currentDest?.hierarchy?.any { it.route == screen.route } == true ||
+                            (screen == Screen.Budget && currentDest?.route in BUDGET_SUB_ROUTES)
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
@@ -565,15 +576,52 @@ fun AppNavigation() {
                         navController.navigate(Screen.FilterSelection.route) {
                             launchSingleTop = true
                         }
-                    },
-                    onNavigateToBudgetSetting = {
-                        navController.navigate(Screen.BudgetSetting.route) {
-                            launchSingleTop = true
-                        }
                     }
                 )
             }
             composable(Screen.Stats.route) { InsightsScreen(innerPadding) }
+            composable(Screen.Budget.route) {
+                BudgetHomeScreen(
+                    innerPadding = innerPadding,
+                    onOpenBucket = { bucketId ->
+                        navController.navigate("bucket/$bucketId") { launchSingleTop = true }
+                    },
+                    onPlanBuckets = {
+                        navController.navigate(Screen.PlanBuckets.route) { launchSingleTop = true }
+                    },
+                    onStartCycle = {
+                        navController.navigate(Screen.StartCycle.route) { launchSingleTop = true }
+                    }
+                )
+            }
+            composable(Screen.StartCycle.route) {
+                StartCycleScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
+                    onDone = { navController.popBackStack() }
+                )
+            }
+            composable(Screen.PlanBuckets.route) {
+                PlanBucketsScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
+                    onOpenBucket = { bucketId ->
+                        navController.navigate("bucket/$bucketId") { launchSingleTop = true }
+                    },
+                    onStartCycle = {
+                        navController.navigate(Screen.StartCycle.route) { launchSingleTop = true }
+                    }
+                )
+            }
+            composable(
+                route = Screen.BucketDetail.route,
+                arguments = listOf(navArgument("bucketId") { type = NavType.LongType })
+            ) {
+                BucketDetailScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() }
+                )
+            }
             composable(Screen.Accounts.route) {
                 AccountsScreen(
                     innerPadding = innerPadding,
@@ -616,12 +664,6 @@ fun AppNavigation() {
             }
             composable(Screen.Changelog.route) {
                 ChangelogScreen(
-                    innerPadding = innerPadding,
-                    onBack = { navController.popBackStack() }
-                )
-            }
-            composable(Screen.BudgetSetting.route) {
-                BudgetSettingScreen(
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() }
                 )

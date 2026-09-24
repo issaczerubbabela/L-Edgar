@@ -7,6 +7,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.Budget
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.preferences.CashFlowChartStyle
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
+import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.BudgetRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
@@ -46,6 +47,7 @@ import kotlinx.coroutines.launch
 class StatsViewModel @Inject constructor(
     private val expenseRepository: ExpenseRepository,
     private val budgetRepository: BudgetRepository,
+    private val accountRepository: AccountRepository,
     private val themePreferenceRepository: ThemePreferenceRepository
 ) : ViewModel() {
 
@@ -91,6 +93,14 @@ class StatsViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val filteredTransactions: StateFlow<List<ExpenseRecord>> = scopedTransactionsInternal
+
+    val accountsBreakdown: StateFlow<AccountsBreakdownUi> = combine(
+        allRecords,
+        resolvedDateRange,
+        accountRepository.getAllAccounts()
+    ) { records, range, accounts ->
+        AccountsBreakdownCalculator.build(records, range, accounts.associate { it.id to it.groupName })
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AccountsBreakdownUi())
 
     val expenseByCategory: StateFlow<List<CategoryTotal>> = scopedTransactionsInternal
         .map { records -> records.toCategoryTotals(type = "Expense") }

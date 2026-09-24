@@ -11,7 +11,10 @@ import com.issaczerubbabel.ledgar.data.remote.AccountImportDto
 import com.issaczerubbabel.ledgar.data.remote.AccountImportResponse
 import com.issaczerubbabel.ledgar.data.remote.ApiService
 import com.issaczerubbabel.ledgar.data.remote.BudgetImportDto
+import com.issaczerubbabel.ledgar.data.remote.BucketBudgetImportResponse
 import com.issaczerubbabel.ledgar.data.remote.BudgetImportResponse
+import com.issaczerubbabel.ledgar.data.remote.CycleImportDto
+import com.issaczerubbabel.ledgar.data.repository.BucketBudgetRepositoryImpl
 import com.issaczerubbabel.ledgar.data.remote.DropdownImportDto
 import com.issaczerubbabel.ledgar.data.remote.DropdownImportResponse
 import com.issaczerubbabel.ledgar.data.remote.ImportResponse
@@ -49,7 +52,8 @@ class SheetListsMergerTest {
 
     @Test
     fun `a fresh install takes in the Sheet's lists once, before its first Backup could replace them`() = runBlocking {
-        val merger = SheetListsMerger(sheet, db, SyncStateRepository(ApplicationProvider.getApplicationContext()))
+        val buckets = BucketBudgetRepositoryImpl(db, db.bucketBudgetDao())
+        val merger = SheetListsMerger(sheet, db, buckets, SyncStateRepository(ApplicationProvider.getApplicationContext()))
         // A fresh install: seeded categories and the fallback account created for imports.
         db.dropdownOptionDao().insert(DropdownOption(optionType = "EXPENSE_CATEGORY", name = "Food", displayOrder = 0))
         db.accountDao().insert(AccountRecord(groupName = "Cash", accountName = "Cash", initialBalance = 0.0))
@@ -71,6 +75,8 @@ class SheetListsMergerTest {
         )
         assertTrue(db.dropdownOptionDao().getAllOptionsSnapshot().none { it.optionType == "PAYMENT_MODE" })
         assertEquals(listOf("2026-09" to 5000.0), db.budgetDao().getAllBudgetsSnapshot().map { it.monthYear to it.amount })
+        assertEquals("the Sheet's salary cycle comes in when the phone has none",
+            listOf("2026-09-01"), buckets.getBackupSnapshot().cycles.map { it.startDate })
 
         val readsSoFar = sheet.reads
         merger.mergeOnce(URL)
@@ -108,6 +114,14 @@ private class FakeSheetLists : ApiService {
 
     override suspend fun importBudgets(url: String, target: String) = reply(
         BudgetImportResponse(status = "ok", data = listOf(BudgetImportDto(monthYear = "2026-09", category = "Food", amount = 5000.0)))
+    )
+
+    override suspend fun importBucketBudgets(url: String, target: String) = reply(
+        BucketBudgetImportResponse(
+            status = "ok",
+            type = BucketBudgetImportResponse.TYPE,
+            data = listOf(CycleImportDto(startDate = "2026-09-01", endDate = "2026-09-30", spendableAmount = 40000.0))
+        )
     )
 
     override suspend fun syncRecords(url: String, request: SyncRequest): Response<SyncResponse> = error("unused")

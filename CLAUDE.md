@@ -42,7 +42,7 @@ UI (Compose) → ViewModel (StateFlow) → Repository → Room (instant local wr
 
 ### Room model
 
-Core tables: `expense_records` (transaction ledger + sync state: `isSynced`, `syncAction`, `remoteTimestamp`), `account_records` (accounts/groups, referenced by `accountId`/`fromAccountId`/`toAccountId` for transfers), `budgets` (unique on `monthYear`+`category`), `dropdown_options` (configurable dictionaries: `EXPENSE_CATEGORY`, `INCOME_CATEGORY`, `ACCOUNT_GROUP`, `PAYMENT_MODE`).
+Core tables: `expense_records` (transaction ledger + sync state: `isSynced`, `syncAction`, `remoteTimestamp`), `account_records` (accounts/groups, referenced by `accountId`/`fromAccountId`/`toAccountId` for transfers), `budgets` (unique on `monthYear`+`category`; legacy per-category model, superseded by the bucket tables but kept for backup/rollback), `budget_cycles` / `budget_buckets` / `bucket_categories` (salary-cycle bucket budgeting; unique on `cycleId`+`category` so a category lives in exactly one bucket), `dropdown_options` (configurable dictionaries: `EXPENSE_CATEGORY`, `INCOME_CATEGORY`, `ACCOUNT_GROUP`, `PAYMENT_MODE`).
 
 ### Extending the app (typical flow)
 
@@ -50,7 +50,7 @@ Core tables: `expense_records` (transaction ledger + sync state: `isSynced`, `sy
 2. Expose operations via repository interfaces/impls.
 3. Add ViewModel state + actions (StateFlow).
 4. Build/update Compose screens, wire navigation.
-5. If remote-facing, update `scripts/AppsScript.gs` contract and the Retrofit DTO/API methods together — the two must stay in sync since there's no shared schema.
+5. If remote-facing, update `scripts/AppsScript.gs` contract and the Retrofit DTO/API methods together — the two must stay in sync since there's no shared schema. The script also exists as a copy inside `ui/screens/AppsScriptSetupScreen.kt` (what users paste into Apps Script): change both, and run `node --test scripts/tests/bucket-budgets.test.js`, which fails if they drift. Never send new data in `records`: a script deployed before your change files `records` as transactions.
 6. Validate sync behavior for insert/update/delete and import paths.
 
 ## Mandatory changelog policy
