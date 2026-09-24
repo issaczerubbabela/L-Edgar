@@ -13,5 +13,8 @@ data class SyncResponse(
     /** IDs an upsert refused because their row changed since the `base` revision sent. */
     val stale: List<String>? = null,
     /** Each written row's revision as now stored. */
-    val revisions: Map<String, String>? = null
+    val revisions: Map<String, String>? = null,
+    /** Set by scripts that recognise the target, e.g. "bucket_budgets_backed_up". */
+    val type: String? = null,
+    val action: String? = null
 )

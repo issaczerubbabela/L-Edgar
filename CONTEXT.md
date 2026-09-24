@@ -27,7 +27,18 @@ _Avoid_: opening balance, starting balance
 The label that classifies an Expense or Income, picked from the `EXPENSE_CATEGORY` or `INCOME_CATEGORY` Dropdown options.
 
 **Budget**:
-The amount planned for one Category in one month. Each month and Category pair has at most one Budget.
+The legacy plan: an amount for one Category in one month. Each month and Category pair has at most one. Salary cycles replaced it, but it's still kept and backed up so old backups restore.
+
+**Salary cycle**:
+The money the user has to spend between two paydays. The running cycle has no close date, and it stays open past its end date until the next one starts.
+_Avoid_: month, period (a cycle rarely lines up with either)
+
+**Bucket**:
+A named pot of money inside one Salary cycle. Buckets belong to their cycle, so carrying them into the next cycle copies them.
+_Avoid_: envelope, budget (the legacy per-category plan)
+
+**Bucket category**:
+The routing of one expense Category into one Bucket for one cycle. A Category sits in at most one Bucket per cycle; Categories in none count as Unbucketed.
 
 **Dropdown option**:
 A user-editable choice for Categories and Account groups. `PAYMENT_MODE` options are legacy: Accounts replaced them, and they are never backed up.

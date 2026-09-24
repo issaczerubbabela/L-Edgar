@@ -1,17 +1,19 @@
 package com.issaczerubbabel.ledgar.sync
 
 import androidx.room.withTransaction
+import com.issaczerubbabel.ledgar.data.bucket.BucketBackupMapper
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.Budget
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.preferences.SyncStateRepository
 import com.issaczerubbabel.ledgar.data.remote.ApiService
+import com.issaczerubbabel.ledgar.data.repository.BucketBudgetRepository
 import retrofit2.Response
 import javax.inject.Inject
 
 /**
- * A Backup replaces the Sheet's Accounts, Dropdown options and Budgets tabs with the phone's lists.
+ * A Backup replaces the Sheet's Accounts, Dropdown options, Budgets and salary-cycle tabs with the phone's lists.
  * On a fresh install those are empty or defaults, so the first Backup would wipe the Sheet's real
  * lists. Before this phone's first Backup, this adds whatever the Sheet has that the phone doesn't
  * (matched by name), so every Backup after it writes back at least what the Sheet had.
@@ -19,6 +21,7 @@ import javax.inject.Inject
 class SheetListsMerger @Inject constructor(
     private val api: ApiService,
     private val database: SheetSyncDatabase,
+    private val bucketBudgets: BucketBudgetRepository,
     private val syncState: SyncStateRepository
 ) {
     suspend fun mergeOnce(scriptUrl: String) {
@@ -27,6 +30,14 @@ class SheetListsMerger @Inject constructor(
         val sheetAccounts = api.importAccounts(scriptUrl).dataOrThrow("Accounts") { it.status to it.data }
         val sheetDropdowns = api.importDropdownOptions(scriptUrl).dataOrThrow("Dropdown options") { it.status to it.data }
         val sheetBudgets = api.importBudgets(scriptUrl).dataOrThrow("Budgets") { it.status to it.data }
+        val sheetCycles = api.importBucketBudgets(scriptUrl).let { response ->
+            val body = response.body()
+            check(response.isSuccessful && body?.status.equals("ok", ignoreCase = true)) {
+                "Reading salary cycles from the Sheet failed (HTTP ${response.code()})"
+            }
+            // A script from before bucket budgets answers without the marker: nothing to take in.
+            if (body?.isUnderstoodByScript == true) BucketBackupMapper.fromImportDtos(body.data.orEmpty()) else emptyList()
+        }
 
         database.withTransaction {
             val accountDao = database.accountDao()
@@ -59,6 +70,10 @@ class SheetListsMerger @Inject constructor(
             sheetBudgets
                 .filter { it.monthYear.isNotBlank() && it.category.isNotBlank() && localBudgets.add(it.monthYear to it.category.key()) }
                 .forEach { dto -> budgetDao.upsert(Budget(monthYear = dto.monthYear, category = dto.category, amount = dto.amount)) }
+        }
+        // Salary cycles can't be matched up by name, so they only come in when the phone has none.
+        if (sheetCycles.isNotEmpty() && bucketBudgets.getBackupSnapshot().cycles.isEmpty()) {
+            bucketBudgets.replaceAllFromBackup(sheetCycles)
         }
         syncState.setMergedListsFromSheet()
     }

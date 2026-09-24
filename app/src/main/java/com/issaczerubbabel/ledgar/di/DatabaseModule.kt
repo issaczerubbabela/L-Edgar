@@ -8,7 +8,9 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.dao.AccountDao
+import com.issaczerubbabel.ledgar.data.local.dao.BucketBudgetDao
 import com.issaczerubbabel.ledgar.data.local.dao.BudgetDao
+import com.issaczerubbabel.ledgar.data.local.migration.BucketBudgetMigration
 import com.issaczerubbabel.ledgar.data.local.dao.DropdownOptionDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
 import dagger.Module
@@ -69,7 +71,7 @@ object DatabaseModule {
         }
     }
 
-    private val MIGRATION_16_17 = object : Migration(16, 17) {
+    private val MIGRATION_17_18 = object : Migration(17, 18) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE expense_records ADD COLUMN localVersion INTEGER NOT NULL DEFAULT 0")
             db.execSQL(ExpenseTableTriggers.CREATE_SQL)
@@ -77,7 +79,7 @@ object DatabaseModule {
     }
 
     /** Existing rows keep a null Transaction ID: Sync links them to their Sheet row by Remote timestamp. */
-    private val MIGRATION_17_18 = object : Migration(17, 18) {
+    private val MIGRATION_18_19 = object : Migration(18, 19) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE expense_records ADD COLUMN syncId TEXT")
             db.execSQL("ALTER TABLE expense_records ADD COLUMN syncedRevision TEXT")
@@ -208,8 +210,9 @@ object DatabaseModule {
             .addMigrations(MIGRATION_13_14)
             .addMigrations(MIGRATION_14_15)
             .addMigrations(MIGRATION_15_16)
-            .addMigrations(MIGRATION_16_17)
+            .addMigrations(BucketBudgetMigration.MIGRATION_16_17)
             .addMigrations(MIGRATION_17_18)
+            .addMigrations(MIGRATION_18_19)
             .fallbackToDestructiveMigration()
             .addCallback(callback)
             .build()
@@ -220,6 +223,9 @@ object DatabaseModule {
 
     @Provides
     fun provideBudgetDao(db: SheetSyncDatabase): BudgetDao = db.budgetDao()
+
+    @Provides
+    fun provideBucketBudgetDao(db: SheetSyncDatabase): BucketBudgetDao = db.bucketBudgetDao()
 
     @Provides
     fun provideAccountDao(db: SheetSyncDatabase): AccountDao = db.accountDao()

@@ -23,7 +23,8 @@ class SyncTriggers @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    // Transactions are included because the Accounts backup carries each account's current balance.
+    // Transactions are included because the Accounts backup carries each account's current balance,
+    // and the salary-cycle backup covers cycles, buckets and category routing.
     private val backupObserver = object : InvalidationTracker.Observer(BACKED_UP_TABLES) {
         override fun onInvalidated(tables: Set<String>) = scheduler.requestBackup()
     }
@@ -39,6 +40,9 @@ class SyncTriggers @Inject constructor(
     }
 
     private companion object {
-        val BACKED_UP_TABLES = arrayOf("account_records", "dropdown_options", "budgets", "expense_records")
+        val BACKED_UP_TABLES = arrayOf(
+            "account_records", "dropdown_options", "budgets", "expense_records",
+            "budget_cycles", "budget_buckets", "bucket_categories"
+        )
     }
 }

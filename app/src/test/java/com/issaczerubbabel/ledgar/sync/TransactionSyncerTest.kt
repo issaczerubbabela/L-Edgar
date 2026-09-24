@@ -3,6 +3,7 @@ package com.issaczerubbabel.ledgar.sync
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.remote.AccountImportResponse
 import com.issaczerubbabel.ledgar.data.remote.ApiService
+import com.issaczerubbabel.ledgar.data.remote.BucketBudgetImportResponse
 import com.issaczerubbabel.ledgar.data.remote.BudgetImportResponse
 import com.issaczerubbabel.ledgar.data.remote.DropdownImportResponse
 import com.issaczerubbabel.ledgar.data.remote.ImportRecordDto
@@ -524,4 +525,5 @@ private class FakeAppsScript : ApiService {
     override suspend fun importDropdownOptions(url: String, target: String): Response<DropdownImportResponse> = error("unused")
     override suspend fun importBudgets(url: String, target: String): Response<BudgetImportResponse> = error("unused")
     override suspend fun importAccounts(url: String, target: String): Response<AccountImportResponse> = error("unused")
+    override suspend fun importBucketBudgets(url: String, target: String): Response<BucketBudgetImportResponse> = error("unused")
 }
