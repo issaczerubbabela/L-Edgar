@@ -41,9 +41,8 @@ class StatsReportTest {
         records: List<ExpenseRecord>,
         period: StatsPeriod = september,
         today: LocalDate = afterSeptember,
-        cycles: List<BudgetCycle> = emptyList(),
-        category: String? = null
-    ) = StatsReport.build(StatsInput(records, accounts, roles, cycles, period, today, category))
+        cycles: List<BudgetCycle> = emptyList()
+    ) = StatsReport.build(StatsInput(records, accounts, roles, cycles, period, today))
 
     // ---- comparison ----------------------------------------------------------------------------
 
@@ -154,8 +153,7 @@ class StatsReportTest {
             )
         )
 
-        assertEquals(listOf("Rent", "Food"), result.expenseCategories.map { it.category })
-        assertEquals(listOf("Salary"), result.incomeCategories.map { it.category })
+        assertEquals(listOf("Rent", "Food"), result.categories.map { it.category })
     }
 
     // ---- paid from -------------------------------------------------------------------------------
@@ -224,22 +222,174 @@ class StatsReportTest {
         assertEquals(0.0, timeline[8].earned, 0.0)
     }
 
-    @Test
-    fun theAverageOnlyCountsDaysUpToToday() {
-        val result = build(listOf(expense("2026-09-01", 100.0), expense("2026-09-02", 100.0)), today = LocalDate.of(2026, 9, 4))
+    // ---- pace ------------------------------------------------------------------------------------
 
-        assertEquals(50.0, result.averageSpentPerPoint, 0.001)
+    @Test
+    fun paceRunsUpToTodayAndComparesTheSameDayLastPeriod() {
+        val pace = build(
+            listOf(expense("2026-08-01", 1000.0), expense("2026-08-20", 500.0), expense("2026-09-01", 1000.0), expense("2026-09-03", 200.0)),
+            today = LocalDate.of(2026, 9, 10)
+        ).pace
+
+        assertEquals(10, pace.current.size)
+        assertEquals(1200.0, pace.spentSoFar, 0.0)
+        assertEquals(31, pace.previous.size)
+        assertEquals(1000.0, pace.previousAtSamePoint!!, 0.0) // August by the 10th, before the 20th's 500
     }
 
     @Test
-    fun aCategoryTimelineOnlyCountsThatCategory() {
-        val timeline = build(
-            listOf(expense("2026-09-01", 300.0, "Food"), expense("2026-09-01", 900.0, "Rent"), income("2026-09-01", 50.0, "Return")),
-            category = "food"
-        ).timeline
+    fun theProjectionIgnoresTheBiggestDay() {
+        val records = listOf(expense("2026-09-01", 18000.0)) + (2..10).map { expense("2026-09-%02d".format(it), 100.0) }
+        val pace = build(records, today = LocalDate.of(2026, 9, 10)).pace
 
-        assertEquals(300.0, timeline[0].spent, 0.0)
-        assertNull(timeline[0].budget)
+        // 18,900 so far; a typical day is 100 (rent left out), and 20 days remain.
+        assertEquals(20900.0, pace.projection!!, 0.001)
+    }
+
+    @Test
+    fun aFinishedPeriodHasNoProjection() {
+        assertNull(build(listOf(expense("2026-09-01", 100.0))).pace.projection)
+    }
+
+    // ---- categories, calendar, trend, biggest -----------------------------------------------------
+
+    @Test
+    fun aCategorysUsualAmountIsTheAverageOfTheThreePeriodsBefore() {
+        val result = build(
+            listOf(
+                expense("2026-06-05", 300.0, "Food"),
+                expense("2026-07-05", 600.0, "Food"),
+                expense("2026-09-05", 450.0, "Food"),
+                expense("2026-09-06", 50.0, "Gifts")
+            )
+        )
+
+        assertEquals(300.0, result.categories.first { it.category == "Food" }.usual!!, 0.001) // (300 + 600 + 0) / 3
+        assertNull(result.categories.first { it.category == "Gifts" }.usual)
+    }
+
+    @Test
+    fun calendarShadesByRankSoOneBigBillDoesNotWashOutTheRest() {
+        val days = build(
+            listOf(expense("2026-09-01", 18000.0), expense("2026-09-02", 100.0), expense("2026-09-03", 200.0)),
+            today = LocalDate.of(2026, 9, 3)
+        ).days
+
+        assertEquals(30, days.size)
+        assertEquals(5, days[0].step)
+        assertTrue(days[1].step in 1..2)
+        assertEquals(0, days[3].step)
+        assertTrue(days[3].isFuture)
+    }
+
+    @Test
+    fun aYearHasNoCalendar() {
+        assertTrue(build(emptyList(), period = StatsPeriod.Year(2026)).days.isEmpty())
+    }
+
+    @Test
+    fun theTrendShowsThisMonthAndTheSevenBefore() {
+        val trend = build(listOf(expense("2026-02-10", 700.0), income("2026-09-25", 68000.0, "Salary"))).trend
+
+        assertEquals(listOf("Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep"), trend.map { it.label })
+        assertEquals(700.0, trend.first().spent, 0.0)
+        assertTrue(trend.last().isCurrent)
+        assertEquals(68000.0, trend.last().leftOver, 0.0)
+    }
+
+    @Test
+    fun biggestExpensesLeaveOutSavings() {
+        val biggest = build(
+            listOf(expense("2026-09-10", 10000.0, "Investments/Savings"), expense("2026-09-01", 18000.0, "Rent"), expense("2026-09-02", 90.0))
+        ).biggest
+
+        assertEquals(listOf(18000.0, 90.0), biggest.map { it.amount })
+    }
+
+    // ---- cycle view ------------------------------------------------------------------------------
+
+    @Test
+    fun cycleViewCountsEverythingAgainstTheSpendableAmountLikeTheBudgetTab() {
+        val cycle = cycle("2026-08-25", "2026-09-24", 43000.0, closedAt = "2026-09-25").copy(id = 7)
+        val today = LocalDate.of(2026, 9, 26)
+        val period = StatsPeriod.cycleOn(LocalDate.of(2026, 9, 1), listOf(cycle), today)!!
+        val result = build(
+            listOf(expense("2026-09-01", 18000.0, "Rent"), expense("2026-09-10", 10000.0, "Investments/Savings"), income("2026-09-09", 500.0, "Return")),
+            period = period, cycles = listOf(cycle), today = today
+        )
+
+        val view = result.cycle!!
+        assertEquals(15000.0, view.summary.leftToSpend, 0.0)
+        assertEquals(10000.0, view.saved, 0.0)
+        assertFalse(view.isRunning)
+        assertEquals(28000.0, result.totals.spent, 0.0) // saving and no refund taken off, as in Budget
+    }
+
+    @Test
+    fun cyclesStepThroughEachOtherAndPastTheEndsByTheirLength() {
+        val cycles = listOf(
+            cycle("2026-07-25", "2026-08-24", 1.0, closedAt = "2026-08-25").copy(id = 1),
+            cycle("2026-08-25", "2026-09-24", 1.0).copy(id = 2)
+        )
+        val today = LocalDate.of(2026, 9, 30)
+        val running = StatsPeriod.cycleOn(today, cycles, today)!!
+
+        assertEquals(LocalDate.of(2026, 9, 30), running.end) // stays open past its end date
+        assertEquals(1L, (running.previous() as StatsPeriod.Cycle).span.id)
+        assertFalse((running.previous() as StatsPeriod.Cycle).hasPrevious)
+        assertTrue(running.previous().previous() is StatsPeriod.Custom)
+    }
+
+    @Test
+    fun aFirstCycleHasNothingToCompareWithAndNoMadeUpHistory() {
+        val cycle = cycle("2026-09-25", "2026-10-24", 68000.0).copy(id = 1)
+        val today = LocalDate.of(2026, 10, 5)
+        val period = StatsPeriod.cycleOn(today, listOf(cycle), today)!!
+        val result = build(
+            listOf(expense("2026-09-01", 5000.0), expense("2026-09-26", 700.0)),
+            period = period, cycles = listOf(cycle), today = today
+        )
+
+        assertNull(result.spentChangePercent)
+        assertTrue(result.pace.previous.isEmpty())
+        assertNull(result.pace.previousAtSamePoint)
+        assertEquals(1, result.trend.size)
+    }
+
+    @Test
+    fun aPeriodTwoDaysInIsNotComparedYet() {
+        val result = build(
+            listOf(expense("2026-08-01", 100.0), expense("2026-09-01", 300.0)),
+            today = LocalDate.of(2026, 9, 2)
+        )
+
+        assertNull(result.spentChangePercent)
+        assertNull(result.previousLeftOver)
+        assertNull(result.pace.previousAtSamePoint)
+        assertEquals(31, result.pace.previous.size) // last month's line is still drawn
+    }
+
+    @Test
+    fun noCyclesMeansNoCyclePeriod() {
+        assertNull(StatsPeriod.cycleOn(LocalDate.of(2026, 9, 1), emptyList(), LocalDate.of(2026, 9, 1)))
+    }
+
+    // ---- category detail -------------------------------------------------------------------------
+
+    @Test
+    fun categoryDetailOnlyCountsThoseCategories() {
+        val records = listOf(
+            expense("2026-09-02", 300.0, "Food"), expense("2026-09-04", 200.0, "food "),
+            expense("2026-09-03", 900.0, "Rent"), expense("2026-08-10", 400.0, "Food")
+        )
+        val detail = StatsReport.categoryDetail(
+            StatsInput(records, accounts, roles, emptyList(), september, afterSeptember), "Food", setOf("Food")
+        )
+
+        assertEquals(500.0, detail.spent, 0.0)
+        assertEquals(400.0 / 3, detail.usual!!, 0.001) // Jun, Jul, Aug: only August had Food
+        assertEquals(listOf(200.0, 300.0), detail.transactions.map { it.amount })
+        assertEquals(8, detail.trend.size)
     }
 
     // ---- budget line -----------------------------------------------------------------------------
@@ -274,6 +424,16 @@ class StatsReportTest {
 
         assertEquals(100.0, timeline[26].budget!!, 0.001) // 27 Sep, still inside the running cycle
         assertNull(timeline[27].budget)                  // 28 Sep is after today
+    }
+
+    @Test
+    fun theRunningBudgetStartsWhereTheFirstCycleDoes() {
+        val cycles = listOf(cycle("2026-09-25", "2026-10-24", 3000.0)) // 100 a day
+        val budget = build(emptyList(), cycles = cycles, today = LocalDate.of(2026, 9, 30)).pace.budget
+
+        assertNull(budget[23])                  // 24 Sep, before the cycle
+        assertEquals(100.0, budget[24]!!, 0.001) // 25 Sep
+        assertEquals(600.0, budget[29]!!, 0.001) // 30 Sep
     }
 
     @Test

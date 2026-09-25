@@ -64,8 +64,15 @@ Earned minus Spent minus Saved, for a week, month, year or custom range.
 _Avoid_: kept, balance, savings
 
 **Left to spend**:
-A Salary cycle's spendable amount minus what was Spent in it. Once the cycle is over, the Stats tab calls it "Left unspent".
+A Salary cycle's spendable amount minus every Expense in it, Saving Categories included and Refunds not taken off: the same figure the Budget tab shows, because a Bucket can hold savings. Once the cycle is over, the Stats tab calls it "Left unspent".
 _Avoid_: left over (which is based on Earned, not the spendable amount)
+
+**Usual**:
+What a Category normally costs in Stats: its average over the three periods of the same kind before this one (months for a month, cycles for a cycle).
+_Avoid_: average (without saying over what)
+
+**Chart palette**:
+The set of colours Stats charts use for money in, money out and saved, picked in Settings. Every palette except Classic keeps the three apart for red-green colour blindness.
 
 **Dropdown option**:
 A user-editable choice for Categories and Account groups. `PAYMENT_MODE` options are legacy: Accounts replaced them, and they are never backed up.

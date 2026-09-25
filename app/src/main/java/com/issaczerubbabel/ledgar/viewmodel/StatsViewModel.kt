@@ -1,10 +1,10 @@
 package com.issaczerubbabel.ledgar.viewmodel
 
-import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
-import com.issaczerubbabel.ledgar.data.preferences.CashFlowChartStyle
+import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
+import com.issaczerubbabel.ledgar.data.local.entity.BudgetBucket
+import com.issaczerubbabel.ledgar.data.preferences.ChartPalette
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.BucketBudgetRepository
@@ -16,18 +16,41 @@ import java.time.LocalDate
 import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 
+/** What the Stats screen draws. */
+data class StatsUiState(
+    val loading: Boolean = true,
+    val scope: StatsScope = StatsScope.MONTHLY,
+    val period: StatsPeriod = StatsPeriod.of(StatsScope.MONTHLY, LocalDate.now()),
+    val hasCycles: Boolean = false,
+    val today: LocalDate = LocalDate.now(),
+    val report: StatsReportUi = StatsReportUi(),
+    val buckets: List<BudgetBucket> = emptyList()
+) {
+    val canGoBack: Boolean get() = (period as? StatsPeriod.Cycle)?.hasPrevious ?: true
+    val canGoForward: Boolean get() = (period as? StatsPeriod.Cycle)?.hasNext ?: true
+}
+
+/** A Category or Bucket the user opened from the breakdown. */
+data class DetailRequest(val title: String, val categories: Set<String>, val bucketColorIndex: Int? = null)
+
 /** Wires the repositories to [StatsReport]; all the arithmetic lives there. */
 @HiltViewModel
+@OptIn(ExperimentalCoroutinesApi::class)
 class StatsViewModel @Inject constructor(
     expenseRepository: ExpenseRepository,
     accountRepository: AccountRepository,
@@ -36,154 +59,116 @@ class StatsViewModel @Inject constructor(
     themePreferenceRepository: ThemePreferenceRepository
 ) : ViewModel() {
 
-    private val _filterState = MutableStateFlow(StatsFilterState())
-    val filterState: StateFlow<StatsFilterState> = _filterState.asStateFlow()
+    private val filter = MutableStateFlow(StatsFilterState())
+    val filterState: StateFlow<StatsFilterState> = filter.asStateFlow()
+
+    private val detailRequest = MutableStateFlow<DetailRequest?>(null)
 
     private val rupeeFormatter = NumberFormat.getCurrencyInstance(Locale("en", "IN")).apply {
         maximumFractionDigits = 0
     }
 
-    private val categoryOptions = combine(
+    val chartPalette: StateFlow<ChartPalette> = themePreferenceRepository.chartPalette
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChartPalette.STANDARD)
+
+    private val roles = combine(
         dropdownOptionRepository.getOptionsByType("EXPENSE_CATEGORY"),
         dropdownOptionRepository.getOptionsByType("INCOME_CATEGORY"),
         dropdownOptionRepository.getOptionsByType("ACCOUNT_GROUP")
-    ) { expense, income, groups -> expense + income + groups }
+    ) { expense, income, groups -> StatsRoles.from(expense + income + groups) }
 
-    private val records = expenseRepository.getAllRecords()
+    private val cycles = bucketBudgetRepository.observeAllCycles()
 
-    val cashFlowChartStyle: StateFlow<CashFlowChartStyle> = themePreferenceRepository.cashFlowChartStyle
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CashFlowChartStyle.BAR)
+    /** The filter with its default scope applied: Cycle when a cycle exists, until the user picks one. */
+    private val effectiveFilter = combine(filter, cycles) { f, c ->
+        if (!f.scopeChosen && c.isNotEmpty()) f.copy(scope = StatsScope.CYCLE) else f
+    }
 
-    val resolvedDateRange: StateFlow<StatsDateRange> = filterState
-        .map { it.period.range }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StatsFilterState().period.range)
+    private val periodFlow: Flow<StatsPeriod> = combine(effectiveFilter, cycles) { f, c -> f.period(c, LocalDate.now()) }
+        .distinctUntilChanged()
 
-    /** Null until the first report is ready. */
-    private val reportOrNull: StateFlow<Pair<StatsReportUi, List<DropdownOption>>?> = combine(
-        records,
+    private val bucketsForPeriod: Flow<Pair<List<BudgetBucket>, List<BucketCategory>>> = periodFlow
+        .map { (it as? StatsPeriod.Cycle)?.span?.id }
+        .distinctUntilChanged()
+        .flatMapLatest { id ->
+            if (id == null) {
+                flowOf(emptyList<BudgetBucket>() to emptyList())
+            } else {
+                combine(bucketBudgetRepository.observeBuckets(id), bucketBudgetRepository.observeCategoryAssignments(id)) { b, a -> b to a }
+            }
+        }
+
+    private val inputs: Flow<StatsInput> = combine(
+        expenseRepository.getAllRecords(),
         accountRepository.getAllAccounts(),
-        categoryOptions,
-        bucketBudgetRepository.observeAllCycles(),
-        filterState
-    ) { records, accounts, options, cycles, filter ->
-        StatsReport.build(
-            StatsInput(
-                records = records,
-                accounts = accounts,
-                roles = StatsRoles.from(options),
-                cycles = cycles,
-                period = filter.period,
-                today = LocalDate.now(),
-                timelineCategory = filter.cashFlowCategory
-            )
-        ) to options
+        roles,
+        combine(cycles, periodFlow, ::Pair),
+        bucketsForPeriod
+    ) { records, accounts, roles, (cycles, period), (buckets, assignments) ->
+        StatsInput(records, accounts, roles, cycles, period, LocalDate.now(), buckets, assignments)
+    }
+
+    val uiState: StateFlow<StatsUiState> = combine(inputs, effectiveFilter) { input, f ->
+        StatsUiState(
+            loading = false,
+            scope = f.scope,
+            period = input.period,
+            hasCycles = input.cycles.isNotEmpty(),
+            today = input.today,
+            report = StatsReport.build(input),
+            buckets = input.buckets
+        )
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StatsUiState())
+
+    val detail: StateFlow<Pair<DetailRequest, CategoryDetail>?> = combine(inputs, detailRequest) { input, request ->
+        request?.let { it to StatsReport.categoryDetail(input, it.title, it.categories) }
     }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val isLoading: StateFlow<Boolean> = reportOrNull
-        .map { it == null }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
-
-    val report: StateFlow<StatsReportUi> = reportOrNull
-        .map { it?.first ?: StatsReportUi() }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StatsReportUi())
-
-    val breakdownCategoryTotals: StateFlow<List<CategoryTotal>> = combine(reportOrNull, filterState) { pair, filter ->
-        val (report, options) = pair ?: return@combine emptyList()
-        when (filter.breakdownTab) {
-            StatsBreakdownTab.EXPENSE -> report.expenseCategories.withColors(options, "EXPENSE_CATEGORY")
-            StatsBreakdownTab.INCOME -> report.incomeCategories.withColors(options, "INCOME_CATEGORY")
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val cashFlowCategoryOptions: StateFlow<List<String>> = reportOrNull
-        .map { pair ->
-            val report = pair?.first ?: return@map listOf(ALL_CATEGORIES_OPTION)
-            listOf(ALL_CATEGORIES_OPTION) +
-                (report.expenseCategories + report.incomeCategories).map { it.category }.distinct().sorted()
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf(ALL_CATEGORIES_OPTION))
-
     fun formatRupee(amount: Double): String = synchronized(rupeeFormatter) { rupeeFormatter.format(amount) }
 
-    fun updateScope(scope: StatsScope) {
-        _filterState.update { current ->
-            val hasCustomRange = current.customStartDate != null && current.customEndDate != null
-            if (scope == StatsScope.SELECT_PERIOD && !hasCustomRange) {
-                current.copy(scope = scope, customStartDate = current.anchorDate, customEndDate = current.anchorDate)
-            } else {
-                current.copy(scope = scope)
-            }
+    fun selectScope(scope: StatsScope) {
+        filter.update { current ->
+            val anchor = if (current.scope == StatsScope.SELECT_PERIOD) current.customEndDate ?: current.anchorDate else current.anchorDate
+            current.copy(scope = scope, scopeChosen = true, anchorDate = anchor)
         }
     }
 
-    fun moveToPreviousPeriod() = moveTo(filterState.value.period.previous())
+    fun previousPeriod() = moveTo(uiState.value.period.previous())
 
-    fun moveToNextPeriod() = moveTo(filterState.value.period.next())
+    fun nextPeriod() = moveTo(uiState.value.period.next())
 
     private fun moveTo(period: StatsPeriod) {
-        _filterState.update { current ->
-            if (period is StatsPeriod.Custom) {
-                current.copy(anchorDate = period.end, customStartDate = period.start, customEndDate = period.end)
-            } else {
-                current.copy(anchorDate = period.start)
+        filter.update { current ->
+            when (period) {
+                is StatsPeriod.Custom -> if (current.scope == StatsScope.SELECT_PERIOD) {
+                    current.copy(anchorDate = period.end, customStartDate = period.start, customEndDate = period.end)
+                } else {
+                    current // stepping past the first or last cycle
+                }
+                else -> current.copy(anchorDate = period.start, scopeChosen = true, scope = uiState.value.scope)
             }
         }
     }
 
-    fun updateAnchorDate(anchorDate: LocalDate) {
-        _filterState.update { it.copy(anchorDate = anchorDate) }
+    /** Jumps to the period of the current scope containing [date]. */
+    fun jumpTo(date: LocalDate) {
+        filter.update { it.copy(anchorDate = date, scopeChosen = true, scope = uiState.value.scope) }
     }
 
-    fun updateCustomPeriodStart(startDate: LocalDate) = updateCustomRange(startDate, filterState.value.customEndDate ?: startDate)
-
-    fun updateCustomPeriodEnd(endDate: LocalDate) = updateCustomRange(filterState.value.customStartDate ?: endDate, endDate)
-
-    private fun updateCustomRange(a: LocalDate, b: LocalDate) {
-        val (start, end) = if (a <= b) a to b else b to a
-        _filterState.update { it.copy(customStartDate = start, customEndDate = end, anchorDate = end) }
+    fun selectCustomRange(start: LocalDate, end: LocalDate) {
+        val (a, b) = if (start <= end) start to end else end to start
+        filter.update { it.copy(scope = StatsScope.SELECT_PERIOD, scopeChosen = true, customStartDate = a, customEndDate = b, anchorDate = b) }
     }
 
-    fun updateBreakdownTab(tab: StatsBreakdownTab) {
-        _filterState.update { it.copy(breakdownTab = tab) }
+    fun openDetail(request: DetailRequest) {
+        detailRequest.value = request
     }
 
-    fun updateCashFlowCategory(category: String?) {
-        val normalized = category?.trim()?.takeIf { it.isNotBlank() && !it.equals(ALL_CATEGORIES_OPTION, ignoreCase = true) }
-        _filterState.update { it.copy(cashFlowCategory = normalized) }
-    }
-
-    /**
-     * Colours follow the Category, not its rank: each Category keeps its place in the user's own
-     * Category order. Only eight colours stay distinguishable, so any Category past the eighth is grey.
-     */
-    private fun List<CategoryAmount>.withColors(options: List<DropdownOption>, type: String): List<CategoryTotal> {
-        val order = options.filter { it.optionType == type }
-            .sortedBy { it.displayOrder }
-            .map { it.name.trim().lowercase() }
-        val present = map { it.category }
-            .sortedWith(compareBy({ order.indexOf(it.lowercase()).let { i -> if (i < 0) Int.MAX_VALUE else i } }, { it }))
-        return map { amount ->
-            val slot = present.indexOf(amount.category)
-            CategoryTotal(amount.category, amount.amount, CATEGORY_COLORS.getOrElse(slot) { OVERFLOW_COLOR })
-        }
-    }
-
-    companion object {
-        const val ALL_CATEGORIES_OPTION = "All Categories"
-
-        /** Neighbouring colours in this order stay apart for red-green colour blindness. */
-        private val CATEGORY_COLORS = listOf(
-            Color(0xFF3987E5),
-            Color(0xFFD95926),
-            Color(0xFF199E70),
-            Color(0xFFC98500),
-            Color(0xFFD55181),
-            Color(0xFF008300),
-            Color(0xFF9085E9),
-            Color(0xFFE66767)
-        )
-        private val OVERFLOW_COLOR = Color(0xFF8F94A0)
+    fun closeDetail() {
+        detailRequest.value = null
     }
 }

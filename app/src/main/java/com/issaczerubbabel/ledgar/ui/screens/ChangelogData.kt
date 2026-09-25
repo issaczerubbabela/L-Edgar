@@ -33,7 +33,14 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Quick Add (widget, Quick Settings tile, app shortcut) now shares the same keypad and category-picker sheet as the full Add Transaction screen",
             "Add Transaction and Quick Add now show which bucket the chosen category falls in, with what is left of it after the amount you are typing, as a pace bar under the date. It turns red and striped if the amount would overspend the bucket, and hides for income, transfers, categories with no bucket and dates before the running cycle",
             "Categories and account groups can now count as Saving, Refund or Savings in Stats. Investments/Savings is saving, Return is a refund, and the Savings and Investments groups hold savings. Saved money and transfers into savings no longer count as spending, and refunds now reduce spending instead of counting as income. Roles are backed up in a new Role column on the _dropdowns tab once the Apps Script is redeployed",
-            "Stats cash-flow chart now shows a budget line from your salary cycles: each day gets its share of its cycle's spendable amount"
+            "Stats cash-flow chart now shows a budget line from your salary cycles: each day gets its share of its cycle's spendable amount",
+            "Stats tab redesigned. Pick Cycle, Week, Month or Year at the top (Cycle is the default once you have a salary cycle); tap the dates to jump to a date or pick a custom range, or swipe the date strip. The first card says what matters: Left to spend in a cycle (the same figure as the Budget tab), or Left over (earned minus spent minus saved) with a bar showing where your income went",
+            "Spending pace chart: your running total against the same point last period and the budget line, with where you are heading. Press and drag to read any day, with a light tick as you pass each one",
+            "Where it went: categories as ranked bars with a tick at what each usually costs (the average of the three periods before) and how far above or below usual you are. Cycle view shows your buckets against their limits instead, with overspent buckets flagged in words and an icon",
+            "Daily spending calendar shaded by how much you spent, Paid from (cash and bank against cards), a Month by month / Week by week / Cycle by cycle chart with spent, saved and earned, and your biggest expenses",
+            "Tap any category or bucket for a sheet with this period's total, what it usually costs, the daily average, its trend and its transactions",
+            "Chart colours setting in More: choose Standard, Okabe-Ito, Dusk, Sunset or Classic green and red for the Stats charts. All but Classic stay distinguishable with red-green colour blindness",
+            "Manage Categories & Dropdowns: tap a category or account group to choose how Stats counts it (saving, refund or savings group)"
         ),
         fixes = listOf(
             "Cash Flow chart now refreshes plotted series correctly when switching top period months, preventing stale bars/lines and stale Y-axis scale carryover",
@@ -107,6 +114,10 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Export result is now reported through the Settings snackbar with the exported transaction count instead of an inline status line",
             "Added developer docs: a CONTEXT.md glossary of app terms, architecture decision records, and issue-tracker notes for coding agents",
             "Stats cash-flow granularity dropdown removed: the period you pick now decides the bar size (days for a week or month, months for a year)",
+            "Stats motion: a new period slides in from the side you moved towards, switching between Cycle/Week/Month/Year fades through, headline numbers count to their new value, charts move from old values to new ones, and cards rise in once on your first visit. All of it switches off when Android's animations are turned off",
+            "Stats header collapses into a slim bar with the period and arrows as you scroll, so lower cards always say which period they show",
+            "Cash Flow Graph (bars or lines) setting replaced by Chart colours, since the new charts no longer switch between bars and lines",
+            "Stats comparisons wait until a period is three days in, and a first salary cycle is not compared with made-up history",
             "All Stats arithmetic now lives in one tested StatsReport module, with the Stats glossary terms in CONTEXT.md and the roles decision in ADR-0004"
         )
     ),

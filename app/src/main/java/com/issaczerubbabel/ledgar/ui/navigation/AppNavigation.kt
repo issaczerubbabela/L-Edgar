@@ -578,7 +578,12 @@ fun AppNavigation() {
                     }
                 )
             }
-            composable(Screen.Stats.route) { InsightsScreen(innerPadding) }
+            composable(Screen.Stats.route) {
+                InsightsScreen(
+                    innerPadding = innerPadding,
+                    onSetUpCycle = { navController.navigate(Screen.StartCycle.route) { launchSingleTop = true } }
+                )
+            }
             composable(Screen.Budget.route) {
                 BudgetHomeScreen(
                     innerPadding = innerPadding,
