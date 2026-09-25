@@ -2,7 +2,7 @@ name: Android CI Build
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "claude/**" ]
   pull_request:
     branches: [ "main" ]
   workflow_dispatch:
@@ -22,6 +22,17 @@ jobs:
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
+
+    - name: Unit tests
+      run: ./gradlew testDebugUnitTest
+
+    - name: set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: Apps Script tests
+      run: node --test scripts/tests/bucket-budgets.test.js
 
     - name: Build with Gradle
       run: ./gradlew assembleDebug

@@ -6,17 +6,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.Constraints
-import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
-import com.issaczerubbabel.ledgar.sync.SyncWorker
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -70,7 +64,6 @@ data class HistoryUiState(
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
     private val repository: ExpenseRepository,
-    private val workManager: WorkManager,
     accountRepository: AccountRepository,
     dropdownOptionRepository: DropdownOptionRepository
 ) : ViewModel() {
@@ -205,7 +198,6 @@ class HistoryViewModel @Inject constructor(
     fun delete(record: ExpenseRecord) {
         viewModelScope.launch {
             repository.delete(record)
-            enqueueSyncWork()
         }
     }
 
@@ -247,20 +239,7 @@ class HistoryViewModel @Inject constructor(
         viewModelScope.launch {
             repository.deleteTransactionsByIds(ids)
             clearSelection()
-            enqueueSyncWork()
         }
-    }
-
-    private fun enqueueSyncWork() {
-        val request = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .build()
-            )
-            .addTag(SyncWorker.TAG)
-            .build()
-        workManager.enqueueUniqueWork(SyncWorker.TAG, ExistingWorkPolicy.REPLACE, request)
     }
 
     fun updateSelectedDates(newDate: String) {

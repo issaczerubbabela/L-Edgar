@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -62,6 +61,10 @@ private val KEYPAD_MAX_HEIGHT = 460.dp
  * Emits [KeypadAction]s for digit/dot/backspace against the caller's amount string, and calls
  * [onCommit] from a dedicated key that spans the right column's lower three rows.
  *
+ * The keypad never pads for the system navigation bar itself: whatever hosts it (the screen's
+ * Scaffold, or the Quick Add sheet) owns the bottom inset, so it is applied once and cannot eat
+ * into the fixed key heights.
+ *
  * The outer row is given an explicit height (a fraction of [LocalConfiguration]'s screen
  * height, clamped) rather than left to wrap its content: the commit key uses a column weight
  * to span three rows, and a `ColumnScope.weight` child only resolves sensibly against a
@@ -92,7 +95,6 @@ fun NumericKeypad(
         modifier = modifier
             .fillMaxWidth()
             .height(keypadHeight)
-            .navigationBarsPadding()
             .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(KEY_GAP)
     ) {
@@ -101,19 +103,19 @@ fun NumericKeypad(
             verticalArrangement = Arrangement.spacedBy(KEY_GAP)
         ) {
             KeypadRow(keyRowHeight) {
-                DigitKey(7, keyFontSize, Modifier.weight(1f)) { act(KeypadAction.Digit(7)) }
-                DigitKey(8, keyFontSize, Modifier.weight(1f)) { act(KeypadAction.Digit(8)) }
-                DigitKey(9, keyFontSize, Modifier.weight(1f)) { act(KeypadAction.Digit(9)) }
+                SymbolKey("7", keyFontSize, Modifier.weight(1f)) { act(KeypadAction.Digit(7)) }
+                SymbolKey("8", keyFontSize, Modifier.weight(1f)) { act(KeypadAction.Digit(8)) }
+                SymbolKey("9", keyFontSize, Modifier.weight(1f)) { act(KeypadAction.Digit(9)) }
             }
             KeypadRow(keyRowHeight) {
-                DigitKey(4, keyFontSize, Modifier.weight(1f)) { act(KeypadAction.Digit(4)) }
-                DigitKey(5, keyFontSize, Modifier.weight(1f)) { act(KeypadAction.Digit(5)) }
-                DigitKey(6, keyFontSize, Modifier.weight(1f)) { act(KeypadAction.Digit(6)) }
+                SymbolKey("4", keyFontSize, Modifier.weight(1f)) { act(KeypadAction.Digit(4)) }
+                SymbolKey("5", keyFontSize, Modifier.weight(1f)) { act(KeypadAction.Digit(5)) }
+                SymbolKey("6", keyFontSize, Modifier.weight(1f)) { act(KeypadAction.Digit(6)) }
             }
             KeypadRow(keyRowHeight) {
-                DigitKey(1, keyFontSize, Modifier.weight(1f)) { act(KeypadAction.Digit(1)) }
-                DigitKey(2, keyFontSize, Modifier.weight(1f)) { act(KeypadAction.Digit(2)) }
-                DigitKey(3, keyFontSize, Modifier.weight(1f)) { act(KeypadAction.Digit(3)) }
+                SymbolKey("1", keyFontSize, Modifier.weight(1f)) { act(KeypadAction.Digit(1)) }
+                SymbolKey("2", keyFontSize, Modifier.weight(1f)) { act(KeypadAction.Digit(2)) }
+                SymbolKey("3", keyFontSize, Modifier.weight(1f)) { act(KeypadAction.Digit(3)) }
             }
             KeypadRow(keyRowHeight) {
                 SymbolKey("0", keyFontSize, Modifier.weight(2f)) { act(KeypadAction.Digit(0)) }
@@ -127,7 +129,7 @@ fun NumericKeypad(
                 .fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(KEY_GAP)
         ) {
-            KeyboardSurface(
+            KeypadKey(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(keyRowHeight),
@@ -148,7 +150,7 @@ fun NumericKeypad(
                 animationSpec = tween(200),
                 label = "commitBackground"
             )
-            KeyboardSurface(
+            KeypadKey(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
@@ -176,7 +178,7 @@ fun NumericKeypad(
  * every key gets the same tactile "squish" feedback instead of a flat ripple alone.
  */
 @Composable
-private fun KeyboardSurface(
+private fun KeypadKey(
     modifier: Modifier = Modifier,
     background: Color,
     enabled: Boolean = true,
@@ -218,13 +220,8 @@ private fun KeypadRow(rowHeight: Dp, content: @Composable RowScope.() -> Unit) {
 }
 
 @Composable
-private fun DigitKey(value: Int, fontSize: Float, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    SymbolKey(value.toString(), fontSize, modifier, onClick)
-}
-
-@Composable
 private fun SymbolKey(label: String, fontSize: Float, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    KeyboardSurface(
+    KeypadKey(
         modifier = modifier.fillMaxHeight(),
         background = MaterialTheme.colorScheme.surfaceVariant,
         onClick = onClick

@@ -1,19 +1,7 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -22,27 +10,33 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
-import com.issaczerubbabel.ledgar.ui.components.OptionPickerSheet
+import com.issaczerubbabel.ledgar.ui.components.AmountDisplay
+import com.issaczerubbabel.ledgar.ui.components.BucketPreviewSlot
+import com.issaczerubbabel.ledgar.ui.components.ChipRow
+import com.issaczerubbabel.ledgar.ui.components.ChipSpec
 import com.issaczerubbabel.ledgar.ui.components.NumericKeypad
-import com.issaczerubbabel.ledgar.ui.theme.ExpenseOrange
-import com.issaczerubbabel.ledgar.ui.theme.IncomeBlue
+import com.issaczerubbabel.ledgar.ui.components.OptionPickerSheet
+import com.issaczerubbabel.ledgar.ui.components.PickerOption
+import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.util.applyKeypadAction
+import com.issaczerubbabel.ledgar.viewmodel.AccountTarget
 import com.issaczerubbabel.ledgar.viewmodel.LogViewModel
-import com.issaczerubbabel.ledgar.viewmodel.SyncStatusUi
+import com.issaczerubbabel.ledgar.sync.SyncStatus
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-private enum class LogSheet { Category, Account, FromAccount, ToAccount, Note }
+private sealed interface LogSheet {
+    data object Category : LogSheet
+    data class Account(val target: AccountTarget) : LogSheet
+    data object Note : LogSheet
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,6 +55,7 @@ fun LogScreen(
     val accounts by vm.accounts.collectAsStateWithLifecycle()
     val expenseCategories by vm.expenseCategories.collectAsStateWithLifecycle()
     val incomeCategories by vm.incomeCategories.collectAsStateWithLifecycle()
+    val bucketContext by vm.bucketContext.collectAsStateWithLifecycle()
 
     BackHandler(
         enabled = !showDatePicker && !showDeleteConfirm && activeSheet == null,
@@ -88,12 +83,6 @@ fun LogScreen(
             vm.clearError()
         }
     }
-    LaunchedEffect(vm.syncInfoMessage) {
-        vm.syncInfoMessage?.let {
-            snackbarHostState.showSnackbar(it)
-            vm.clearSyncInfoMessage()
-        }
-    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -113,9 +102,9 @@ fun LogScreen(
                 onDeleteClick = { showDeleteConfirm = true }
             )
 
-            val transferContext = if (vm.selectedType == "Transfer") {
-                val from = accounts.firstOrNull { it.id == vm.selectedFromAccountId }?.accountName
-                val to = accounts.firstOrNull { it.id == vm.selectedToAccountId }?.accountName
+            val transferContext = if (vm.selectedType == TransactionType.TRANSFER) {
+                val from = accounts.nameOf(vm.selectedFromAccountId)
+                val to = accounts.nameOf(vm.selectedToAccountId)
                 if (from != null || to != null) "${from ?: "?"} → ${to ?: "?"}" else null
             } else {
                 null
@@ -127,11 +116,13 @@ fun LogScreen(
                 onClick = { showDatePicker = true }
             )
 
+            BucketPreviewSlot(preview = vm.bucketPreview(bucketContext))
+
             TypeRow(
                 selectedType = vm.selectedType,
-                onSelect = { label ->
-                    vm.selectedType = label
-                    vm.selectedCategory = if (label == "Transfer") "Transfer" else ""
+                onSelect = { type ->
+                    vm.selectedType = type
+                    vm.selectedCategory = if (type == TransactionType.TRANSFER) TransactionType.TRANSFER else ""
                     vm.selectedAccountId = null
                     vm.selectedFromAccountId = null
                     vm.selectedToAccountId = null
@@ -145,26 +136,36 @@ fun LogScreen(
                 modifier = Modifier.weight(1f)
             )
 
-            val selectedAccountName = accounts.firstOrNull { it.id == vm.selectedAccountId }?.accountName
-            val selectedFromName = accounts.firstOrNull { it.id == vm.selectedFromAccountId }?.accountName
-            val selectedToName = accounts.firstOrNull { it.id == vm.selectedToAccountId }?.accountName
+            val isTransfer = vm.selectedType == TransactionType.TRANSFER
+            val accountName = accounts.nameOf(vm.selectedAccountId)
+            val fromName = accounts.nameOf(vm.selectedFromAccountId)
+            val toName = accounts.nameOf(vm.selectedToAccountId)
+            val hasNote = vm.description.isNotBlank() || vm.remarks.isNotBlank()
 
             ChipRow(
-                selectedType = vm.selectedType,
-                categoryLabel = vm.selectedCategory.ifBlank { "Category" },
-                hasCategoryValue = vm.selectedCategory.isNotBlank(),
-                accountLabel = selectedAccountName ?: "Account",
-                hasAccountValue = selectedAccountName != null,
-                fromLabel = selectedFromName ?: "From account",
-                hasFromValue = selectedFromName != null,
-                toLabel = selectedToName ?: "To account",
-                hasToValue = selectedToName != null,
-                hasNote = vm.description.isNotBlank() || vm.remarks.isNotBlank(),
-                onCategoryClick = { activeSheet = LogSheet.Category },
-                onAccountClick = { activeSheet = LogSheet.Account },
-                onFromAccountClick = { activeSheet = LogSheet.FromAccount },
-                onToAccountClick = { activeSheet = LogSheet.ToAccount },
-                onNoteClick = { activeSheet = LogSheet.Note }
+                primaryChips = if (isTransfer) {
+                    listOf(
+                        ChipSpec(fromName ?: "From account", fromName != null) {
+                            activeSheet = LogSheet.Account(AccountTarget.From)
+                        },
+                        ChipSpec(toName ?: "To account", toName != null) {
+                            activeSheet = LogSheet.Account(AccountTarget.To)
+                        }
+                    )
+                } else {
+                    listOf(
+                        ChipSpec(vm.selectedCategory.ifBlank { "Category" }, vm.selectedCategory.isNotBlank()) {
+                            activeSheet = LogSheet.Category
+                        },
+                        ChipSpec(accountName ?: "Account", accountName != null) {
+                            activeSheet = LogSheet.Account(AccountTarget.Account)
+                        }
+                    )
+                },
+                swapKey = isTransfer,
+                trailingChip = ChipSpec(if (hasNote) "Note added" else "+ Note", hasNote) {
+                    activeSheet = LogSheet.Note
+                }
             )
 
             NumericKeypad(
@@ -175,13 +176,13 @@ fun LogScreen(
         }
     }
 
-    when (activeSheet) {
+    when (val sheet = activeSheet) {
         LogSheet.Category -> {
-            val categories = if (vm.selectedType == "Income") incomeCategories else expenseCategories
+            val categories = if (vm.selectedType == TransactionType.INCOME) incomeCategories else expenseCategories
             OptionPickerSheet(
                 title = "Category",
-                options = categories,
-                selected = vm.selectedCategory,
+                options = categories.map { PickerOption(it) },
+                selectedKey = vm.selectedCategory,
                 onSelect = {
                     vm.selectedCategory = it
                     activeSheet = null
@@ -195,41 +196,24 @@ fun LogScreen(
             )
         }
 
-        LogSheet.Account -> OptionPickerSheet(
-            title = "Account",
-            options = accounts.map { it.accountName },
-            selected = selectedAccountNameOrEmpty(accounts, vm.selectedAccountId),
-            onSelect = { name ->
-                accounts.firstOrNull { it.accountName == name }?.let { vm.selectedAccountId = it.id }
-                activeSheet = null
-            },
-            onDismiss = { activeSheet = null },
-            manageHint = "Add accounts from the Accounts tab"
-        )
-
-        LogSheet.FromAccount -> OptionPickerSheet(
-            title = "From Account",
-            options = accounts.map { it.accountName },
-            selected = selectedAccountNameOrEmpty(accounts, vm.selectedFromAccountId),
-            onSelect = { name ->
-                accounts.firstOrNull { it.accountName == name }?.let { vm.selectedFromAccountId = it.id }
-                activeSheet = null
-            },
-            onDismiss = { activeSheet = null },
-            manageHint = "Add accounts from the Accounts tab"
-        )
-
-        LogSheet.ToAccount -> OptionPickerSheet(
-            title = "To Account",
-            options = accounts.map { it.accountName },
-            selected = selectedAccountNameOrEmpty(accounts, vm.selectedToAccountId),
-            onSelect = { name ->
-                accounts.firstOrNull { it.accountName == name }?.let { vm.selectedToAccountId = it.id }
-                activeSheet = null
-            },
-            onDismiss = { activeSheet = null },
-            manageHint = "Add accounts from the Accounts tab"
-        )
+        is LogSheet.Account -> {
+            val (title, selectedId) = when (sheet.target) {
+                AccountTarget.Account -> "Account" to vm.selectedAccountId
+                AccountTarget.From -> "From Account" to vm.selectedFromAccountId
+                AccountTarget.To -> "To Account" to vm.selectedToAccountId
+            }
+            OptionPickerSheet(
+                title = title,
+                options = accounts.map { PickerOption(key = it.id.toString(), label = it.accountName) },
+                selectedKey = selectedId?.toString(),
+                onSelect = { key ->
+                    key.toLongOrNull()?.let { vm.setAccount(sheet.target, it) }
+                    activeSheet = null
+                },
+                onDismiss = { activeSheet = null },
+                manageHint = "Add accounts from the Accounts tab"
+            )
+        }
 
         LogSheet.Note -> NoteSheet(
             description = vm.description,
@@ -284,17 +268,14 @@ fun LogScreen(
     }
 }
 
-private fun selectedAccountNameOrEmpty(
-    accounts: List<AccountRecord>,
-    selectedId: Long?
-): String = accounts.firstOrNull { it.id == selectedId }?.accountName.orEmpty()
+private fun List<AccountRecord>.nameOf(id: Long?): String? = firstOrNull { it.id == id }?.accountName
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LogTopBar(
     isEditMode: Boolean,
     showEnterAppButton: Boolean,
-    syncStatus: SyncStatusUi,
+    syncStatus: SyncStatus,
     onRetrySync: () -> Unit,
     onBack: () -> Unit,
     onEnterApp: () -> Unit,
@@ -375,7 +356,7 @@ private fun TypeRow(selectedType: String, onSelect: (String) -> Unit) {
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        val types = listOf("Expense", "Income", "Transfer")
+        val types = listOf(TransactionType.EXPENSE, TransactionType.INCOME, TransactionType.TRANSFER)
         types.forEachIndexed { index, label ->
             SegmentedButton(
                 shape = SegmentedButtonDefaults.itemShape(index, types.size),
@@ -385,131 +366,6 @@ private fun TypeRow(selectedType: String, onSelect: (String) -> Unit) {
             )
         }
     }
-}
-
-@Composable
-private fun AmountDisplay(
-    amount: String,
-    type: String,
-    pulseSignal: Int,
-    modifier: Modifier = Modifier
-) {
-    val color = when (type) {
-        "Expense" -> ExpenseOrange
-        "Income" -> IncomeBlue
-        else -> MaterialTheme.colorScheme.onSurface
-    }
-    val displayValue = amount.ifEmpty { "0" }
-    val baseSp = when {
-        displayValue.length <= 5 -> 96f
-        displayValue.length <= 8 -> 72f
-        else -> 52f
-    }
-    val fontSize = responsiveTextSize(baseSp = baseSp, minSp = 36f, maxSp = 104f)
-
-    val pulseScale = remember { Animatable(1f) }
-    LaunchedEffect(pulseSignal) {
-        if (pulseSignal == 0) return@LaunchedEffect
-        pulseScale.animateTo(1.06f, tween(durationMillis = 90, easing = LinearEasing))
-        pulseScale.animateTo(1f, tween(durationMillis = 160, easing = LinearEasing))
-    }
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .scale(pulseScale.value),
-        contentAlignment = Alignment.CenterEnd
-    ) {
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(
-                text = "₹",
-                fontSize = fontSize.value.times(0.4f).sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = fontSize.value.times(0.12f).dp)
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = displayValue,
-                fontSize = fontSize,
-                fontWeight = FontWeight.Bold,
-                color = color
-            )
-        }
-    }
-}
-
-@Composable
-private fun responsiveTextSize(baseSp: Float, minSp: Float = 12f, maxSp: Float = 48f) =
-    (baseSp * (LocalConfiguration.current.screenWidthDp / 411f).coerceIn(0.9f, 1.08f))
-        .coerceIn(minSp, maxSp).sp
-
-@Composable
-private fun ChipRow(
-    selectedType: String,
-    categoryLabel: String,
-    hasCategoryValue: Boolean,
-    accountLabel: String,
-    hasAccountValue: Boolean,
-    fromLabel: String,
-    hasFromValue: Boolean,
-    toLabel: String,
-    hasToValue: Boolean,
-    hasNote: Boolean,
-    onCategoryClick: () -> Unit,
-    onAccountClick: () -> Unit,
-    onFromAccountClick: () -> Unit,
-    onToAccountClick: () -> Unit,
-    onNoteClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .heightIn(min = 44.dp)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        AnimatedContent(
-            targetState = selectedType == "Transfer",
-            transitionSpec = {
-                (fadeIn(tween(150)) + slideInHorizontally(tween(150)) { width -> width / 6 })
-                    .togetherWith(fadeOut(tween(150)) + slideOutHorizontally(tween(150)) { width -> -width / 6 })
-                    .using(SizeTransform(clip = false))
-            },
-            label = "chip-type-swap"
-        ) { isTransfer ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (isTransfer) {
-                    TransactionChip(label = fromLabel, filled = hasFromValue, onClick = onFromAccountClick)
-                    TransactionChip(label = toLabel, filled = hasToValue, onClick = onToAccountClick)
-                } else {
-                    TransactionChip(label = categoryLabel, filled = hasCategoryValue, onClick = onCategoryClick)
-                    TransactionChip(label = accountLabel, filled = hasAccountValue, onClick = onAccountClick)
-                }
-            }
-        }
-        TransactionChip(
-            label = if (hasNote) "Note added" else "+ Note",
-            filled = hasNote,
-            onClick = onNoteClick
-        )
-    }
-}
-
-@Composable
-private fun TransactionChip(label: String, filled: Boolean, onClick: () -> Unit) {
-    AssistChip(
-        onClick = onClick,
-        label = { Text(label) },
-        colors = AssistChipDefaults.assistChipColors(
-            containerColor = if (filled) MaterialTheme.colorScheme.secondaryContainer
-            else MaterialTheme.colorScheme.surfaceVariant,
-            labelColor = if (filled) MaterialTheme.colorScheme.onSecondaryContainer
-            else MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -554,31 +410,31 @@ private fun NoteSheet(
 }
 
 @Composable
-private fun SyncStatusIndicator(status: SyncStatusUi, onRetry: () -> Unit) {
+private fun SyncStatusIndicator(status: SyncStatus, onRetry: () -> Unit) {
     val (text, containerColor, contentColor) = when (status) {
-        SyncStatusUi.Idle -> Triple(
+        SyncStatus.Idle -> Triple(
             "Sync idle",
             MaterialTheme.colorScheme.surfaceVariant,
             MaterialTheme.colorScheme.onSurfaceVariant
         )
-        SyncStatusUi.Syncing -> Triple(
+        SyncStatus.Syncing -> Triple(
             "Syncing...",
             MaterialTheme.colorScheme.secondaryContainer,
             MaterialTheme.colorScheme.onSecondaryContainer
         )
-        SyncStatusUi.Synced -> Triple(
+        SyncStatus.Synced -> Triple(
             "Synced",
             MaterialTheme.colorScheme.tertiaryContainer,
             MaterialTheme.colorScheme.onTertiaryContainer
         )
-        SyncStatusUi.Failed -> Triple(
+        SyncStatus.Failed -> Triple(
             "Retry sync",
             MaterialTheme.colorScheme.errorContainer,
             MaterialTheme.colorScheme.onErrorContainer
         )
     }
 
-    val isRetryEnabled = status == SyncStatusUi.Failed
+    val isRetryEnabled = status == SyncStatus.Failed
 
     SuggestionChip(
         onClick = onRetry,

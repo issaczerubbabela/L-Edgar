@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.di
 
+import com.issaczerubbabel.ledgar.data.local.entity.ExpenseVersionTrigger
 import android.content.Context
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -7,7 +8,9 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.dao.AccountDao
+import com.issaczerubbabel.ledgar.data.local.dao.BucketBudgetDao
 import com.issaczerubbabel.ledgar.data.local.dao.BudgetDao
+import com.issaczerubbabel.ledgar.data.local.migration.BucketBudgetMigration
 import com.issaczerubbabel.ledgar.data.local.dao.DropdownOptionDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
 import dagger.Module
@@ -65,6 +68,13 @@ object DatabaseModule {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE expense_records ADD COLUMN accountName TEXT")
             db.execSQL("ALTER TABLE expense_records ADD COLUMN fromAccountName TEXT")
+        }
+    }
+
+    private val MIGRATION_17_18 = object : Migration(17, 18) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE expense_records ADD COLUMN localVersion INTEGER NOT NULL DEFAULT 0")
+            ExpenseVersionTrigger.install(db)
         }
     }
 
@@ -168,12 +178,14 @@ object DatabaseModule {
         val callback = object : RoomDatabase.Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
                 super.onCreate(db)
+                ExpenseVersionTrigger.install(db)
                 android.util.Log.d("DatabaseModule", "Database created, seeding defaults...")
                 seedDropdownDefaultsIfEmpty(db)
             }
 
             override fun onOpen(db: SupportSQLiteDatabase) {
                 super.onOpen(db)
+                ExpenseVersionTrigger.install(db)
                 // Seed defaults on first open as a fallback (in case onCreate wasn't called due to migrations)
                 // This is safe because seedDropdownDefaultsIfEmpty checks if data already exists
                 seedDropdownDefaultsIfEmpty(db)
@@ -187,6 +199,8 @@ object DatabaseModule {
             .addMigrations(MIGRATION_13_14)
             .addMigrations(MIGRATION_14_15)
             .addMigrations(MIGRATION_15_16)
+            .addMigrations(BucketBudgetMigration.MIGRATION_16_17)
+            .addMigrations(MIGRATION_17_18)
             .fallbackToDestructiveMigration()
             .addCallback(callback)
             .build()
@@ -197,6 +211,9 @@ object DatabaseModule {
 
     @Provides
     fun provideBudgetDao(db: SheetSyncDatabase): BudgetDao = db.budgetDao()
+
+    @Provides
+    fun provideBucketBudgetDao(db: SheetSyncDatabase): BucketBudgetDao = db.bucketBudgetDao()
 
     @Provides
     fun provideAccountDao(db: SheetSyncDatabase): AccountDao = db.accountDao()

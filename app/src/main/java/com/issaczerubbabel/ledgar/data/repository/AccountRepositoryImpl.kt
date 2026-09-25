@@ -122,7 +122,7 @@ class AccountRepositoryImpl @Inject constructor(
         if (hasLinkedTransactions) {
             when (strategy) {
                 PermanentDeleteStrategy.REMOVE_LINKED_TRANSACTIONS -> {
-                    expenseDao.deleteLinkedTransactionsForAccount(accountId)
+                    expenseDao.markLinkedTransactionsDeletedForAccount(accountId)
                 }
 
                 PermanentDeleteStrategy.REASSIGN_LINKED_TRANSACTIONS -> {

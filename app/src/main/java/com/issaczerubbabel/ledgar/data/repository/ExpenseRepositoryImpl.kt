@@ -2,24 +2,25 @@ package com.issaczerubbabel.ledgar.data.repository
 
 import android.util.Log
 import com.issaczerubbabel.ledgar.data.local.dao.AccountDao
+import com.issaczerubbabel.ledgar.data.bucket.BucketBackupMapper
 import com.issaczerubbabel.ledgar.data.local.dao.BudgetDao
+import com.issaczerubbabel.ledgar.data.local.migration.BucketBudgetMigration
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
 import com.issaczerubbabel.ledgar.data.local.entity.Budget
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
+import com.issaczerubbabel.ledgar.data.preferences.SyncStateRepository
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
 import com.issaczerubbabel.ledgar.data.remote.ApiService
 import com.issaczerubbabel.ledgar.data.remote.DeletePayload
 import com.issaczerubbabel.ledgar.data.remote.ImportRecordDto
 import com.issaczerubbabel.ledgar.data.remote.SyncRequest
 import com.issaczerubbabel.ledgar.sync.SyncUrlNotConfiguredException
-import com.issaczerubbabel.ledgar.util.generateTimestampKey
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import com.issaczerubbabel.ledgar.util.normalizeTimestampKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import java.time.LocalDateTime
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
@@ -32,7 +33,9 @@ class ExpenseRepositoryImpl @Inject constructor(
     private val apiService: ApiService,
     private val dropdownOptionRepository: DropdownOptionRepository,
     private val budgetDao: BudgetDao,
-    private val preferenceRepository: ThemePreferenceRepository
+    private val bucketBudgetRepository: BucketBudgetRepository,
+    private val preferenceRepository: ThemePreferenceRepository,
+    private val syncState: SyncStateRepository
 ) : ExpenseRepository {
 
     private val importLogTag = "ExpenseImport"
@@ -41,7 +44,7 @@ class ExpenseRepositoryImpl @Inject constructor(
 
     override suspend fun getById(id: Long): ExpenseRecord? = dao.getById(id)
 
-    override suspend fun update(record: ExpenseRecord) = dao.update(record)
+    override suspend fun update(record: ExpenseRecord) = dao.updateKeepingSyncState(record)
 
     override suspend fun hardDeleteById(id: Long) = dao.hardDeleteById(id)
 
@@ -87,10 +90,6 @@ class ExpenseRepositoryImpl @Inject constructor(
 
     override fun getRecordsByDateRange(startDate: String, endDate: String): Flow<List<ExpenseRecord>> =
         dao.getRecordsByDateRange(startDate, endDate)
-
-    override suspend fun getUnsynced(): List<ExpenseRecord> = dao.getUnsyncedRecords()
-
-    override suspend fun markSynced(ids: List<Long>) = dao.markAsSynced(ids)
 
     override suspend fun setBookmarked(id: Long, isBookmarked: Boolean) =
         dao.updateBookmarkStatus(id = id, isBookmarked = isBookmarked)
@@ -292,6 +291,11 @@ class ExpenseRepositoryImpl @Inject constructor(
             mapped.size
         }
 
+        val restoredCycles = restoreBucketBudgets(scriptUrl)
+
+        // The phone's lists now match the Sheet's, so Backups can safely write them back.
+        syncState.setMergedListsFromSheet()
+
         val txResponse = apiService.importRecords(
             url = scriptUrl,
             target = "transactions"
@@ -315,9 +319,54 @@ class ExpenseRepositoryImpl @Inject constructor(
             skipped = skipped,
             restoredDropdowns = restoredDropdowns,
             restoredBudgets = restoredBudgets,
+            restoredCycles = restoredCycles,
             restoredAccounts = restoredAccounts,
             conflicts = importOutcome.conflicts
         )
+    }
+
+    /**
+     * Restores salary cycles, buckets and category routing. Returns how many cycles were restored.
+     *
+     * The sheet is only trusted when the script says it understands the target. If it has nothing to
+     * offer (an empty sheet, a backup from before buckets existed, or a script that has not been
+     * redeployed) local cycles are left alone, never wiped. And if the device has no cycles at all,
+     * the older monthly budgets just restored are carried across the same way an app upgrade does,
+     * so restoring an old backup still leaves a starting point rather than an empty screen.
+     */
+    private suspend fun restoreBucketBudgets(scriptUrl: String): Int {
+        val response = apiService.importBucketBudgets(url = scriptUrl, target = "bucket_budgets")
+        if (!response.isSuccessful) {
+            throw IllegalStateException("Bucket budget import failed: HTTP ${response.code()}")
+        }
+        val body = response.body()
+        if (!body?.status.equals("ok", ignoreCase = true)) {
+            throw IllegalStateException(body?.message ?: "Bucket budget import failed")
+        }
+
+        val remote = if (body?.isUnderstoodByScript == true) {
+            BucketBackupMapper.fromImportDtos(body.data.orEmpty())
+        } else {
+            Log.w(importLogTag, "Skipping bucket budget restore: the deployed Apps Script predates bucket budgets")
+            emptyList()
+        }
+        if (remote.isNotEmpty()) {
+            bucketBudgetRepository.replaceAllFromBackup(remote)
+            return remote.size
+        }
+
+        if (bucketBudgetRepository.getBackupSnapshot().cycles.isEmpty()) {
+            val seed = BucketBudgetMigration.plan(
+                budgetDao.getAllBudgetsSnapshot().map {
+                    BucketBudgetMigration.LegacyBudget(it.monthYear, it.category, it.amount)
+                }
+            )
+            if (seed != null) {
+                bucketBudgetRepository.replaceAllFromBackup(listOf(BucketBackupMapper.fromSeed(seed)))
+                return 1
+            }
+        }
+        return 0
     }
 
     override suspend fun updateLocalTransactionFromSheet(conflict: SyncConflict) {
@@ -363,13 +412,13 @@ class ExpenseRepositoryImpl @Inject constructor(
         )
         if (mapped.discarded) return
 
-        val duplicateTimestamp = generateTimestampKey(LocalDateTime.now())
+        // Sync assigns a Remote timestamp no other Transaction uses.
         dao.insert(
             mapped.record.copy(
                 id = 0,
                 isSynced = false,
                 syncAction = "INSERT",
-                remoteTimestamp = duplicateTimestamp
+                remoteTimestamp = null
             )
         )
     }

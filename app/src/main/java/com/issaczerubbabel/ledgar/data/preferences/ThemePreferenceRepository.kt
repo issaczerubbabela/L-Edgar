@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.issaczerubbabel.ledgar.BuildConfig
 import com.issaczerubbabel.ledgar.ui.theme.AppThemeOption
 import com.issaczerubbabel.ledgar.util.PinSecurity
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -55,9 +56,9 @@ class ThemePreferenceRepository @Inject constructor(
 
     val scriptUrl: Flow<String?> = context.dataStore.data
         .map { prefs ->
-            prefs[SCRIPT_URL]
-                ?.trim()
-                ?.takeIf { it.isNotEmpty() }
+            (prefs[SCRIPT_URL] ?: BuildConfig.DEFAULT_SCRIPT_URL)
+                .trim()
+                .takeIf { it.isNotEmpty() }
         }
 
     val appLockEnabled: Flow<Boolean> = context.dataStore.data

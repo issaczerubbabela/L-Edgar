@@ -7,9 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -33,15 +31,26 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
+
+/**
+ * One choice in an [OptionPickerSheet]. [key] is what comes back from a selection, so two options
+ * that read the same (two accounts with one name) are still told apart; [label] is what is shown.
+ */
+data class PickerOption(val key: String, val label: String = key)
 
 /**
  * Bottom sheet picker for a single option (category, account, ...): a search field, a chip grid
@@ -52,13 +61,13 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun OptionPickerSheet(
     title: String,
-    options: List<String>,
-    selected: String,
+    options: List<PickerOption>,
+    selectedKey: String?,
     onSelect: (String) -> Unit,
-    onCreate: ((String) -> Unit)? = null,
     onDismiss: () -> Unit,
-    manageHint: String? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onCreate: ((String) -> Unit)? = null,
+    manageHint: String? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var searchQuery by remember { mutableStateOf("") }
@@ -67,7 +76,7 @@ fun OptionPickerSheet(
 
     val filteredOptions = remember(options, searchQuery) {
         if (searchQuery.isBlank()) options
-        else options.filter { it.contains(searchQuery, ignoreCase = true) }
+        else options.filter { it.label.contains(searchQuery, ignoreCase = true) }
     }
 
     fun confirmAdd() {
@@ -91,15 +100,12 @@ fun OptionPickerSheet(
 
             AnimatedContent(
                 targetState = isAdding,
-                transitionSpec = {
-                    (fadeIn(tween(150)) + slideInHorizontally(tween(150)) { width -> width / 6 })
-                        .togetherWith(fadeOut(tween(150)) + slideOutHorizontally(tween(150)) { width -> -width / 6 })
-                },
+                transitionSpec = { slideSwap() },
                 label = "picker-search-or-add"
             ) { adding ->
                 if (adding) {
                     Row(
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         OutlinedTextField(
@@ -130,9 +136,9 @@ fun OptionPickerSheet(
             ) {
                 filteredOptions.forEach { option ->
                     OptionChip(
-                        label = option,
-                        selected = option == selected,
-                        onClick = { onSelect(option) }
+                        label = option.label,
+                        selected = option.key == selectedKey,
+                        onClick = { onSelect(option.key) }
                     )
                 }
                 AnimatedVisibility(
@@ -175,11 +181,36 @@ private fun OptionChip(label: String, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
+/** The dashed "+ Add" chip: same footprint as an option chip, outlined rather than filled. */
 @Composable
 private fun AddOptionChip(onClick: () -> Unit) {
-    TextButton(onClick = onClick) {
-        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.height(18.dp))
+    val outline = MaterialTheme.colorScheme.outline
+    val shape = MaterialTheme.shapes.medium
+    Row(
+        modifier = Modifier
+            .clip(shape)
+            .clickable(onClick = onClick)
+            .drawBehind {
+                val stroke = Stroke(
+                    width = 1.5.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(10.dp.toPx(), 6.dp.toPx()))
+                )
+                drawRoundRect(outline, cornerRadius = CornerRadius(12.dp.toPx()), style = stroke)
+            }
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Filled.Add,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.height(18.dp)
+        )
         Spacer(Modifier.width(4.dp))
-        Text("Add")
+        Text(
+            text = "Add",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

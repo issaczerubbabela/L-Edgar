@@ -4,14 +4,10 @@
 # Android SDK path (auto-set by Android Studio on first project open)
 # sdk.dir=C\:\\Users\\YourUsername\\AppData\\Local\\Android\\Sdk
 
-# ─── Google Apps Script Web App URL ──────────────────────────────────────────
-# IMPORTANT: the URL changes every time you do a "New Deployment".
-# After any script change, always do Deploy → New Deployment (not Test).
-#
-# Steps:
-#   1. Open your Google Sheet → Extensions → Apps Script
-#   2. Paste the script from scripts/AppsScript.gs
-#   3. Click Deploy → New Deployment
-#   4. Type: Web App | Execute as: Me | Who has access: Anyone
-#   5. Copy the URL below:
-# APPS_SCRIPT_URL=https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec
+# ─── Debug build: test Apps Script (optional) ────────────────────────────────
+# The app uses the URL entered in its Database Setup screen. The debug build
+# (installed as "L.Edgar (Debug)" next to the release app) falls back to this
+# URL when none has been entered, so development can use a test Sheet instead
+# of your real one. Deploy scripts/AppsScript.gs over a separate test Sheet
+# (Deploy → New Deployment, Web App, Execute as: Me, Access: Anyone):
+# APPS_SCRIPT_URL_DEBUG=https://script.google.com/macros/s/YOUR_TEST_SCRIPT_ID/exec

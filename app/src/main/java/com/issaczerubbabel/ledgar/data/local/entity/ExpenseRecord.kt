@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.data.local.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Ignore
@@ -47,7 +48,9 @@ data class ExpenseRecord(
     val isBookmarked: Boolean = false,
     val isSynced: Boolean = false,
     val remoteTimestamp: String? = null,
-    val syncAction: String = "INSERT"
+    val syncAction: String = "INSERT",
+    /** Raised by the [ExpenseVersionTrigger] on every change; Sync only settles a row whose version it sent. */
+    @ColumnInfo(defaultValue = "0") val localVersion: Long = 0
 ) {
     @Ignore
     val paymentMode: String = ""

@@ -5,41 +5,40 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.Constraints
-import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
+import com.issaczerubbabel.ledgar.data.bucket.BucketPreview
+import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewCalculator
+import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewContext
+import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewSource
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
-import com.issaczerubbabel.ledgar.sync.SyncWorker
+import com.issaczerubbabel.ledgar.util.TransactionType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
 
-private const val EXPENSE_CATEGORY_TYPE = "EXPENSE_CATEGORY"
-
 @HiltViewModel
 class QuickLogViewModel @Inject constructor(
     private val expenseRepository: ExpenseRepository,
     private val dropdownOptionRepository: DropdownOptionRepository,
-    private val workManager: WorkManager
+    bucketPreviewSource: BucketPreviewSource
 ) : ViewModel() {
 
     val categories = dropdownOptionRepository
-        .getOptionsByType(EXPENSE_CATEGORY_TYPE)
+        .getOptionsByType(TransactionType.EXPENSE_CATEGORY_OPTION)
         .map { options -> options.map { it.name } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val bucketContext: StateFlow<BucketPreviewContext?> = bucketPreviewSource.context
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     var amount by mutableStateOf("")
     var selectedCategory by mutableStateOf("")
@@ -64,7 +63,7 @@ class QuickLogViewModel @Inject constructor(
                 expenseRepository.save(
                     ExpenseRecord(
                         date = LocalDate.now().toString(),
-                        type = "Expense",
+                        type = TransactionType.EXPENSE,
                         category = selectedCategory,
                         description = "",
                         amount = parsedAmount,
@@ -75,7 +74,6 @@ class QuickLogViewModel @Inject constructor(
                     )
                 )
             }.onSuccess {
-                enqueueSyncWork()
                 _saveSuccess.emit(Unit)
             }.onFailure {
                 errorMessage = it.message ?: "Failed to save transaction"
@@ -83,49 +81,24 @@ class QuickLogViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Creates a new expense category from the Quick Log sheet, mirroring
-     * LogViewModel.addCategoryInline: case-insensitive match selects the existing option
-     * instead of inserting a duplicate, since there is no unique index on (optionType, name).
-     */
+    /** Adds the category if it doesn't exist yet, then selects it. */
     fun addCategoryInline(name: String) {
-        val trimmed = name.trim()
-        if (trimmed.isEmpty()) return
-
-        val existing = categories.value.firstOrNull { it.equals(trimmed, ignoreCase = true) }
-        if (existing != null) {
-            selectedCategory = existing
-            return
-        }
-
         viewModelScope.launch {
-            val options = dropdownOptionRepository.getOptionsByType(EXPENSE_CATEGORY_TYPE).first()
-            val maxOrder = options.maxOfOrNull { it.displayOrder } ?: -1
-            dropdownOptionRepository.insert(
-                DropdownOption(
-                    optionType = EXPENSE_CATEGORY_TYPE,
-                    name = trimmed,
-                    displayOrder = maxOrder + 1
-                )
-            )
-            selectedCategory = trimmed
-            enqueueSyncWork()
+            dropdownOptionRepository.addOptionIfAbsent(TransactionType.EXPENSE_CATEGORY_OPTION, name)
+                ?.let { selectedCategory = it }
         }
     }
+
+    /** The bucket this Quick Add expense would land in, counting the amount typed so far. */
+    fun bucketPreview(context: BucketPreviewContext?): BucketPreview? = BucketPreviewCalculator.preview(
+        context = context,
+        type = TransactionType.EXPENSE,
+        category = selectedCategory,
+        date = LocalDate.now(),
+        draftAmount = amount.toDoubleOrNull() ?: 0.0
+    )
 
     fun clearError() {
         errorMessage = null
-    }
-
-    private fun enqueueSyncWork() {
-        val request = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .build()
-            )
-            .addTag(SyncWorker.TAG)
-            .build()
-        workManager.enqueueUniqueWork(SyncWorker.TAG, ExistingWorkPolicy.REPLACE, request)
     }
 }

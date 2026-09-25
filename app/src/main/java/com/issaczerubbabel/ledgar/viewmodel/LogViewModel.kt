@@ -6,39 +6,37 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.*
-import androidx.work.WorkInfo
+import com.issaczerubbabel.ledgar.data.bucket.BucketPreview
+import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewCalculator
+import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewContext
+import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewSource
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
-import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
-import com.issaczerubbabel.ledgar.sync.SyncWorker
+import com.issaczerubbabel.ledgar.sync.SyncScheduler
+import com.issaczerubbabel.ledgar.sync.SyncStatus
+import com.issaczerubbabel.ledgar.util.TransactionType
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
-import java.util.UUID
 import javax.inject.Inject
 
-enum class SyncStatusUi {
-    Idle,
-    Syncing,
-    Synced,
-    Failed
-}
+/** Which of the transaction's accounts an account pick applies to. */
+enum class AccountTarget { Account, From, To }
 
 @HiltViewModel
 class LogViewModel @Inject constructor(
     private val repository: ExpenseRepository,
     accountRepository: AccountRepository,
     private val dropdownOptionRepository: DropdownOptionRepository,
-    private val workManager: WorkManager,
+    private val syncScheduler: SyncScheduler,
+    bucketPreviewSource: BucketPreviewSource,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -47,17 +45,20 @@ class LogViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val expenseCategories: StateFlow<List<String>> = dropdownOptionRepository
-        .getOptionsByType("EXPENSE_CATEGORY")
+        .getOptionsByType(TransactionType.EXPENSE_CATEGORY_OPTION)
         .map { options -> options.map { it.name } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val incomeCategories: StateFlow<List<String>> = dropdownOptionRepository
-        .getOptionsByType("INCOME_CATEGORY")
+        .getOptionsByType(TransactionType.INCOME_CATEGORY_OPTION)
         .map { options -> options.map { it.name } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val bucketContext: StateFlow<BucketPreviewContext?> = bucketPreviewSource.context
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     var selectedDate by mutableStateOf(LocalDate.now())
-    var selectedType by mutableStateOf("Expense")
+    var selectedType by mutableStateOf(TransactionType.EXPENSE)
     var selectedCategory by mutableStateOf("")
     var selectedAccountId by mutableStateOf<Long?>(null)
     var selectedFromAccountId by mutableStateOf<Long?>(null)
@@ -67,13 +68,12 @@ class LogViewModel @Inject constructor(
     var remarks by mutableStateOf("")
     var saveSuccess by mutableStateOf(false)
     var errorMessage by mutableStateOf<String?>(null)
-    var syncInfoMessage by mutableStateOf<String?>(null)
-    var syncStatus by mutableStateOf(SyncStatusUi.Idle)
+    var syncStatus by mutableStateOf(SyncStatus.Idle)
 
     private var editingRecordId: Long? = null
-    private var hasObservedInitialWorkerState = false
-    private var lastObservedWorkerId: UUID? = null
-    private var lastObservedWorkerState: WorkInfo.State? = null
+
+    /** The record being edited, as first loaded: its amount is already in its bucket's spend. */
+    private var editingOriginal by mutableStateOf<ExpenseRecord?>(null)
     private var hasStartedSyncObserver = false
     val isEditMode: Boolean get() = editingRecordId != null
 
@@ -90,11 +90,12 @@ class LogViewModel @Inject constructor(
                     errorMessage = "Transaction not found"
                     return@launch
                 }
+                editingOriginal = record
                 selectedDate = runCatching { LocalDate.parse(record.date) }.getOrDefault(LocalDate.now())
                 selectedType = record.type
                 selectedCategory = record.category
                 selectedAccountId = when (record.type) {
-                    "Expense", "Income" -> record.accountId
+                    TransactionType.EXPENSE, TransactionType.INCOME -> record.accountId
                     else -> null
                 }
                 selectedFromAccountId = record.fromAccountId
@@ -120,7 +121,7 @@ class LogViewModel @Inject constructor(
                 selectedType = source.type
                 selectedCategory = source.category
                 selectedAccountId = when (source.type) {
-                    "Expense", "Income" -> source.accountId
+                    TransactionType.EXPENSE, TransactionType.INCOME -> source.accountId
                     else -> null
                 }
                 selectedFromAccountId = source.fromAccountId
@@ -137,7 +138,7 @@ class LogViewModel @Inject constructor(
         if (parsedAmount == null || parsedAmount <= 0.0) {
             errorMessage = "Enter a valid amount"; return
         }
-        if (selectedType == "Transfer") {
+        if (selectedType == TransactionType.TRANSFER) {
             if (selectedFromAccountId == null) { errorMessage = "Select From Account"; return }
             if (selectedToAccountId == null) { errorMessage = "Select To Account"; return }
             if (selectedFromAccountId == selectedToAccountId) { errorMessage = "From and To accounts must differ"; return }
@@ -154,23 +155,23 @@ class LogViewModel @Inject constructor(
                 id = baseRecord?.id ?: 0,
                 date = selectedDate.toString(),
                 type = selectedType,
-                category = if (selectedType == "Transfer") "Transfer" else selectedCategory,
+                category = if (selectedType == TransactionType.TRANSFER) TransactionType.TRANSFER else selectedCategory,
                 description = description,
                 amount = parsedAmount,
-                accountId = if (selectedType == "Transfer") null else selectedAccountId,
+                accountId = if (selectedType == TransactionType.TRANSFER) null else selectedAccountId,
                 remarks = remarks,
                 fromAccountId = when (selectedType) {
-                    "Expense" -> selectedAccountId
-                    "Transfer" -> selectedFromAccountId
+                    TransactionType.EXPENSE -> selectedAccountId
+                    TransactionType.TRANSFER -> selectedFromAccountId
                     else -> null
                 },
                 toAccountId = when (selectedType) {
-                    "Income" -> selectedAccountId
-                    "Transfer" -> selectedToAccountId
+                    TransactionType.INCOME -> selectedAccountId
+                    TransactionType.TRANSFER -> selectedToAccountId
                     else -> null
                 },
                 toAccountName = when (selectedType) {
-                    "Transfer" -> selectedToAccountId?.let { accountNameById[it] }
+                    TransactionType.TRANSFER -> selectedToAccountId?.let { accountNameById[it] }
                     else -> baseRecord?.toAccountName
                 },
                 isBookmarked = baseRecord?.isBookmarked ?: false,
@@ -185,8 +186,6 @@ class LogViewModel @Inject constructor(
                 repository.save(record)
             }
 
-            syncStatus = SyncStatusUi.Syncing
-            enqueueSyncWork()
             saveSuccess = true
             if (!isEditMode) resetForm()
         }
@@ -201,60 +200,51 @@ class LogViewModel @Inject constructor(
                 return@launch
             }
 
-            repository.update(
-                current.copy(
-                    isSynced = false,
-                    syncAction = "DELETE"
-                )
-            )
+            repository.delete(current)
 
-            syncStatus = SyncStatusUi.Syncing
-            enqueueSyncWork()
             saveSuccess = true
         }
     }
 
     fun resetSaveSuccess() { saveSuccess = false }
     fun clearError() { errorMessage = null }
-    fun clearSyncInfoMessage() { syncInfoMessage = null }
 
     fun retrySync() {
-        syncStatus = SyncStatusUi.Syncing
-        enqueueSyncWork()
+        viewModelScope.launch { syncScheduler.retrySync() }
     }
 
     /**
-     * Creates a new expense/income category from the Add Transaction screen itself, so the
-     * user never has to leave for Settings → Dropdowns. Case-insensitive match against the
-     * existing list selects that option instead of inserting a duplicate, since there is no
-     * unique index on (optionType, name).
+     * Creates a category on the type currently selected without leaving the screen, or selects
+     * the existing one. If the type changes while the insert is in flight the new category
+     * belongs to the old type's list, so it is not selected under the new one.
      */
     fun addCategoryInline(name: String) {
-        val trimmed = name.trim()
-        if (trimmed.isEmpty()) return
-
-        val optionType = if (selectedType == "Income") "INCOME_CATEGORY" else "EXPENSE_CATEGORY"
-        val currentOptions = if (selectedType == "Income") incomeCategories.value else expenseCategories.value
-        val existing = currentOptions.firstOrNull { it.equals(trimmed, ignoreCase = true) }
-        if (existing != null) {
-            selectedCategory = existing
-            return
-        }
-
+        val typeAtRequest = selectedType
         viewModelScope.launch {
-            val options = dropdownOptionRepository.getOptionsByType(optionType).first()
-            val maxOrder = options.maxOfOrNull { it.displayOrder } ?: -1
-            dropdownOptionRepository.insert(
-                DropdownOption(
-                    optionType = optionType,
-                    name = trimmed,
-                    displayOrder = maxOrder + 1
-                )
-            )
-            selectedCategory = trimmed
-            enqueueSyncWork()
+            val category = dropdownOptionRepository
+                .addOptionIfAbsent(TransactionType.categoryOptionType(typeAtRequest), name)
+                ?: return@launch
+            if (selectedType == typeAtRequest) selectedCategory = category
         }
     }
+
+    fun setAccount(target: AccountTarget, accountId: Long) {
+        when (target) {
+            AccountTarget.Account -> selectedAccountId = accountId
+            AccountTarget.From -> selectedFromAccountId = accountId
+            AccountTarget.To -> selectedToAccountId = accountId
+        }
+    }
+
+    /** The bucket this transaction would land in, counting the amount typed so far. */
+    fun bucketPreview(context: BucketPreviewContext?): BucketPreview? = BucketPreviewCalculator.preview(
+        context = context,
+        type = selectedType,
+        category = selectedCategory,
+        date = selectedDate,
+        draftAmount = amount.toDoubleOrNull() ?: 0.0,
+        original = editingOriginal
+    )
 
     fun startSyncStatusObserver() {
         if (hasStartedSyncObserver) return
@@ -264,7 +254,7 @@ class LogViewModel @Inject constructor(
 
     private fun resetForm() {
         selectedDate = LocalDate.now()
-        selectedType = "Expense"
+        selectedType = TransactionType.EXPENSE
         selectedCategory = ""
         selectedAccountId = null
         selectedFromAccountId = null
@@ -274,62 +264,9 @@ class LogViewModel @Inject constructor(
         remarks = ""
     }
 
-    private fun enqueueSyncWork() {
-        val request = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setConstraints(Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
-                .build())
-            .addTag(SyncWorker.TAG)
-            .build()
-        workManager.enqueueUniqueWork(SyncWorker.TAG, ExistingWorkPolicy.REPLACE, request)
-    }
-
     private fun observeSyncStatus() {
         viewModelScope.launch {
-            workManager.getWorkInfosForUniqueWorkFlow(SyncWorker.TAG).collect { infos ->
-                val latest = infos.firstOrNull() ?: run {
-                    if (syncStatus != SyncStatusUi.Synced) syncStatus = SyncStatusUi.Idle
-                    return@collect
-                }
-
-                if (!hasObservedInitialWorkerState) {
-                    hasObservedInitialWorkerState = true
-                    lastObservedWorkerId = latest.id
-                    lastObservedWorkerState = latest.state
-                }
-
-                syncStatus = when (latest.state) {
-                    WorkInfo.State.ENQUEUED,
-                    WorkInfo.State.RUNNING,
-                    WorkInfo.State.BLOCKED -> SyncStatusUi.Syncing
-
-                    WorkInfo.State.SUCCEEDED -> SyncStatusUi.Synced
-                    WorkInfo.State.FAILED,
-                    WorkInfo.State.CANCELLED -> SyncStatusUi.Failed
-                }
-
-                val workerJustCompleted =
-                    latest.state == WorkInfo.State.SUCCEEDED && (
-                        latest.id != lastObservedWorkerId ||
-                            lastObservedWorkerState != WorkInfo.State.SUCCEEDED
-                        )
-
-                if (workerJustCompleted) {
-                    val dropdownCount = latest.outputData.getInt(SyncWorker.KEY_DROPDOWN_BACKUP_COUNT, -1)
-                    val budgetCount = latest.outputData.getInt(SyncWorker.KEY_BUDGET_BACKUP_COUNT, -1)
-                    val accountCount = latest.outputData.getInt(SyncWorker.KEY_ACCOUNTS_BACKUP_COUNT, -1)
-                    if (dropdownCount >= 0 && budgetCount >= 0 && accountCount >= 0) {
-                        syncInfoMessage = "Sync complete. Dropdown backup: $dropdownCount option${if (dropdownCount == 1) "" else "s"}. Budget backup: $budgetCount row${if (budgetCount == 1) "" else "s"}. Account backup: $accountCount account${if (accountCount == 1) "" else "s"}."
-                    } else if (dropdownCount >= 0 && budgetCount >= 0) {
-                        syncInfoMessage = "Sync complete. Dropdown backup: $dropdownCount option${if (dropdownCount == 1) "" else "s"}. Budget backup: $budgetCount row${if (budgetCount == 1) "" else "s"}."
-                    } else if (dropdownCount >= 0) {
-                        syncInfoMessage = "Sync complete. Dropdown backup: $dropdownCount option${if (dropdownCount == 1) "" else "s"}."
-                    }
-                }
-
-                lastObservedWorkerId = latest.id
-                lastObservedWorkerState = latest.state
-            }
+            syncScheduler.transactionSyncStatus.collect { syncStatus = it }
         }
     }
 }

@@ -14,6 +14,7 @@ data class GoogleSheetsImportResult(
     val skipped: Int,
     val restoredDropdowns: Int,
     val restoredBudgets: Int = 0,
+    val restoredCycles: Int = 0,
     val restoredAccounts: Int = 0,
     val conflicts: List<SyncConflict> = emptyList()
 )
@@ -42,8 +43,6 @@ interface ExpenseRepository {
     fun getAccountBalanceUntilDate(accountId: Long, endDate: String): Flow<Double>
     fun getAccountBalance(accountId: Long): Flow<Double>
     fun getRecordsByDateRange(startDate: String, endDate: String): Flow<List<ExpenseRecord>>
-    suspend fun getUnsynced(): List<ExpenseRecord>
-    suspend fun markSynced(ids: List<Long>)
     suspend fun setBookmarked(id: Long, isBookmarked: Boolean)
     suspend fun deleteTransactionsByIds(ids: List<Long>)
     suspend fun updateTransactionsDateByIds(ids: List<Long>, newDate: String)
