@@ -329,7 +329,10 @@ fun CashFlowBarChart(
         val earned = timeline.map { it.earned }
         val spent = timeline.map { it.spent }
         val average = List(timeline.size) { averageSpent }
-        val budget = timeline.map { it.budget ?: 0.0 }
+        // Only points a Salary cycle covers get a budget; the rest are left blank rather than drawn at ₹0.
+        val budgetPoints = timeline.withIndex().filter { it.value.budget != null }
+        val budgetX = budgetPoints.map { it.index.toDouble() }
+        val budget = budgetPoints.map { it.value.budget!! }
         modelProducer.runTransaction {
             if (chartStyle == CashFlowChartStyle.BAR) {
                 columnSeries {
@@ -344,7 +347,7 @@ fun CashFlowBarChart(
             }
             lineSeries {
                 series(x, average)
-                if (hasBudget) series(x, budget)
+                if (budgetX.isNotEmpty()) series(budgetX, budget)
             }
         }
     }
