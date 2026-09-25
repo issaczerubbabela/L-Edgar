@@ -15,22 +15,16 @@ enum class StatsBreakdownTab {
     INCOME
 }
 
-enum class CashFlowGranularity {
-    DAILY,
-    WEEKLY,
-    MONTHLY,
-    YEARLY
-}
-
 data class StatsFilterState(
     val scope: StatsScope = StatsScope.MONTHLY,
     val anchorDate: LocalDate = LocalDate.now(),
     val customStartDate: LocalDate? = null,
     val customEndDate: LocalDate? = null,
     val breakdownTab: StatsBreakdownTab = StatsBreakdownTab.EXPENSE,
-    val cashFlowCategory: String? = null,
-    val cashFlowGranularity: CashFlowGranularity = CashFlowGranularity.DAILY
-)
+    val cashFlowCategory: String? = null
+) {
+    val period: StatsPeriod get() = StatsPeriod.of(scope, anchorDate, customStartDate, customEndDate)
+}
 
 data class StatsDateRange(
     val start: LocalDate,
@@ -41,12 +35,4 @@ data class CategoryTotal(
     val categoryName: String,
     val totalAmount: Double,
     val assignedColor: Color
-)
-
-data class AccountsBreakdownUi(
-    val cashAndAccountsExpense: Double = 0.0,
-    val cardExpense: Double = 0.0,
-    val transferTotal: Double = 0.0,
-    /** Null when the preceding period has no spending to compare against. */
-    val changePercent: Int? = null
 )

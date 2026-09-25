@@ -54,8 +54,8 @@ import com.issaczerubbabel.ledgar.data.preferences.CashFlowChartStyle
 import com.issaczerubbabel.ledgar.ui.components.SingleDatePickerDialog
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseRed
 import com.issaczerubbabel.ledgar.ui.theme.IncomeGreen
-import com.issaczerubbabel.ledgar.viewmodel.AccountsBreakdownUi
-import com.issaczerubbabel.ledgar.viewmodel.CashFlowGranularity
+import com.issaczerubbabel.ledgar.viewmodel.MoneyTotals
+import com.issaczerubbabel.ledgar.viewmodel.PaidFrom
 import com.issaczerubbabel.ledgar.viewmodel.StatsBreakdownTab
 import com.issaczerubbabel.ledgar.viewmodel.StatsDateRange
 import com.issaczerubbabel.ledgar.viewmodel.StatsScope
@@ -78,14 +78,11 @@ private fun responsiveTextSize(baseSp: Float, minSp: Float = 12f, maxSp: Float =
 fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewModel()) {
     val filterState by vm.filterState.collectAsStateWithLifecycle()
     val resolvedDateRange by vm.resolvedDateRange.collectAsStateWithLifecycle()
-    val filteredTransactions by vm.filteredTransactions.collectAsStateWithLifecycle()
+    val report by vm.report.collectAsStateWithLifecycle()
     val breakdownTotals by vm.breakdownCategoryTotals.collectAsStateWithLifecycle()
     val cashFlowCategoryOptions by vm.cashFlowCategoryOptions.collectAsStateWithLifecycle()
-    val cashFlowXAxisLabels by vm.cashFlowXAxisLabels.collectAsStateWithLifecycle()
     val cashFlowChartStyle by vm.cashFlowChartStyle.collectAsStateWithLifecycle()
-    val useCompressedScale by vm.useCompressedScale.collectAsStateWithLifecycle()
     val isLoading by vm.isLoading.collectAsStateWithLifecycle()
-    val accountsBreakdown by vm.accountsBreakdown.collectAsStateWithLifecycle()
 
     var showAnchorDatePicker by remember { mutableStateOf(false) }
     var showCustomStartPicker by remember { mutableStateOf(false) }
@@ -186,7 +183,7 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
                     CircularProgressIndicator()
                 }
             }
-        } else if (filteredTransactions.isEmpty()) {
+        } else if (!report.hasTransactions) {
             item {
                 Box(
                     modifier = Modifier
@@ -246,6 +243,10 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
                             },
                             modifier = Modifier.fillMaxWidth()
                         )
+
+                        if (filterState.breakdownTab == StatsBreakdownTab.EXPENSE) {
+                            SpendingNote(totals = report.totals, formatRupee = vm::formatRupee)
+                        }
                     }
                 }
             }
@@ -278,17 +279,6 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
                                     )
                                 }
                             )
-
-                            TopRightFilterDropdown(
-                                selectedLabel = filterState.cashFlowGranularity.label(),
-                                options = CashFlowGranularity.entries.map { it.label() },
-                                modifier = Modifier.weight(1f),
-                                onSelect = { selected ->
-                                    CashFlowGranularity.entries
-                                        .firstOrNull { it.label() == selected }
-                                        ?.let(vm::updateCashFlowGranularity)
-                                }
-                            )
                         }
 
                         Text(
@@ -298,13 +288,10 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
                         )
 
                         CashFlowBarChart(
-                            modelProducer = vm.cashFlowChartModelProducer,
-                            xAxisLabels = cashFlowXAxisLabels,
-                            markerValueFormatter = vm.cashFlowMarkerValueFormatter,
+                            timeline = report.timeline,
+                            averageSpent = report.averageSpentPerPoint,
                             formatRupee = vm::formatRupee,
-                            chartValueToAmount = vm::chartValueToAmount,
                             chartStyle = cashFlowChartStyle,
-                            useCompressedScale = useCompressedScale,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -313,7 +300,8 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
 
             item {
                 AccountsBreakdownCard(
-                    breakdown = accountsBreakdown,
+                    paidFrom = report.paidFrom,
+                    changePercent = report.spentChangePercent,
                     formatRupee = vm::formatRupee
                 )
             }
@@ -358,7 +346,8 @@ fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewMod
 
 @Composable
 private fun AccountsBreakdownCard(
-    breakdown: AccountsBreakdownUi,
+    paidFrom: PaidFrom,
+    changePercent: Int?,
     formatRupee: (Double) -> String
 ) {
     Card(
@@ -384,13 +373,13 @@ private fun AccountsBreakdownCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "Spending vs previous period",
+                    text = "Spent vs the same point last period",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f)
                 )
 
-                val change = breakdown.changePercent
+                val change = changePercent
                 if (change == null) {
                     Text(
                         text = "No earlier data",
@@ -434,11 +423,26 @@ private fun AccountsBreakdownCard(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            AccountsBreakdownLine("Expenses (Cash, Accounts)", formatRupee(breakdown.cashAndAccountsExpense))
-            AccountsBreakdownLine("Expenses (Card)", formatRupee(breakdown.cardExpense))
-            AccountsBreakdownLine("Transfers", formatRupee(breakdown.transferTotal))
+            AccountsBreakdownLine("Expenses (Cash, Accounts)", formatRupee(paidFrom.cashAndAccounts))
+            AccountsBreakdownLine("Expenses (Card)", formatRupee(paidFrom.card))
+            AccountsBreakdownLine("Transfers", formatRupee(paidFrom.transfers))
         }
     }
+}
+
+/** Explains why the spending figures differ from plain expenses (ADR-0004). */
+@Composable
+private fun SpendingNote(totals: MoneyTotals, formatRupee: (Double) -> String) {
+    val parts = buildList {
+        if (totals.refunds > 0.0) add("Refunds of ${formatRupee(totals.refunds)} bring spending down to ${formatRupee(totals.spent)}.")
+        if (totals.saved != 0.0) add("${formatRupee(totals.saved)} saved isn't counted as spending.")
+    }
+    if (parts.isEmpty()) return
+    Text(
+        text = parts.joinToString(" "),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
 }
 
 @Composable
@@ -572,15 +576,6 @@ private fun StatsBreakdownTab.label(): String {
     return when (this) {
         StatsBreakdownTab.EXPENSE -> "Expense"
         StatsBreakdownTab.INCOME -> "Income"
-    }
-}
-
-private fun CashFlowGranularity.label(): String {
-    return when (this) {
-        CashFlowGranularity.DAILY -> "Daily"
-        CashFlowGranularity.WEEKLY -> "Weekly"
-        CashFlowGranularity.MONTHLY -> "Monthly"
-        CashFlowGranularity.YEARLY -> "Yearly"
     }
 }
 

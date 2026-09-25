@@ -85,7 +85,8 @@ class BackupWorker @AssistedInject constructor(
                 id = option.id,
                 optionType = option.optionType,
                 name = option.name,
-                displayOrder = option.displayOrder
+                displayOrder = option.displayOrder,
+                role = option.role
             )
         }
 

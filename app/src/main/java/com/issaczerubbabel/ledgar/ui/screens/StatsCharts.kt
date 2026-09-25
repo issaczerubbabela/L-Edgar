@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,6 +63,12 @@ import com.issaczerubbabel.ledgar.ui.theme.ExpenseRed
 import com.issaczerubbabel.ledgar.ui.theme.IncomeGreen
 import com.issaczerubbabel.ledgar.data.preferences.CashFlowChartStyle
 import com.issaczerubbabel.ledgar.viewmodel.CategoryTotal
+import com.issaczerubbabel.ledgar.viewmodel.TimelinePoint
+import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
+import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
+import com.patrykandpatrick.vico.core.cartesian.marker.ColumnCartesianLayerMarkerTarget
+import com.patrykandpatrick.vico.core.cartesian.marker.LineCartesianLayerMarkerTarget
+import com.patrykandpatrick.vico.core.cartesian.marker.CartesianMarker
 import java.text.NumberFormat
 import java.util.Locale
 import kotlin.math.PI
@@ -300,17 +307,61 @@ private data class DonutSliceMarker(
     val anchor: Offset
 )
 
+/**
+ * Earned and spent per timeline point on a linear scale, with the average and (when a Salary cycle
+ * covers the period) the budget for each point as guide lines.
+ */
 @Composable
 fun CashFlowBarChart(
-    modelProducer: CartesianChartModelProducer,
-    xAxisLabels: List<String>,
-    markerValueFormatter: CartesianMarkerValueFormatter,
+    timeline: List<TimelinePoint>,
+    averageSpent: Double,
     formatRupee: (Double) -> String,
-    chartValueToAmount: (Double) -> Double,
     chartStyle: CashFlowChartStyle,
-    useCompressedScale: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val modelProducer = remember { CartesianChartModelProducer() }
+    val xAxisLabels = remember(timeline) { timeline.map { it.label } }
+    val hasBudget = remember(timeline) { timeline.any { it.budget != null } }
+
+    LaunchedEffect(timeline, averageSpent, chartStyle) {
+        if (timeline.isEmpty()) return@LaunchedEffect
+        val x = timeline.indices.map { it.toDouble() }
+        val earned = timeline.map { it.earned }
+        val spent = timeline.map { it.spent }
+        val average = List(timeline.size) { averageSpent }
+        val budget = timeline.map { it.budget ?: 0.0 }
+        modelProducer.runTransaction {
+            if (chartStyle == CashFlowChartStyle.BAR) {
+                columnSeries {
+                    series(x, earned)
+                    series(x, spent)
+                }
+            } else {
+                lineSeries {
+                    series(x, earned)
+                    series(x, spent)
+                }
+            }
+            lineSeries {
+                series(x, average)
+                if (hasBudget) series(x, budget)
+            }
+        }
+    }
+
+    val markerValueFormatter = remember(timeline, averageSpent, formatRupee) {
+        CartesianMarkerValueFormatter { _, targets ->
+            val point = targets.firstOrNull()?.xIndex()?.let(timeline::getOrNull) ?: return@CartesianMarkerValueFormatter ""
+            buildString {
+                append(point.label)
+                append("\nSpent ").append(formatRupee(point.spent))
+                append("\nEarned ").append(formatRupee(point.earned))
+                append("\nAverage ").append(formatRupee(averageSpent))
+                point.budget?.let { append("\nBudget ").append(formatRupee(it)) }
+            }
+        }
+    }
+
     if (xAxisLabels.isEmpty()) {
         Box(
             modifier = modifier
@@ -339,14 +390,14 @@ fun CashFlowBarChart(
         }
     }
 
-    val startAxisFormatter = remember(formatRupee, chartValueToAmount, useCompressedScale) {
+    val startAxisFormatter = remember(formatRupee) {
         object : CartesianValueFormatter {
             override fun format(
                 value: Double,
                 chartValues: ChartValues,
                 verticalAxisPosition: Axis.Position.Vertical?
             ): CharSequence {
-                return formatRupee(chartValueToAmount(value))
+                return formatRupee(value)
             }
         }
     }
@@ -494,10 +545,16 @@ fun CashFlowBarChart(
         ) {
             LegendBadge(text = if (chartStyle == CashFlowChartStyle.LINE) "Income Line" else "Income", color = IncomeGreen)
             LegendBadge(text = if (chartStyle == CashFlowChartStyle.LINE) "Expense Line" else "Expense", color = ExpenseRed)
-            LegendBadge(text = "Avg/Day Guide", color = avgLineColor)
-            LegendBadge(text = "Max/Day Budget", color = maxLineColor)
+            LegendBadge(text = "Average", color = avgLineColor)
+            if (hasBudget) LegendBadge(text = "Budget", color = maxLineColor)
         }
     }
+}
+
+private fun CartesianMarker.Target.xIndex(): Int? = when (this) {
+    is ColumnCartesianLayerMarkerTarget -> columns.firstOrNull()?.entry?.x?.roundToInt()
+    is LineCartesianLayerMarkerTarget -> points.firstOrNull()?.entry?.x?.roundToInt()
+    else -> null
 }
 
 @Composable

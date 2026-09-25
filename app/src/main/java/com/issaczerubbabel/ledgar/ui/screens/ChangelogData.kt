@@ -31,7 +31,9 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Add Transaction redesigned around a custom numeric keypad: a dominant amount display, tappable chips for category/account/note that open bottom sheets, and a date pill, replacing the stacked text-field form",
             "Category and account chips on the Add Transaction screen now open a searchable picker sheet with an inline + Add option for creating a new category without leaving the screen",
             "Quick Add (widget, Quick Settings tile, app shortcut) now shares the same keypad and category-picker sheet as the full Add Transaction screen",
-            "Add Transaction and Quick Add now show which bucket the chosen category falls in, with what is left of it after the amount you are typing, as a pace bar under the date. It turns red and striped if the amount would overspend the bucket, and hides for income, transfers, categories with no bucket and dates before the running cycle"
+            "Add Transaction and Quick Add now show which bucket the chosen category falls in, with what is left of it after the amount you are typing, as a pace bar under the date. It turns red and striped if the amount would overspend the bucket, and hides for income, transfers, categories with no bucket and dates before the running cycle",
+            "Categories and account groups can now count as Saving, Refund or Savings in Stats. Investments/Savings is saving, Return is a refund, and the Savings and Investments groups hold savings. Saved money and transfers into savings no longer count as spending, and refunds now reduce spending instead of counting as income. Roles are backed up in a new Role column on the _dropdowns tab once the Apps Script is redeployed",
+            "Stats cash-flow chart now shows a budget line from your salary cycles: each day gets its share of its cycle's spendable amount"
         ),
         fixes = listOf(
             "Cash Flow chart now refreshes plotted series correctly when switching top period months, preventing stale bars/lines and stale Y-axis scale carryover",
@@ -60,7 +62,12 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "The Apps Script in the repo and the copy shown in Database Setup were missing changes that only existed in a deployed script: the Description column header upgrade, the description_repair action and a manual repair helper. Anyone redeploying from either copy would have lost description support. Both now match the deployed script, plus the bucket-budget backup",
             "Bucket names on the Budget home and Plan screens now wrap instead of being cut off, and the amount on each bucket row sits flush at the right edge. Previously a long name left its amount a different distance from the edge on every row",
             "Add Transaction: choosing an account when two accounts share a name now saves the one you tapped, not the first with that name",
-            "Add Transaction: creating a category inline and then switching between Expense and Income before it finished no longer selects it under the wrong type"
+            "Add Transaction: creating a category inline and then switching between Expense and Income before it finished no longer selects it under the wrong type",
+            "Stats: \"Spent vs the same point last period\" now compares like with like. A month in progress is measured against the same days of the month before, and a finished month against the whole previous month. It used to compare September with Aug 2-31, which skipped rent on the 1st and showed a flat month as +58%",
+            "Stats cash-flow chart is drawn to scale. Its square-root axis (₹0, 8,100, 32,400, 72,900) made small days look almost as big as rent day",
+            "Stats cash-flow chart now shows days with no spending instead of skipping them, and Yearly and long ranges are drawn by month or week instead of hundreds of daily bars",
+            "Stats budget line no longer sits at ₹0: it read the legacy per-category budgets instead of your salary cycles",
+            "Stats category colours no longer repeat: each category keeps a distinct colour from a colour-blind-safe set, in your own category order, instead of a hash that gave Food, Medical and Amenities the same blue"
         ),
         qol = listOf(
             "Quick Settings tile click now stays in quick-entry flow and updates tile state without opening the main app tabs",
@@ -98,7 +105,9 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Android CI workflow now also builds claude/** branches on push, so feature work is compiled before it reaches a pull request, and installs an Oracle JDK to match the toolchain vendor pinned in gradle-daemon-jvm.properties",
             "Export dialog now uses real radio buttons with 48dp touch targets, inline date validation with an example format, and an Export action that stays disabled until a custom range is valid",
             "Export result is now reported through the Settings snackbar with the exported transaction count instead of an inline status line",
-            "Added developer docs: a CONTEXT.md glossary of app terms, architecture decision records, and issue-tracker notes for coding agents"
+            "Added developer docs: a CONTEXT.md glossary of app terms, architecture decision records, and issue-tracker notes for coding agents",
+            "Stats cash-flow granularity dropdown removed: the period you pick now decides the bar size (days for a week or month, months for a year)",
+            "All Stats arithmetic now lives in one tested StatsReport module, with the Stats glossary terms in CONTEXT.md and the roles decision in ADR-0004"
         )
     ),
     ChangelogRelease(

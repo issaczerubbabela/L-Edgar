@@ -40,6 +40,33 @@ _Avoid_: envelope, budget (the legacy per-category plan)
 **Bucket category**:
 The routing of one expense Category into one Bucket for one cycle. A Category sits in at most one Bucket per cycle; Categories in none count as Unbucketed.
 
+**Stats role**:
+The part a Dropdown option plays in Stats, stored in its `role`: an expense Category can be **Saving**, an income Category can be **Refund**, and an Account group can be **Savings**. Most options have no role.
+_Avoid_: flag, tag
+
+**Earned**:
+Income in a period, not counting Refunds.
+_Avoid_: total income (when Refunds are included)
+
+**Spent**:
+Expenses in a period, not counting Saving Categories, minus Refunds.
+_Avoid_: total expenses (when Saving Categories are included)
+
+**Saved**:
+Money put aside in a period: Expenses in Saving Categories, plus Transfers into a Savings Account group from outside it, minus Transfers out of one. Saved money is never Spent.
+_Avoid_: invested, spent (for Saving Categories)
+
+**Refund**:
+An Income in a Refund Category. It reduces Spent instead of adding to Earned, and it isn't tied to any expense Category.
+
+**Left over**:
+Earned minus Spent minus Saved, for a week, month, year or custom range.
+_Avoid_: kept, balance, savings
+
+**Left to spend**:
+A Salary cycle's spendable amount minus what was Spent in it. Once the cycle is over, the Stats tab calls it "Left unspent".
+_Avoid_: left over (which is based on Earned, not the spendable amount)
+
 **Dropdown option**:
 A user-editable choice for Categories and Account groups. `PAYMENT_MODE` options are legacy: Accounts replaced them, and they are never backed up.
 
