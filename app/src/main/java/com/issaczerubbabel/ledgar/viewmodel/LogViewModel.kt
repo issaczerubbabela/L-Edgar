@@ -6,14 +6,13 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.*
-import androidx.work.WorkInfo
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
-import com.issaczerubbabel.ledgar.sync.SyncWorker
+import com.issaczerubbabel.ledgar.sync.SyncScheduler
+import com.issaczerubbabel.ledgar.sync.SyncStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.SharingStarted
@@ -21,22 +20,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
-import java.util.UUID
 import javax.inject.Inject
-
-enum class SyncStatusUi {
-    Idle,
-    Syncing,
-    Synced,
-    Failed
-}
 
 @HiltViewModel
 class LogViewModel @Inject constructor(
     private val repository: ExpenseRepository,
     accountRepository: AccountRepository,
     dropdownOptionRepository: DropdownOptionRepository,
-    private val workManager: WorkManager,
+    private val syncScheduler: SyncScheduler,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -65,13 +56,9 @@ class LogViewModel @Inject constructor(
     var remarks by mutableStateOf("")
     var saveSuccess by mutableStateOf(false)
     var errorMessage by mutableStateOf<String?>(null)
-    var syncInfoMessage by mutableStateOf<String?>(null)
-    var syncStatus by mutableStateOf(SyncStatusUi.Idle)
+    var syncStatus by mutableStateOf(SyncStatus.Idle)
 
     private var editingRecordId: Long? = null
-    private var hasObservedInitialWorkerState = false
-    private var lastObservedWorkerId: UUID? = null
-    private var lastObservedWorkerState: WorkInfo.State? = null
     private var hasStartedSyncObserver = false
     val isEditMode: Boolean get() = editingRecordId != null
 
@@ -183,8 +170,6 @@ class LogViewModel @Inject constructor(
                 repository.save(record)
             }
 
-            syncStatus = SyncStatusUi.Syncing
-            enqueueSyncWork()
             saveSuccess = true
             if (!isEditMode) resetForm()
         }
@@ -199,26 +184,17 @@ class LogViewModel @Inject constructor(
                 return@launch
             }
 
-            repository.update(
-                current.copy(
-                    isSynced = false,
-                    syncAction = "DELETE"
-                )
-            )
+            repository.delete(current)
 
-            syncStatus = SyncStatusUi.Syncing
-            enqueueSyncWork()
             saveSuccess = true
         }
     }
 
     fun resetSaveSuccess() { saveSuccess = false }
     fun clearError() { errorMessage = null }
-    fun clearSyncInfoMessage() { syncInfoMessage = null }
 
     fun retrySync() {
-        syncStatus = SyncStatusUi.Syncing
-        enqueueSyncWork()
+        viewModelScope.launch { syncScheduler.retrySync() }
     }
 
     fun startSyncStatusObserver() {
@@ -239,69 +215,9 @@ class LogViewModel @Inject constructor(
         remarks = ""
     }
 
-    private fun enqueueSyncWork() {
-        val request = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setConstraints(Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
-                .build())
-            .addTag(SyncWorker.TAG)
-            .build()
-        workManager.enqueueUniqueWork(SyncWorker.TAG, ExistingWorkPolicy.REPLACE, request)
-    }
-
     private fun observeSyncStatus() {
         viewModelScope.launch {
-            workManager.getWorkInfosForUniqueWorkFlow(SyncWorker.TAG).collect { infos ->
-                val latest = infos.firstOrNull() ?: run {
-                    if (syncStatus != SyncStatusUi.Synced) syncStatus = SyncStatusUi.Idle
-                    return@collect
-                }
-
-                if (!hasObservedInitialWorkerState) {
-                    hasObservedInitialWorkerState = true
-                    lastObservedWorkerId = latest.id
-                    lastObservedWorkerState = latest.state
-                }
-
-                syncStatus = when (latest.state) {
-                    WorkInfo.State.ENQUEUED,
-                    WorkInfo.State.RUNNING,
-                    WorkInfo.State.BLOCKED -> SyncStatusUi.Syncing
-
-                    WorkInfo.State.SUCCEEDED -> SyncStatusUi.Synced
-                    WorkInfo.State.FAILED,
-                    WorkInfo.State.CANCELLED -> SyncStatusUi.Failed
-                }
-
-                val workerJustCompleted =
-                    latest.state == WorkInfo.State.SUCCEEDED && (
-                        latest.id != lastObservedWorkerId ||
-                            lastObservedWorkerState != WorkInfo.State.SUCCEEDED
-                        )
-
-                if (workerJustCompleted) {
-                    val dropdownCount = latest.outputData.getInt(SyncWorker.KEY_DROPDOWN_BACKUP_COUNT, -1)
-                    val budgetCount = latest.outputData.getInt(SyncWorker.KEY_BUDGET_BACKUP_COUNT, -1)
-                    val accountCount = latest.outputData.getInt(SyncWorker.KEY_ACCOUNTS_BACKUP_COUNT, -1)
-                    val bucketCount = latest.outputData.getInt(SyncWorker.KEY_BUCKET_BACKUP_COUNT, 0)
-                    val bucketNote = when {
-                        bucketCount == SyncWorker.SCRIPT_OUTDATED ->
-                            " Buckets were not backed up: redeploy the latest Apps Script from Database Setup."
-                        bucketCount > 0 -> " Bucket backup: $bucketCount cycle${if (bucketCount == 1) "" else "s"}."
-                        else -> ""
-                    }
-                    if (dropdownCount >= 0 && budgetCount >= 0 && accountCount >= 0) {
-                        syncInfoMessage = "Sync complete. Dropdown backup: $dropdownCount option${if (dropdownCount == 1) "" else "s"}. Budget backup: $budgetCount row${if (budgetCount == 1) "" else "s"}. Account backup: $accountCount account${if (accountCount == 1) "" else "s"}.$bucketNote"
-                    } else if (dropdownCount >= 0 && budgetCount >= 0) {
-                        syncInfoMessage = "Sync complete. Dropdown backup: $dropdownCount option${if (dropdownCount == 1) "" else "s"}. Budget backup: $budgetCount row${if (budgetCount == 1) "" else "s"}."
-                    } else if (dropdownCount >= 0) {
-                        syncInfoMessage = "Sync complete. Dropdown backup: $dropdownCount option${if (dropdownCount == 1) "" else "s"}."
-                    }
-                }
-
-                lastObservedWorkerId = latest.id
-                lastObservedWorkerState = latest.state
-            }
+            syncScheduler.transactionSyncStatus.collect { syncStatus = it }
         }
     }
 }

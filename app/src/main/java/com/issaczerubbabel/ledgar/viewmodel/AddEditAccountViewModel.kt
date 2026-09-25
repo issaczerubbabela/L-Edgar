@@ -2,17 +2,10 @@ package com.issaczerubbabel.ledgar.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.Constraints
-import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import androidx.work.workDataOf
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.PermanentDeleteStrategy
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
-import com.issaczerubbabel.ledgar.sync.SyncWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -45,7 +38,6 @@ data class AddEditAccountUiState(
 @HiltViewModel
 class AddEditAccountViewModel @Inject constructor(
     private val accountRepository: AccountRepository,
-    private val workManager: WorkManager,
     dropdownOptionRepository: DropdownOptionRepository
 ) : ViewModel() {
 
@@ -182,7 +174,6 @@ class AddEditAccountViewModel @Inject constructor(
                 )
             )
 
-            enqueueAccountBackupSync()
             _saved.emit(Unit)
         }
     }
@@ -204,14 +195,12 @@ class AddEditAccountViewModel @Inject constructor(
                         includeInTotals = false
                     )
                 )
-                enqueueAccountBackupSync()
                 _events.emit("Account has linked transactions, so it was archived (hidden) instead of deleted.")
                 _deleted.emit(Unit)
                 return@launch
             }
 
             accountRepository.delete(account)
-            enqueueAccountBackupSync()
             _deleted.emit(Unit)
         }
     }
@@ -237,22 +226,7 @@ class AddEditAccountViewModel @Inject constructor(
                 return@launch
             }
 
-            enqueueAccountBackupSync()
             _deleted.emit(Unit)
         }
-    }
-
-    private fun enqueueAccountBackupSync() {
-        val request = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .build()
-            )
-            .setInputData(workDataOf(SyncWorker.KEY_BACKUP_ACCOUNTS to true))
-            .addTag(SyncWorker.TAG)
-            .build()
-
-        workManager.enqueueUniqueWork(SyncWorker.TAG, ExistingWorkPolicy.REPLACE, request)
     }
 }

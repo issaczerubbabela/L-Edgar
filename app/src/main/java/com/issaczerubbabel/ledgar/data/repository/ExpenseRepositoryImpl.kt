@@ -10,18 +10,17 @@ import com.issaczerubbabel.ledgar.data.local.entity.Budget
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
+import com.issaczerubbabel.ledgar.data.preferences.SyncStateRepository
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
 import com.issaczerubbabel.ledgar.data.remote.ApiService
 import com.issaczerubbabel.ledgar.data.remote.DeletePayload
 import com.issaczerubbabel.ledgar.data.remote.ImportRecordDto
 import com.issaczerubbabel.ledgar.data.remote.SyncRequest
 import com.issaczerubbabel.ledgar.sync.SyncUrlNotConfiguredException
-import com.issaczerubbabel.ledgar.util.generateTimestampKey
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import com.issaczerubbabel.ledgar.util.normalizeTimestampKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import java.time.LocalDateTime
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
@@ -35,7 +34,8 @@ class ExpenseRepositoryImpl @Inject constructor(
     private val dropdownOptionRepository: DropdownOptionRepository,
     private val budgetDao: BudgetDao,
     private val bucketBudgetRepository: BucketBudgetRepository,
-    private val preferenceRepository: ThemePreferenceRepository
+    private val preferenceRepository: ThemePreferenceRepository,
+    private val syncState: SyncStateRepository
 ) : ExpenseRepository {
 
     private val importLogTag = "ExpenseImport"
@@ -44,7 +44,7 @@ class ExpenseRepositoryImpl @Inject constructor(
 
     override suspend fun getById(id: Long): ExpenseRecord? = dao.getById(id)
 
-    override suspend fun update(record: ExpenseRecord) = dao.update(record)
+    override suspend fun update(record: ExpenseRecord) = dao.updateKeepingSyncState(record)
 
     override suspend fun hardDeleteById(id: Long) = dao.hardDeleteById(id)
 
@@ -90,10 +90,6 @@ class ExpenseRepositoryImpl @Inject constructor(
 
     override fun getRecordsByDateRange(startDate: String, endDate: String): Flow<List<ExpenseRecord>> =
         dao.getRecordsByDateRange(startDate, endDate)
-
-    override suspend fun getUnsynced(): List<ExpenseRecord> = dao.getUnsyncedRecords()
-
-    override suspend fun markSynced(ids: List<Long>) = dao.markAsSynced(ids)
 
     override suspend fun setBookmarked(id: Long, isBookmarked: Boolean) =
         dao.updateBookmarkStatus(id = id, isBookmarked = isBookmarked)
@@ -297,6 +293,9 @@ class ExpenseRepositoryImpl @Inject constructor(
 
         val restoredCycles = restoreBucketBudgets(scriptUrl)
 
+        // The phone's lists now match the Sheet's, so Backups can safely write them back.
+        syncState.setMergedListsFromSheet()
+
         val txResponse = apiService.importRecords(
             url = scriptUrl,
             target = "transactions"
@@ -413,13 +412,13 @@ class ExpenseRepositoryImpl @Inject constructor(
         )
         if (mapped.discarded) return
 
-        val duplicateTimestamp = generateTimestampKey(LocalDateTime.now())
+        // Sync assigns a Remote timestamp no other Transaction uses.
         dao.insert(
             mapped.record.copy(
                 id = 0,
                 isSynced = false,
                 syncAction = "INSERT",
-                remoteTimestamp = duplicateTimestamp
+                remoteTimestamp = null
             )
         )
     }

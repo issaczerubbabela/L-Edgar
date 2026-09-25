@@ -67,9 +67,9 @@ graph TD
 
 ### Background Execution
 
-- WorkManager + Hilt-injected SyncWorker.
-- SyncWorker sends local unsynced records and then backs up dropdowns, budgets and bucket budgets (cycles, buckets and category routing).
-- Worker uses retry semantics on failure.
+- `SyncTriggers` (started in `SheetSyncApp`) watches Room: any Transaction waiting to sync requests a Sync, and any change to accounts, dropdowns, budgets or transactions requests a Backup. Screens never schedule sync work. All work is queued through `SyncScheduler`. `SyncWorker` sends pending Transaction changes. It's queued with `APPEND_OR_REPLACE`, so a running Sync is never cancelled, and it retries with exponential backoff.
+- `BackupWorker` replaces the Sheet's accounts, dropdowns, budgets and bucket-budget tabs (cycles, buckets and category routing). It runs as a separate, delayed job, so a failing Backup can't hold Transactions back. Before a phone's first Backup, `SheetListsMerger` adds the Sheet's accounts, dropdowns and budgets that the phone lacks (matched by name), and takes in the Sheet's salary cycles if it has none, so a fresh install's defaults can never replace the Sheet's real lists.
+- Sync is safe to repeat (ADR-0003). A Transaction's Remote timestamp is saved in Room before its first request, every insert/update is sent as the script's overwrite-or-append `update`, and a Transaction is only marked synced if its `localVersion` (raised by a SQLite trigger on every change) hasn't moved since Sync read it.
 
 ## 3. Navigation Architecture
 
@@ -117,32 +117,28 @@ sequenceDiagram
     LogVM->>Repo: save/update(record, isSynced=false, syncAction=INSERT|UPDATE)
     Repo->>Room: insert/update
     Room-->>LogVM: local write complete
-    LogVM->>WM: enqueue unique SyncWorker
+    Room-->>WM: SyncTriggers sees the unsynced row → SyncScheduler.requestSync() (APPEND_OR_REPLACE; a delayed BackupWorker too)
 
     WM->>Worker: run doWork()
-    Worker->>Repo: getUnsynced()
-    Repo-->>Worker: unsynced records
+    Worker->>Room: save a unique Remote timestamp on pending rows that lack one
+    Worker->>Room: read pending rows (with localVersion)
 
-    alt INSERT/UPDATE exists
-        Worker->>API: syncRecords(action, records)
+    alt INSERT/UPDATE exists (batches of 20)
+        Worker->>API: syncRecords(update, records)
         API->>GAS: POST
-        GAS->>Sheet: append/update rows
+        GAS->>Sheet: overwrite row with that timestamp, or append
         GAS-->>API: ok
         API-->>Worker: ok
-        Worker->>Repo: markSynced(ids)
+        Worker->>Room: markSyncedIfUnchanged(id, localVersion)
     end
 
     alt DELETE exists
         Worker->>API: syncRecords(delete, targetTimestamp)
         API->>GAS: POST delete
         GAS->>Sheet: delete row by timestamp
-        GAS-->>API: ok/not found
-        Worker->>Repo: hardDeleteById(id)
+        GAS-->>API: ok (count 0 = already gone)
+        Worker->>Room: deleteSyncedDeleteIfUnchanged(id, localVersion)
     end
-
-    Worker->>API: backup dropdowns
-    Worker->>API: backup budgets
-    Worker->>API: backup bucket_budgets
 ```
 
 ## 5. Import Flows
@@ -352,5 +348,5 @@ graph TD
 ## 9. Operational Notes
 
 - The app is intentionally resilient to intermittent connectivity due to local-first persistence + queued sync.
-- Remote endpoint changes (Apps Script redeploy) require local `APPS_SCRIPT_URL` update.
+- Remote endpoint changes (Apps Script redeploy) require pasting the new URL into Database Setup (Sheets).
 - Sync includes not only transactions but also dropdown and budget backup to support restore scenarios.

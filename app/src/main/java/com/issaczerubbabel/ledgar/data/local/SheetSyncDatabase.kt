@@ -25,7 +25,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
         BudgetBucket::class,
         BucketCategory::class
     ],
-    version = 17,
+    version = 18,
     exportSchema = false
 )
 abstract class SheetSyncDatabase : RoomDatabase() {

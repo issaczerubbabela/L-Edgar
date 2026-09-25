@@ -17,7 +17,7 @@ SheetSync (package `com.issaczerubbabel.ledgar`) is an offline-first Android exp
 ### First-time setup required before building
 
 1. Copy `local.properties.example` to `local.properties` and set `sdk.dir`.
-2. Set `APPS_SCRIPT_URL` in `local.properties` to a deployed Google Apps Script web app URL (built from `scripts/AppsScript.gs`, deployed as web app, execute as Me, access Anyone). This value is injected into `BuildConfig.APPS_SCRIPT_URL` in `app/build.gradle.kts`. Without it, sync/import features fail but the app still builds.
+2. The app syncs to the Apps Script URL entered in its Database Setup screen (deploy `scripts/AppsScript.gs` as a web app, execute as Me, access Anyone). The debug build installs as `com.issaczerubbabel.ledgar.debug` ("L.Edgar (Debug)") next to the release app, and falls back to `APPS_SCRIPT_URL_DEBUG` from `local.properties` (injected as `BuildConfig.DEFAULT_SCRIPT_URL`) so development can use a test Sheet.
 3. JDK 17 required (`gradle/gradle-daemon-jvm.properties` pins toolchain vendor `oracle` / version 17).
 
 ## Architecture
@@ -30,7 +30,7 @@ Source root: `app/src/main/java/com/issaczerubbabel/ledgar/`
 - `data/remote` — Retrofit `ApiService` / DTOs for the Apps Script endpoint.
 - `data/repository` — Repository interfaces + impls; ViewModels talk only to repositories, never DAOs or Retrofit directly.
 - `data/preferences` — DataStore-backed preferences (theme, etc).
-- `sync` — WorkManager `SyncWorker` (Hilt-injected).
+- `sync` — `SyncTriggers` (started in `SheetSyncApp`; watches Room and decides when to sync/back up), `SyncScheduler` (the only place work is queued), `SyncWorker` + `TransactionSyncer` (Transactions), `BackupWorker` (accounts, dropdowns, budgets).
 - `di` — Hilt modules.
 - `ui/screens`, `ui/components`, `ui/navigation`, `ui/theme` — Compose screens and navigation graph.
 - `viewmodel` — StateFlow-based ViewModels per feature.
@@ -38,7 +38,7 @@ Source root: `app/src/main/java/com/issaczerubbabel/ledgar/`
 
 ### Data flow
 
-UI (Compose) → ViewModel (StateFlow) → Repository → Room (instant local write, marks `isSynced=false`) → ViewModel enqueues unique `SyncWorker` via WorkManager → `SyncWorker` reads unsynced records → Retrofit `ApiService` → Apps Script web app → Google Sheet. Deletes are soft (`syncAction=DELETE`) until the remote delete succeeds, then hard-deleted locally. Sync also backs up dropdown options and budgets on every run, which supports Sheets-based restore/import.
+UI (Compose) → ViewModel (StateFlow) → Repository → Room (instant local write, marks `isSynced=false`) → `SyncTriggers` sees the unsynced row and calls `SyncScheduler.requestSync()` (ViewModels never schedule sync work themselves) → `SyncWorker` reads unsynced records → Retrofit `ApiService` → Apps Script web app → Google Sheet. Never enqueue `SyncWorker` with `REPLACE` (it cancels a Sync mid-request) or write a synced flag unconditionally: settle rows with `markSyncedIfUnchanged`, which checks the trigger-maintained `localVersion` (see ADR-0003). Deletes are soft (`syncAction=DELETE`) until the remote delete succeeds, then hard-deleted locally. Any change to accounts, dropdown options, budgets or transactions also makes `SyncTriggers` schedule a delayed `BackupWorker` that backs those lists up, which supports Sheets-based restore/import.
 
 ### Room model
 

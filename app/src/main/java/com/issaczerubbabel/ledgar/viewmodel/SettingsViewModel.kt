@@ -7,13 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.Constraints
-import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.workDataOf
 import androidx.work.WorkInfo
-import androidx.work.WorkManager
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.preferences.AppLockAuthMode
 import com.issaczerubbabel.ledgar.data.preferences.CashFlowChartStyle
@@ -21,7 +15,8 @@ import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
 import com.issaczerubbabel.ledgar.data.remote.ApiService
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
 import com.issaczerubbabel.ledgar.data.repository.SyncConflict
-import com.issaczerubbabel.ledgar.sync.SyncWorker
+import com.issaczerubbabel.ledgar.sync.BackupWorker
+import com.issaczerubbabel.ledgar.sync.SyncScheduler
 import com.issaczerubbabel.ledgar.ui.theme.AppThemeOption
 import com.issaczerubbabel.ledgar.util.CsvParser
 import com.issaczerubbabel.ledgar.util.normalizeTimestampKey
@@ -70,7 +65,7 @@ class SettingsViewModel @Inject constructor(
     private val repository: ExpenseRepository,
     private val themeRepository: ThemePreferenceRepository,
     private val apiService: ApiService,
-    private val workManager: WorkManager
+    private val syncScheduler: SyncScheduler
 ) : ViewModel() {
 
     init {
@@ -227,18 +222,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _backupState.value = ImportState.Loading
             backupRequestedFromSettings = true
-
-            val request = OneTimeWorkRequestBuilder<SyncWorker>()
-                .setConstraints(
-                    Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.CONNECTED)
-                        .build()
-                )
-                .setInputData(workDataOf(SyncWorker.KEY_BACKUP_ONLY to true))
-                .addTag(SyncWorker.TAG)
-                .build()
-
-            workManager.enqueueUniqueWork(SyncWorker.TAG, ExistingWorkPolicy.REPLACE, request)
+            syncScheduler.backupNow()
             _uiEvents.emit(SettingsUiEvent.ShowMessage("Backup started. Syncing accounts, budgets, and dropdown options to Google Sheets."))
         }
     }
@@ -418,7 +402,7 @@ class SettingsViewModel @Inject constructor(
 
     private fun observeBackupStatus() {
         viewModelScope.launch {
-            workManager.getWorkInfosForUniqueWorkFlow(SyncWorker.TAG).collect { infos ->
+            syncScheduler.backupWorkInfos.collect { infos ->
                 if (!backupRequestedFromSettings) return@collect
 
                 val latest = infos.firstOrNull() ?: return@collect
@@ -430,13 +414,13 @@ class SettingsViewModel @Inject constructor(
                     }
 
                     WorkInfo.State.SUCCEEDED -> {
-                        val dropdownCount = latest.outputData.getInt(SyncWorker.KEY_DROPDOWN_BACKUP_COUNT, 0)
-                        val budgetCount = latest.outputData.getInt(SyncWorker.KEY_BUDGET_BACKUP_COUNT, 0)
-                        val accountCount = latest.outputData.getInt(SyncWorker.KEY_ACCOUNTS_BACKUP_COUNT, 0)
-                        val bucketCount = latest.outputData.getInt(SyncWorker.KEY_BUCKET_BACKUP_COUNT, 0)
+                        val dropdownCount = latest.outputData.getInt(BackupWorker.KEY_DROPDOWN_BACKUP_COUNT, 0)
+                        val budgetCount = latest.outputData.getInt(BackupWorker.KEY_BUDGET_BACKUP_COUNT, 0)
+                        val accountCount = latest.outputData.getInt(BackupWorker.KEY_ACCOUNTS_BACKUP_COUNT, 0)
+                        val bucketCount = latest.outputData.getInt(BackupWorker.KEY_BUCKET_BACKUP_COUNT, 0)
                         val total = (dropdownCount + budgetCount + accountCount + bucketCount.coerceAtLeast(0)).coerceAtLeast(0)
                         _backupState.value = ImportState.Success(imported = total, skipped = 0)
-                        if (bucketCount == SyncWorker.SCRIPT_OUTDATED) {
+                        if (bucketCount == BackupWorker.SCRIPT_OUTDATED) {
                             _uiEvents.emit(SettingsUiEvent.ShowMessage(BUCKET_SCRIPT_OUTDATED_MESSAGE))
                         }
                         backupRequestedFromSettings = false
@@ -444,7 +428,7 @@ class SettingsViewModel @Inject constructor(
 
                     WorkInfo.State.FAILED,
                     WorkInfo.State.CANCELLED -> {
-                        val reason = latest.outputData.getString(SyncWorker.KEY_ERROR_MESSAGE)
+                        val reason = latest.outputData.getString(BackupWorker.KEY_ERROR_MESSAGE)
                             ?: "Backup failed"
                         _backupState.value = ImportState.Error(reason)
                         _uiEvents.emit(SettingsUiEvent.ShowMessage(reason))
