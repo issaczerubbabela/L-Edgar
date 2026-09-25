@@ -29,7 +29,7 @@ import androidx.room.PrimaryKey
             onDelete = ForeignKey.SET_NULL
         )
     ],
-    indices = [Index("accountId"), Index("fromAccountId"), Index("toAccountId")]
+    indices = [Index("accountId"), Index("fromAccountId"), Index("toAccountId"), Index(value = ["syncId"], unique = true)]
 )
 data class ExpenseRecord(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -49,8 +49,14 @@ data class ExpenseRecord(
     val isSynced: Boolean = false,
     val remoteTimestamp: String? = null,
     val syncAction: String = "INSERT",
-    /** Raised by the [ExpenseVersionTrigger] on every change; Sync only settles a row whose version it sent. */
-    @ColumnInfo(defaultValue = "0") val localVersion: Long = 0
+    /** Raised by the [ExpenseTableTriggers] on every change; Sync only settles a row whose version it sent. */
+    @ColumnInfo(defaultValue = "0") val localVersion: Long = 0,
+    /** The Transaction ID shared with the Sheet's ID column. Null only until Sync links an older row. */
+    val syncId: String? = null,
+    /** The Sheet row's revision when both sides last agreed: the base for merging. */
+    val syncedRevision: String? = null,
+    /** The Sheet's version as JSON while this Transaction is in a Sync conflict; null otherwise. */
+    val sheetConflictJson: String? = null
 ) {
     @Ignore
     val paymentMode: String = ""

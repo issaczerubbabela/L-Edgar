@@ -296,9 +296,14 @@ private fun SyncStatusIndicator(status: SyncStatus, onRetry: () -> Unit) {
             MaterialTheme.colorScheme.errorContainer,
             MaterialTheme.colorScheme.onErrorContainer
         )
+        SyncStatus.NeedsScriptUpdate -> Triple(
+            "Update script",
+            MaterialTheme.colorScheme.errorContainer,
+            MaterialTheme.colorScheme.onErrorContainer
+        )
     }
 
-    val isRetryEnabled = status == SyncStatus.Failed
+    val isRetryEnabled = status == SyncStatus.Failed || status == SyncStatus.NeedsScriptUpdate
 
     SuggestionChip(
         onClick = onRetry,

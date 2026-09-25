@@ -97,6 +97,8 @@ function loadScript(source) {
     },
     SpreadsheetApp: { getActiveSpreadsheet: () => spreadsheet },
     Session: { getScriptTimeZone: () => "UTC" },
+    // Every request runs under the script lock since script version 2.
+    LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
     Utilities: { formatDate: () => "9/24/2026 12:00:00" },
     Logger: { log() {} },
     console,
