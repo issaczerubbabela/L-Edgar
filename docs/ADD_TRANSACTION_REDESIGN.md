@@ -52,9 +52,9 @@ entry screen should feel, while keeping every field and validation rule the old 
 
 - **Validation** — same rules as before: Transfer needs From ≠ To, everything else needs
   category + account, amount must parse to > 0. The commit key just calls `vm.save()`.
-- **Sync model** — Room write first; syncing is triggered by the repository/`SyncScheduler`
-  change observers rather than by the ViewModels. The sync chip in the top bar shows
-  `SyncScheduler.transactionSyncStatus`.
+- **Sync model** — Room write first; the ViewModels never enqueue work themselves.
+  `sync/SyncTriggers` observes Room changes and calls `SyncScheduler.requestSync()`. The sync
+  chip in the top bar shows `SyncScheduler.transactionSyncStatus`.
 - **Edit mode** — pre-fills amount, chips, and date from the existing record; a trash icon
   appears next to the sync chip; `onSaved()` still only fires in edit mode (create mode shows
   a snackbar and stays on the screen, matching the pre-redesign behavior).

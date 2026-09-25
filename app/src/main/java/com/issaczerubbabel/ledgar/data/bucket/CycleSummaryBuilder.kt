@@ -97,6 +97,5 @@ object CycleSummaryBuilder {
     /** How a category is compared for routing and spend: ignoring case and surrounding space. */
     fun categoryKey(category: String): String = category.trim().lowercase()
 
-
     const val UNCATEGORISED = "Uncategorised"
 }
