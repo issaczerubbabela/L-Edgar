@@ -83,6 +83,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - versionCode is derived from versionName (major*10000 + minor*100 + patch)
 - Debug builds install next to the release app as L.Edgar (Debug) and can use a test Apps Script from APPS_SCRIPT_URL_DEBUG
 - Android CI also builds claude/** branches, with an Oracle JDK to match the pinned toolchain
+- /daily-idea and /daily-ship Claude Code commands: research and file one improvement issue a day, and ship one issue as a pull request a day
 
 ## [1.0.2] - 2026-04-10
 
