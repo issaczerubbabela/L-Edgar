@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.ui.navigation
 
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
@@ -16,13 +17,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.AddCircle
-import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -73,7 +73,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
         "Log",
         Icons.Filled.AddCircle
     )
-    object Trans : Screen("trans", "Trans.", Icons.Filled.MenuBook)
+    object Trans : Screen("trans", "Trans.", Icons.AutoMirrored.Filled.MenuBook)
     object Search : Screen("search", "Search", Icons.Filled.MoreHoriz)
     object FilterSelection : Screen("filter_selection", "Filter", Icons.Filled.Tune)
     object FilteredTransactions : Screen(
@@ -578,7 +578,12 @@ fun AppNavigation() {
                     }
                 )
             }
-            composable(Screen.Stats.route) { InsightsScreen(innerPadding) }
+            composable(Screen.Stats.route) {
+                InsightsScreen(
+                    innerPadding = innerPadding,
+                    onSetUpCycle = { navController.navigate(Screen.StartCycle.route) { launchSingleTop = true } }
+                )
+            }
             composable(Screen.Budget.route) {
                 BudgetHomeScreen(
                     innerPadding = innerPadding,

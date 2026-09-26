@@ -1,308 +1,232 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
+/**
+ * One release, in Keep a Changelog sections. The in-app changelog shows [added], [changed] and
+ * [fixed]; [developer] notes only appear in CHANGELOG.md. ChangelogMarkdownTest keeps CHANGELOG.md
+ * in step with this list, and the release workflow publishes that file's section as release notes.
+ */
 data class ChangelogRelease(
     val version: String,
     val date: String,
-    val features: List<String>,
-    val fixes: List<String>,
-    val qol: List<String>
+    val added: List<String> = emptyList(),
+    val changed: List<String> = emptyList(),
+    val fixed: List<String> = emptyList(),
+    val developer: List<String> = emptyList()
 )
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
-        version = "v1.0.3",
-        date = "2026-04-18",
-        features = listOf(
-            "Insights screen now supports flexible period scopes (Weekly, Monthly, Yearly, Select Period) with period navigation and custom date-range selection",
-            "Expense Breakdown now includes tabbed Expense and Income category views with the same interactive donut experience",
-            "Cash Flow now supports category filtering with an explicit All Categories option and time bucketing controls for Daily, Weekly, Monthly, and Yearly views",
-            "Account Balance As-Of now supports precise timestamp values with a Set to Now shortcut in add/edit account flows",
-            "Added advanced Sheets sync conflict resolution UI",
-            "Salary-cycle bucket budgeting data layer: new budget_cycles, budget_buckets and bucket_categories tables, with a unique (cycle, category) constraint so a category can belong to only one bucket and bucket totals always reconcile",
-            "Existing per-category budgets are carried into the new bucket model on upgrade: the most recent budgeted month becomes the first running cycle, with each category budget as its own bucket",
-            "Salary-cycle engine: starting a new cycle atomically closes the running one, opens the next and can carry the buckets and category routing across; a late start stretches the old cycle over the gap it was absorbing and a backdated start trims it, so spend from the real payday moves into the new cycle",
-            "New Budget tab in the bottom bar (Trans., Stats, Budget, Accounts, More): the salary cycle as a ribbon with today marked, the amount left to spend, daily pace, what is unallocated, and each bucket as a bar with a tick for where an even pace would be, so a bar reads as ahead or behind rather than just full or empty. Overspent buckets are striped and flagged with an icon and words, not colour alone",
-            "Start new cycle screen: pick payday and the end date by hand, prefill the spendable amount from the last cycle, accept a detected salary with one tap, and choose whether to carry over your buckets. Starting a cycle in the past or after payday closes the old one cleanly, and mistakes are explained on the field that caused them",
-            "Plan your buckets screen: an always-visible Unallocated figure that turns red when you over-allocate without ever blocking a save, plus steppers and typed amounts for each bucket, an editable spendable amount, and new buckets",
-            "Bucket detail and editor: see where a bucket's money went by category, and edit its name, note, emoji, colour, allocation and categories. Choosing a category held by another bucket moves it, so a category is only ever in one bucket",
-            "Browse past cycles from the Budget header. Closed cycles keep their frozen numbers and cannot be edited",
-            "Salary cycles, buckets and their categories are now backed up to your Google Sheet on every sync (new _cycles, _buckets and _bucket_categories tabs) and restored on import, so a new phone or a reinstall brings your budgeting back. The Apps Script has to be redeployed once from Database Setup for this to start",
-            "Restoring an old backup that has monthly budgets but no buckets on a device with no cycles now carries those budgets across as a starting cycle, the same way an app upgrade does",
-            "Add Transaction redesigned around a custom numeric keypad: a dominant amount display, tappable chips for category/account/note that open bottom sheets, and a date pill, replacing the stacked text-field form",
-            "Category and account chips on the Add Transaction screen now open a searchable picker sheet with an inline + Add option for creating a new category without leaving the screen",
-            "Quick Add (widget, Quick Settings tile, app shortcut) now shares the same keypad and category-picker sheet as the full Add Transaction screen",
-            "Add Transaction and Quick Add now show which bucket the chosen category falls in, with what is left of it after the amount you are typing, as a pace bar under the date. It turns red and striped if the amount would overspend the bucket, and hides for income, transfers, categories with no bucket and dates before the running cycle"
+        version = "v1.1.0",
+        date = "2026-09-26",
+        added = listOf(
+            "Stats: a redesigned tab. Pick Cycle, Week, Month or Year, tap the dates to jump to a date or a custom range, or swipe the date strip to move between periods",
+            "Stats: the first card shows Left to spend in a salary cycle (the same figure as the Budget tab), or Left over with a bar showing where your income went",
+            "Stats: a spending pace chart against the same point last period and your budget, with where you're heading. Press and drag to read any day",
+            "Stats: Where it went ranks your categories against what each usually costs. In Cycle view it shows your buckets against their limits",
+            "Stats: a daily spending calendar, Paid from (cash and bank against cards), period-by-period bars of spent, saved and earned, and your biggest expenses",
+            "Stats: tap a category or bucket and it opens into a sheet with its total, usual cost, daily average, trend and transactions",
+            "Chart colours setting: choose from five palettes for the Stats charts. All but Classic green and red stay readable with red-green colour blindness",
+            "Categories and account groups can count as saving, refund or savings in Stats (Manage Categories & Dropdowns). Money you save no longer counts as spending, and refunds reduce spending instead of counting as income",
+            "Budget tab: salary-cycle budgeting with buckets. See what's left to spend, your daily pace, and each bucket against an even pace",
+            "Budget: start a new cycle (it can spot your salary and carry your buckets over), plan your buckets, edit a bucket and its categories, and browse past cycles",
+            "Budget: salary cycles and buckets are backed up to your Google Sheet and come back when you import",
+            "Add Transaction: a new keypad layout with chips for category, account and note, and a searchable category picker that can add a new category on the spot",
+            "Add Transaction and Quick Add show which bucket the category falls in and what's left of it as you type",
+            "Sheets sync: a screen to resolve conflicts between the phone and the Sheet",
+            "Accounts: set the exact time a starting balance applies from, with a Set to now shortcut",
+            "Two-way sync with Google Sheets: edits and rows typed into the Sheet come to the phone when you open the app or tap Sync now",
+            "Every transaction has a permanent ID shared with a new ID column in the Sheet, so syncing again or reinstalling never duplicates rows",
+            "A transaction changed both on the phone and in the Sheet becomes a conflict for you to resolve in Settings, instead of one side silently winning",
+            "Settings: Sync now, Resolve sync conflicts, and Find duplicate transactions",
+            "Deleting many rows in the Sheet at once asks before removing them from the phone, and lets you put them back"
         ),
-        fixes = listOf(
-            "Cash Flow chart now refreshes plotted series correctly when switching top period months, preventing stale bars/lines and stale Y-axis scale carryover",
-            "Cash Flow income visibility improved by switching bar mode to grouped columns and hardening transaction type matching for imported data with extra whitespace",
-            "Cash Flow marker tooltip now prioritizes spent amount first, followed by income and guide-line values for clearer per-bucket amount reading",
-            "Cash Flow marker content now includes Income, Expense, Avg/day, and Max/day values for each highlighted bucket",
-            "Account balance math now compares transaction timestamps against precise As-Of values, including same-day hour/minute boundaries",
-            "Quick Settings quick-add now runs in an isolated transient task, so dismissing the sheet no longer reveals the main app behind it",
-            "Removed legacy duplicate-skip resolution plumbing and standardized Sheets conflict handling on timestamp-based conflict flow",
-            "Fixed Google Sheets import crash by removing non-unique conflict list keys so the Conflict Resolution sheet opens reliably",
-            "Fixed duplicate rows in Google Sheets: a retried or restarted sync now overwrites its own row instead of appending a copy",
-            "Saving several transactions quickly no longer cancels the sync already in progress, and a replaced sync no longer shows as Sync failed",
-            "Edits, deletes and bookmark changes made while a sync is running are no longer lost or undone",
-            "Account, dropdown and budget backups now run separately and can no longer stop transactions from syncing",
-            "Quick log entries, bookmark changes and History bulk edits now sync straight away",
-            "Permanently deleting an account with its transactions now removes them from Google Sheets too, so an import no longer brings them back",
-            "Deleting a transaction that is already gone from the Sheet no longer leaves sync stuck retrying",
-            "Saving a budget no longer interrupts a sync in progress, and budget and dropdown changes are now backed up automatically",
-            "Changes that hadn't synced when the app was closed now sync as soon as it starts again",
-            "A fresh install no longer overwrites the Sheet's accounts, categories and budgets with its defaults: the first backup adds the Sheet's lists to the phone before writing",
-            "Accounts transfer total now counts transactions whose type is Transfer, instead of any transaction with the word \"transfer\" in its category or description, which both missed real transfers and counted unrelated expenses",
-            "Export dialog no longer shows its date-format hint in the error colour before anything has been typed; it only turns red once an entered range is actually invalid",
-            "Fixed the Trans. tab pager getting stuck between pages after tapping a distant tab (for example Daily to Total): the pager's intermediate pages were being written back into the selected tab, which cancelled the scroll animation part-way",
-            "Accounts card: card and cash spending is now split by the group of the account each expense was paid from (Card, Debit Card, Cash and so on). It previously read a payment-mode field the app never saves, so the card total was always zero and every expense counted as cash",
-            "The date picker on Insights now opens on the day you already selected. It was converting the initial date in the device time zone while the picker works in UTC, so in time zones ahead of UTC it highlighted the previous day",
-            "The Apps Script in the repo and the copy shown in Database Setup were missing changes that only existed in a deployed script: the Description column header upgrade, the description_repair action and a manual repair helper. Anyone redeploying from either copy would have lost description support. Both now match the deployed script, plus the bucket-budget backup",
-            "Bucket names on the Budget home and Plan screens now wrap instead of being cut off, and the amount on each bucket row sits flush at the right edge. Previously a long name left its amount a different distance from the edge on every row",
-            "Add Transaction: choosing an account when two accounts share a name now saves the one you tapped, not the first with that name",
-            "Add Transaction: creating a category inline and then switching between Expense and Income before it finished no longer selects it under the wrong type"
+        changed = listOf(
+            "Stats: new periods slide in from the side you moved towards, views fade through, numbers count to their new value and charts move smoothly. All of it turns off with Android's animations",
+            "Stats: the header shrinks into a slim bar as you scroll, so lower cards always show which period they're for",
+            "Quick Add uses the same keypad and category picker as Add Transaction, with the keypad at the bottom, and the Quick Settings tile stays in quick entry",
+            "Add Transaction keys and chips animate when pressed, and the amount pulses when a transaction is saved",
+            "Export moved to Settings, under Import from CSV. It's now called Export to CSV, has its own month picker, and names the file after its date range",
+            "The Total tab is gone: the Budget tab replaces it",
+            "Database Setup: one-tap Paste for the web app URL",
+            "Rupee amounts use Indian digit grouping (₹1,20,000), with digits that line up as they change",
+            "The Cash Flow Graph setting (bars or lines) is replaced by Chart colours",
+            "Rebuilt on Kotlin 2.3 and Compose 1.11 with Material 3 1.4, for smoother screens",
+            "On a fresh install, transactions pulled from the Sheet land on your restored accounts instead of a placeholder Cash account",
+            "Sync pauses with an Update script notice when your Apps Script is too old, instead of writing to it unsafely",
+            "Update your Apps Script from Database Setup after installing: two-way sync needs it, and it backs up buckets and category roles"
         ),
-        qol = listOf(
-            "Added /daily-idea and /daily-ship Claude Code commands (run with /loop 1d) that research and file one improvement issue a day and ship one issue as a pull request a day",
-            "Quick Settings tile click now stays in quick-entry flow and updates tile state without opening the main app tabs",
-            "Add Transaction keypad keys now morph their corner radius on press for tactile feedback, the commit key fades smoothly between its enabled/disabled colors, the amount pulses briefly on a successful save, and the category/account chip row and the picker sheet's search-to-add-option swap now animate instead of snapping",
-            "Quick Add now lays out like Add Transaction, with the amount, category chip and keypad pinned to the bottom of the sheet instead of the keypad floating near the top",
-            "Apps Script setup URL field now has a one-tap Paste action with clipboard fill and immediate keyboard hide",
-            "Insights breakdown tabs now restore the selected-tab accent underline while keeping the gray card-matched background",
-            "Insights cash-flow card now shows a small Graph mode hint (Bars/Lines) under the controls",
-            "More tab Appearance now includes a Cash Flow Graph style selector with Bars and Lines options",
-            "Breakdown tab indicator contrast improved on the gray card-matched tab row background",
-            "Monthly cash-flow granularity now shows all available months instead of being constrained by the selected top-month period",
-            "Insights breakdown tab selector now uses a card-matching gray surface instead of a dark background",
-            "Cash Flow chart now renders thicker stacked bars and overlays average-per-day plus budget-aware max-per-day guide lines",
-            "Insights card visuals refined: removed redundant chart titles, aligned chart background with card surface, simplified daily x-axis labels, and removed chart grid guidelines",
-            "Added .tmp and .tmp_vico_src to gitignore for local artifact cleanup",
-            "Conflict resolution now emits per-action audit snackbars with exact resolved and remaining counts",
-            "Added developer docs: a CONTEXT.md glossary of app terms, architecture decision records (including the sync design), and issue-tracker notes for coding agents",
-            "Debug builds now install as a separate \"L.Edgar (Debug)\" app next to the release app, and can default to a test Apps Script from APPS_SCRIPT_URL_DEBUG",
-            "Database upgrade to v17 keeps the old budgets table and its Sheets backup untouched, so existing backups still restore and there is a rollback path; the upgrade was verified against a real device database",
-            "Cycle summaries derive spent, remaining, daily pace, overdue days and unbucketed spend from the expense ledger rather than storing them, so moving a category or backdating a cycle can never leave stale totals",
-            "Added on-device instrumented tests that exercise the cycle transaction against a real in-memory Room database, run with am instrument so they never touch app data",
-            "Total tab removed from the Trans. pager (Daily, Calendar and Monthly remain): its budget section is replaced by the Budget tab, and the old budget-setting screen that only it linked to is gone. The legacy budgets table and its Sheets backup are kept untouched for restores",
-            "Budget tab stays highlighted while you are on its sub-screens (Start cycle, Plan buckets, bucket detail)",
-            "If your Apps Script has not been redeployed, syncing keeps working and Settings and the Log screen tell you that buckets were not backed up and how to fix it. Cycles are sent in a separate field so an older script cannot mistake them for transactions and add junk rows to your transaction sheet",
-            "Sheet dates and free text are written as plain text, so cycle dates stay dates and a note or category beginning with = is never run as a formula",
-            "Amount and name dialogs in Plan buckets open with the field focused and ready to type, and a zero amount starts blank instead of with a stray 0",
-            "Rupee amounts on the Budget screens use Indian digit grouping (₹1,20,000) and tabular digits so figures line up as they change",
-            "Export moved out of the Total tab into Settings, directly below Import from CSV, so every data import and export action now lives in one place",
-            "Export renamed from \"Export data to Excel\" to \"Export to CSV\" to match the file it actually produces, replacing the stale \"Money Manager - Excel\" dialog title",
-            "Export dialog now has its own month picker, so any past month can be exported without leaving Settings, and each interval option is labelled with the exact range it will produce (Sep 2026, Jul – Sep 2026, 2026, 2025) instead of a generic name",
-            "Exported file is now named for the range it contains, for example sheetsync_export_20260901_to_20260930.csv",
-            "Accounts summary (cash, card and transfer totals) moved out of the Total tab into Insights, where it now follows the selected period scope instead of being pinned to the current month",
-            "Accounts comparison now reads as a signed change against the immediately preceding period of the same length, with a trend arrow alongside the figure, and says \"No earlier data\" when there is nothing to compare against rather than showing a meaningless 100%",
-            "Total tab now shows only the Budget section, clearing the way for the salary-cycle bucket rebuild",
-            "Android CI workflow now also builds claude/** branches on push, so feature work is compiled before it reaches a pull request, and installs an Oracle JDK to match the toolchain vendor pinned in gradle-daemon-jvm.properties",
-            "Export dialog now uses real radio buttons with 48dp touch targets, inline date validation with an example format, and an Export action that stays disabled until a custom range is valid",
-            "Export result is now reported through the Settings snackbar with the exported transaction count instead of an inline status line",
-            "Added developer docs: a CONTEXT.md glossary of app terms, architecture decision records, and issue-tracker notes for coding agents"
+        fixed = listOf(
+            "Stats: \"Spent vs last period\" compares the same days of each period. A flat month used to show +58% because the 1st's rent was skipped",
+            "Stats: charts are drawn to scale, days with no spending are no longer skipped, and a year is drawn by month instead of hundreds of daily bars",
+            "Stats: the budget line comes from your salary cycles instead of sitting at ₹0, and category colours no longer repeat",
+            "Stats: card and cash spending are split correctly (card was always ₹0), and the transfer total counts only transfers",
+            "Sync: a retried sync no longer adds duplicate rows to your Sheet",
+            "Sync: edits, deletes and bookmarks made during a sync are no longer lost, and saving quickly no longer cancels a sync or shows Sync failed",
+            "Sync: backups can no longer hold up transactions, and quick log entries, bookmarks and bulk edits sync straight away",
+            "Sync: changes that hadn't synced when the app closed now sync when it opens again",
+            "Sync: deleting an account with its transactions removes them from the Sheet too, and deleting something already gone from the Sheet no longer gets stuck",
+            "A fresh install no longer overwrites your Sheet's accounts, categories and budgets with its defaults",
+            "Importing from Sheets no longer crashes when opening conflict resolution",
+            "Account balances respect the exact time a starting balance applies from",
+            "Dismissing the Quick Settings quick add no longer reveals the app behind it",
+            "The Trans. tab no longer gets stuck between pages after a long tab jump",
+            "The date picker opens on the selected day in time zones ahead of UTC",
+            "Add Transaction: picking between two accounts with the same name saves the one you tapped, and a new category keeps the right type",
+            "Long bucket names wrap, and bucket amounts line up",
+            "Export no longer shows its date hint in red before you type anything",
+            "The Apps Script shown in Database Setup includes description support again"
+        ),
+        developer = listOf(
+            "Stats numbers come from one pure, tested StatsReport module; StatsPeriod owns period stepping",
+            "Two-way sync (ADR-0003): Transaction IDs, idempotent locked upserts in the Apps Script, version-checked pulls and a script version handshake, with transaction-sync node tests",
+            "Room migrations 18 -> 19 (sync IDs, synced revisions, sheet conflicts) and 19 -> 20 (dropdown roles, tolerant of builds that added the column earlier)",
+            "CONTEXT.md glossary and ADRs 0001-0004 (offline-first writes, per-user Apps Script, two-way sync by Transaction ID, Stats roles)",
+            "Bucket-budget tables with migration tests; the legacy budgets table is kept for restores",
+            "Instrumented cycle tests on a real in-memory Room database; Apps Script node tests cover both script copies and fail if they drift",
+            "Toolchain: Kotlin 2.3.21 with the Compose compiler plugin, Compose BOM 2026.06.01, Room 2.8.5, Hilt 2.57.2, KSP 2.3.12; all deprecations cleared",
+            "New Release workflow: pushing a vX.Y.Z tag publishes a signed APK and this changelog section as a GitHub Release",
+            "New staging build type: the release build with R8, installed as .staging and signed with the debug key, for testing shrunk builds",
+            "versionCode is derived from versionName (major*10000 + minor*100 + patch)",
+            "Debug builds install next to the release app as L.Edgar (Debug) and can use a test Apps Script from APPS_SCRIPT_URL_DEBUG",
+            "Android CI also builds claude/** branches, with an Oracle JDK to match the pinned toolchain",
+            "/daily-idea and /daily-ship Claude Code commands: research and file one improvement issue a day, and ship one issue as a pull request a day"
         )
     ),
     ChangelogRelease(
         version = "v1.0.2",
         date = "2026-04-10",
-        features = listOf(
-            "In-app changelog screen wired into Settings with dedicated navigation route",
-            "Apps Script setup screen now ships the latest backend script template including transaction schema v2",
-            "Transfer sync schema extended with explicit from/to account name support across app and Sheets",
-            "App now opens directly into Log Transaction for faster first-action entry",
-            "Settings now includes App Lock controls with unlock method selection and configurable re-lock timeout",
-            "Custom in-app PIN unlock added with secure hash and salt storage",
-            "Added one-time Apps Script endpoint action (target=transactions, action=migrate) to force historical transaction-sheet migration to v2 layout"
+        added = listOf(
+            "App Lock with a choice of unlock method and a re-lock timeout",
+            "A custom in-app PIN, stored as a salted hash",
+            "An in-app changelog in Settings",
+            "The app opens straight into Log Transaction",
+            "Transfers record their from and to account names in the Sheet",
+            "A one-time Apps Script action that moves old transaction rows to the new column layout"
         ),
-        fixes = listOf(
-            "Editing an existing account now preserves linked transaction account references so Account Details no longer goes blank after save",
-            "History transaction rows now hide non-applicable zero amount labels by type (Income/Expense/Transfer)",
-            "Accounts, History, and Bookmarks screens now collect ViewModel flows with collectAsStateWithLifecycle for lifecycle-safe reactive updates",
-            "Completed app-wide screen migration from collectAsState to collectAsStateWithLifecycle for consistent lifecycle-aware Flow collection",
-            "MainActivity, QuickLogActivity, and AppNavigation now also use collectAsStateWithLifecycle to align lifecycle-aware collection across app entry and navigation",
-            "Google Sheets transaction parser hardened for mixed legacy and v2 row formats",
-            "Added safe Apps Script migration helper for transaction columns (From/To Account Name)",
-            "Apps Script migration now auto-creates a timestamped backup sheet and rewrites transaction rows into canonical v2 columns to fix shifted From/To/Remarks/Synced/Bookmark data",
-            "Apps Script transaction fetch parser now defensively reads previously shifted rows and normalizes non-transfer account fields for stable Trans tab rendering",
-            "Google Sheets import now refreshes existing local records by remote timestamp so migrated account-name fields are reflected in Trans tab without duplicate inserts",
-            "Budget sync from Sheets now normalizes MonthYear values to yyyy-MM in Apps Script and app import, fixing dropped budget rows caused by JavaScript Date-string formats",
-            "Import from Sheets duplicate review now uses non-destructive skip decisions: checked rows are skipped from future imports while unchecked rows are kept for later review",
-            "Duplicate review now shows conflicting local-record details and adds Skip All / Clear controls for safer bulk decisions",
-            "Apps Script now stores duplicate skip decisions in a dedicated sheet and filters skipped timestamps during transaction fetch without deleting transaction history",
-            "Trans tab now shows transfer amounts on the right with a dedicated transfer color, distinct from income and expense",
-            "Transfer destination account name persistence fixed through Room, DTO mapping, and import/export flows",
-            "Budget import now normalizes legacy month formats to yyyy-MM to prevent missing restored budgets",
-            "Initial Log-screen exit now enforces configured lock method and keeps user on Log when authentication is cancelled",
-            "Added timeout-based re-lock on app foreground transitions after background inactivity",
-            "Back from locked Log screen now directly triggers system biometric or pattern unlock in system-capable modes",
-            "Fixed biometric prompt host mismatch so back-triggered system unlock now opens correctly on the Log screen",
-            "Fixed root Log back behavior so back no longer stalls on start destination and now proceeds into app entry flow",
-            "Root Log back and Enter App actions now always trigger configured auth when app lock is enabled",
-            "System auth failures now show specific diagnostics for missing lock, missing enrollment, and unsupported policy states",
-            "Root Log Enter App and back actions now always require system credential unlock before opening main tabs",
-            "Fixed app-lock toggle stability so enabling or disabling lock in Settings no longer crashes",
-            "Startup routing now respects lock state: Transactions opens first when lock is off; Log gate opens first when lock is on",
-            "Biometric unlock handoff now uses guarded navigation to prevent crash when transitioning from Log gate to Transactions",
-            "Sheets transaction import now reads both legacy 11-column and v2 13-column schemas correctly, preventing missing account labels in Trans tab",
-            "Trans tab account label rendering now falls back to imported account-name text when account ID resolution is unavailable",
-            "One-time transaction-sheet migration now backfills historical transfer rows into From/To Account Name using legacy Account Name splits"
+        changed = listOf(
+            "Clearer unlock choices when both system unlock and an app PIN are on",
+            "An Enter App button on the Log screen, with a smoother transition into the app",
+            "A shortcut from lock diagnostics to your phone's security settings",
+            "Turning App Lock on mid-session applies the next time you enter the app",
+            "Settings icons line up"
         ),
-        qol = listOf(
-            "Settings icon row alignment refined for cleaner visual consistency",
-            "Instruction policy now enforces changelog update on every change-producing prompt",
-            "Added workspace hook guard to block task completion when ChangelogData is not updated",
-            "Hook runner now uses Windows PowerShell executable to avoid pwsh-not-found failures on Windows",
-            "Log screen now starts non-critical sync status observation after first composition to protect cold-start responsiveness",
-            "Security unlock flow now offers clearer runtime choices when both system authentication and app PIN are enabled",
-            "Added Enter App button on Log screen bottom bar for root Log launch so users can enter main tabs directly",
-            "Enter App button repositioned above tab region and app-entry route transition now uses smoother fade-slide animation",
-            "Added one-tap deep link to system security settings from lock diagnostics dialog",
-            "Bottom tab bar now fades and slides with route transitions so content and tabs appear together when entering the app",
-            "Enabling app lock during an active session now applies on next app entry instead of forcing an immediate in-session redirect",
-            "Corrected pager-state call typo in History screen to restore clean Kotlin compilation",
-            "Google Apps Script deployment template is now aligned with runtime script for deterministic legacy/v2 transaction-row parsing"
+        fixed = listOf(
+            "Editing an account no longer blanks its Account Details",
+            "History hides zero amounts that don't apply to a transaction's type",
+            "Importing from Sheets reads both the old and new row layouts, keeps account names, and refreshes existing records without duplicating them",
+            "Budgets restore from Sheets whatever format their month was saved in",
+            "Duplicate review keeps unchecked rows for later and shows the local record it clashes with",
+            "Transfers show on the right in their own colour on the Trans. tab",
+            "App Lock: Back and Enter App always ask for your unlock method, biometric unlock opens reliably, and toggling the lock no longer crashes",
+            "Unlock failures explain whether the screen lock or fingerprint is missing"
+        ),
+        developer = listOf(
+            "All screens collect flows with collectAsStateWithLifecycle",
+            "The Apps Script migration backs up the sheet before rewriting rows",
+            "A hook blocks finishing a task without a changelog entry",
+            "The deployed Apps Script template matches the runtime script"
         )
     ),
     ChangelogRelease(
         version = "v1.0.1",
         date = "2026-04-10",
-        features = listOf(
-            "Responsive text sizing for History and Monthly screens to enhance readability across devices"
+        added = listOf(
+            "History and Monthly text scales with your screen size"
         ),
-        fixes = listOf(
-            "Improved category mapping logic to handle blank values",
-            "Fixed transfer categorization",
-            "Updated navigation logic to properly pop screen routes",
-            "Improved state management"
+        fixed = listOf(
+            "Blank categories are handled",
+            "Transfers are categorised correctly",
+            "Back navigation closes screens properly"
         ),
-        qol = listOf()
+        developer = listOf(
+            "State management tidied up"
+        )
     ),
     ChangelogRelease(
         version = "v1.0.0",
         date = "2026-04-08",
-        features = listOf(
-            "Transaction search with multiple filters and results display",
-            "Batch transaction editing (delete, update dates, categories, assets, descriptions)",
-            "Transaction bookmarking with UI integration",
-            "Account labels for transactions in History screen",
-            "Overall Account Stats screen with detailed analytics",
-            "Category-wise expense visualization with ExpenseDonutChart",
-            "6-month cash flow trend visualization with CashFlowBarChart",
-            "Vico Charting Library integration for professional visualizations",
-            "Interactive chart markers and enhanced formatting",
-            "Theme selection system with multiple color schemes",
-            "Red theme option for improved customization",
-            "Month and year selection in History",
-            "Show/hide functionality for hidden accounts",
-            "Account display order management",
-            "Enhanced account import functionality",
-            "Account balance calculations with running balance statements",
-            "Account deletion with linked transaction handling",
-            "Total Tab Screen with budget tracking",
-            "Budget progress rows with ideal-progress markers",
-            "Account summary dashboard",
-            "Per-category budget management",
-            "Budget import functionality",
-            "CSV data export capability"
+        added = listOf(
+            "Search transactions with filters",
+            "Bulk edit transactions: delete, or change dates, categories, accounts or descriptions",
+            "Bookmark transactions",
+            "Overall Account Stats with charts of spending by category and six months of cash flow",
+            "Themes, including a Red theme",
+            "Pick the month and year in History",
+            "Hide accounts and set their order",
+            "Account balances with running statements, and deleting an account with its transactions",
+            "Budgets per category, with progress against an ideal pace",
+            "Import accounts and budgets, and export to CSV"
         ),
-        fixes = listOf(
-            "Corrected regex patterns in timestamp normalization",
-            "Fixed accurate date parsing",
-            "Improved flexible date parsing with unit tests",
-            "Enhanced logging for unparseable dates"
+        changed = listOf(
+            "Long text no longer overflows",
+            "A tidier Account Detail screen",
+            "Transfers create a missing account automatically",
+            "Clearer snackbar messages"
         ),
-        qol = listOf(
-            "Improved text overflow handling across screens",
-            "Better AccountDetailScreen layout",
-            "Enhanced account management repository",
-            "Fallback account creation for transfers",
-            "Improved sync worker for account backup logic",
-            "Back navigation to LogScreen",
-            "Improved snackbar messaging"
+        fixed = listOf(
+            "Dates in every supported format are read correctly"
+        ),
+        developer = listOf(
+            "Vico charts",
+            "Date parsing unit tests and logging for dates that can't be read",
+            "Account backup in the sync worker"
         )
     ),
     ChangelogRelease(
-        version = "v0.3",
+        version = "v0.3.0",
         date = "2026-04-03",
-        features = listOf(
-            "Account backup functionality",
-            "Database schema update to version 10",
-            "AccountDao update method",
-            "Budget entity refactoring",
-            "Budget import functionality",
-            "Enhanced sync operations"
+        added = listOf(
+            "Accounts are backed up to your Sheet",
+            "Budgets can be imported"
         ),
-        fixes = listOf(),
-        qol = listOf(
-            "Reset default selected tab in History",
-            "Removed unused user adjustment logic in ViewModels",
-            "Enhanced QuickLogTileService with PendingIntent"
+        changed = listOf(
+            "History opens on its first tab",
+            "The Quick Log tile opens more reliably"
+        ),
+        developer = listOf(
+            "Database version 10; budget entity refactored"
         )
     ),
     ChangelogRelease(
         version = "v0.2.1",
         date = "2026-03-31",
-        features = listOf(
-            "Quick Log widget for instant expense entry",
-            "Quick Log tile service with UI integration",
-            "QuickLogActivity for dedicated logging interface",
-            "App shortcut for quick expense logging",
-            "Gradle Java toolchain configuration"
+        added = listOf(
+            "Quick Log: a home-screen widget, a Quick Settings tile and an app shortcut for logging an expense instantly"
         ),
-        fixes = listOf(),
-        qol = listOf()
+        developer = listOf(
+            "Gradle Java toolchain configured"
+        )
     ),
     ChangelogRelease(
-        version = "v0.2",
+        version = "v0.2.0",
         date = "2026-03-30",
-        features = listOf(
-            "Dropdown management with complete CRUD operations",
-            "Dropdown import functionality",
-            "Default dropdown seeding logic",
-            "Transaction CRUD operations",
-            "Remote record import with duplicate detection",
-            "Database version update to 8",
-            "Enhanced sync functionality with detailed response handling",
-            "UI status updates with sync status indicator",
-            "Retry functionality for failed syncs"
+        added = listOf(
+            "Manage categories and dropdowns, with sensible defaults and import from your Sheet",
+            "Import transactions from your Sheet, skipping duplicates",
+            "A sync status indicator with retry"
         ),
-        fixes = listOf(),
-        qol = listOf(
-            "Improved apps script URL handling in build configuration",
-            "Streamlined data comparison logic",
-            "Better error handling and recovery"
+        changed = listOf(
+            "Better error messages and recovery"
+        ),
+        developer = listOf(
+            "Database version 8; sync responses handled in detail"
         )
     ),
     ChangelogRelease(
         version = "v0.1.0",
         date = "2026-03-25",
-        features = listOf(
-            "Add, edit, and delete transactions",
-            "Support for Expense, Income, and Transfer types",
-            "Date picker and category selection",
-            "Transfer flow with From/To Account selection",
-            "Sync status indicator with manual retry",
-            "Multi-tab history experience (Daily, Calendar, Monthly, Total)",
-            "Insights screen with current month summary",
-            "Category-wise spend visualization",
-            "6-month expense trend analysis",
-            "Total budget management",
-            "Per-category budget configuration",
-            "Automatic 'Other' budget calculation",
-            "Dedicated Accounts tab with full management",
-            "Account grouping and organization",
-            "Monthly account detail screens",
-            "Running balance statements",
-            "In-app dropdown management (Categories, Account Groups, Payment Modes)",
-            "CSV parsing and export functionality",
-            "Google Sheets integration",
-            "Offline-first sync architecture"
+        added = listOf(
+            "Add, edit and delete expenses, income and transfers",
+            "History in Daily, Calendar, Monthly and Total views",
+            "Insights with this month's summary, spending by category and a six-month trend",
+            "Total and per-category budgets",
+            "An Accounts tab with groups, monthly details and running balances",
+            "Manage categories, account groups and payment modes in the app",
+            "Import and export CSV",
+            "Google Sheets sync that works offline first"
         ),
-        fixes = listOf(),
-        qol = listOf(
-            "Material Design 3 inspired UI with Jetpack Compose",
-            "Custom typography configuration",
-            "Light and Dark theme support"
+        changed = listOf(
+            "Material 3 design with light and dark themes"
         )
     )
 )

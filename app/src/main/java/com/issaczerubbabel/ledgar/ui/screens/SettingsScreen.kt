@@ -1,11 +1,15 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.*
@@ -28,9 +32,15 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.issaczerubbabel.ledgar.data.preferences.CashFlowChartStyle
+import com.issaczerubbabel.ledgar.data.preferences.ChartPalette
+import com.issaczerubbabel.ledgar.ui.theme.swatches
 import com.issaczerubbabel.ledgar.data.remote.ImportRecordDto
+import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.SyncConflict
+import com.issaczerubbabel.ledgar.sync.SyncStatus
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Warning
 import com.issaczerubbabel.ledgar.ui.theme.AppThemeOption
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseRed
 import com.issaczerubbabel.ledgar.ui.theme.IncomeGreen
@@ -40,7 +50,6 @@ import com.issaczerubbabel.ledgar.viewmodel.ExportViewModel
 import com.issaczerubbabel.ledgar.viewmodel.ImportState
 import com.issaczerubbabel.ledgar.viewmodel.SettingsUiEvent
 import com.issaczerubbabel.ledgar.viewmodel.SettingsViewModel
-import com.issaczerubbabel.ledgar.util.normalizeTimestampKey
 import java.io.File
 
 @Composable
@@ -66,13 +75,19 @@ fun SettingsScreen(
     val backupState by vm.backupState.collectAsStateWithLifecycle()
     val syncConflicts by vm.syncConflicts.collectAsStateWithLifecycle()
     val conflictResolutionState by vm.conflictResolutionState.collectAsStateWithLifecycle()
+    val showConflictSheet by vm.showConflictSheet.collectAsStateWithLifecycle()
+    val heldSheetDeletions by vm.heldSheetDeletions.collectAsStateWithLifecycle()
+    val possibleDuplicates by vm.possibleDuplicates.collectAsStateWithLifecycle()
+    val showDuplicatesSheet by vm.showDuplicatesSheet.collectAsStateWithLifecycle()
+    val syncStatus by vm.syncStatus.collectAsStateWithLifecycle()
+    var heldDeletionsDismissed by remember { mutableStateOf(false) }
     val currentTheme by vm.themeState.collectAsStateWithLifecycle()
     val scriptUrl by vm.scriptUrl.collectAsStateWithLifecycle()
     val appLockEnabled by vm.appLockEnabled.collectAsStateWithLifecycle()
     val appLockAuthMode by vm.appLockAuthMode.collectAsStateWithLifecycle()
     val appLockTimeoutMinutes by vm.appLockTimeoutMinutes.collectAsStateWithLifecycle()
     val hasAppPinConfigured by vm.hasAppPinConfigured.collectAsStateWithLifecycle()
-    val cashFlowChartStyle by vm.cashFlowChartStyle.collectAsStateWithLifecycle()
+    val chartPalette by vm.chartPalette.collectAsStateWithLifecycle()
     var themeDropdownExpanded by remember { mutableStateOf(false) }
     var chartStyleDropdownExpanded by remember { mutableStateOf(false) }
     var authModeDropdownExpanded by remember { mutableStateOf(false) }
@@ -152,7 +167,36 @@ fun SettingsScreen(
         )
     }
 
-    if (syncConflicts.isNotEmpty()) {
+    if (heldSheetDeletions.isNotEmpty() && !heldDeletionsDismissed) {
+        val count = heldSheetDeletions.size
+        AlertDialog(
+            onDismissRequest = { heldDeletionsDismissed = true },
+            icon = { Icon(Icons.Filled.Warning, null) },
+            title = { Text("$count transactions were deleted from the Sheet") },
+            text = {
+                Text(
+                    "They're still on this phone. Delete them here too, or keep them and put them back in the Sheet? " +
+                        "Nothing changes until you choose."
+                )
+            },
+            confirmButton = {
+                Button(onClick = { heldDeletionsDismissed = true; vm.deleteHeldFromPhone() }) { Text("Delete from phone") }
+            },
+            dismissButton = {
+                TextButton(onClick = { heldDeletionsDismissed = true; vm.keepHeldAndReupload() }) { Text("Keep and re-upload") }
+            }
+        )
+    }
+
+    if (showDuplicatesSheet) {
+        DuplicatesSheet(
+            groups = possibleDuplicates,
+            onDelete = vm::deleteDuplicate,
+            onDismiss = vm::dismissDuplicatesSheet
+        )
+    }
+
+    if (showConflictSheet && syncConflicts.isNotEmpty()) {
         SyncResolutionSheet(
             conflicts = syncConflicts,
             resolutionState = conflictResolutionState,
@@ -293,7 +337,7 @@ fun SettingsScreen(
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = themeDropdownExpanded) },
                         colors = ExposedDropdownMenuDefaults.textFieldColors(),
                         modifier = Modifier
-                            .menuAnchor()
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                             .widthIn(min = 132.dp, max = 188.dp)
                     )
 
@@ -333,44 +377,52 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsListItem(title = "Cash Flow Graph", icon = Icons.Filled.ShowChart) {
+            SettingsListItem(title = "Chart colours", icon = Icons.AutoMirrored.Filled.ShowChart) {
                 ExposedDropdownMenuBox(
                     expanded = chartStyleDropdownExpanded,
                     onExpandedChange = { chartStyleDropdownExpanded = !chartStyleDropdownExpanded }
                 ) {
                     TextField(
-                        value = cashFlowChartStyleLabel(cashFlowChartStyle),
+                        value = chartPalette.label,
                         onValueChange = {},
                         readOnly = true,
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyMedium,
+                        leadingIcon = { PaletteSwatches(chartPalette) },
                         trailingIcon = {
                             ExposedDropdownMenuDefaults.TrailingIcon(expanded = chartStyleDropdownExpanded)
                         },
                         colors = ExposedDropdownMenuDefaults.textFieldColors(),
                         modifier = Modifier
-                            .menuAnchor()
-                            .widthIn(min = 132.dp, max = 188.dp)
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                            .widthIn(min = 132.dp, max = 200.dp)
                     )
 
                     ExposedDropdownMenu(
                         expanded = chartStyleDropdownExpanded,
                         onDismissRequest = { chartStyleDropdownExpanded = false }
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("Bars") },
-                            onClick = {
-                                vm.updateCashFlowChartStyle(CashFlowChartStyle.BAR)
-                                chartStyleDropdownExpanded = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Lines") },
-                            onClick = {
-                                vm.updateCashFlowChartStyle(CashFlowChartStyle.LINE)
-                                chartStyleDropdownExpanded = false
-                            }
-                        )
+                        ChartPalette.entries.forEach { palette ->
+                            DropdownMenuItem(
+                                leadingIcon = { PaletteSwatches(palette) },
+                                text = {
+                                    Column {
+                                        Text(palette.label)
+                                        if (!palette.colourBlindSafe) {
+                                            Text(
+                                                text = "Not colour-blind safe",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                },
+                                onClick = {
+                                    vm.updateChartPalette(palette)
+                                    chartStyleDropdownExpanded = false
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -416,7 +468,7 @@ fun SettingsScreen(
                             },
                             colors = ExposedDropdownMenuDefaults.textFieldColors(),
                             modifier = Modifier
-                                .menuAnchor()
+                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                                 .widthIn(min = 166.dp, max = 220.dp)
                         )
                         ExposedDropdownMenu(
@@ -467,7 +519,7 @@ fun SettingsScreen(
                             },
                             colors = ExposedDropdownMenuDefaults.textFieldColors(),
                             modifier = Modifier
-                                .menuAnchor()
+                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                                 .widthIn(min = 110.dp, max = 160.dp)
                         )
                         ExposedDropdownMenu(
@@ -539,6 +591,65 @@ fun SettingsScreen(
                         softWrap = false
                     )
                 }
+            }
+
+            if (syncStatus == SyncStatus.NeedsScriptUpdate) {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.fillMaxWidth().clickable(onClick = onNavigateToAppsScriptSetup)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                        Text(
+                            text = "Sync is paused: your Apps Script is out of date. Tap to open Database Setup, " +
+                                "copy the new script into Apps Script and deploy a new version.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+
+            SettingsListItem(title = "Sync now", icon = Icons.Filled.Sync, onClick = vm::syncNow) {
+                Text(
+                    text = when (syncStatus) {
+                        SyncStatus.Syncing -> "Syncing..."
+                        SyncStatus.Synced -> "Synced"
+                        SyncStatus.Failed -> "Failed, will retry"
+                        SyncStatus.NeedsScriptUpdate -> "Paused"
+                        SyncStatus.Idle -> ""
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (syncConflicts.isNotEmpty()) {
+                SettingsListItem(
+                    title = "Resolve sync conflicts",
+                    icon = Icons.Filled.Warning,
+                    iconTint = ExpenseRed,
+                    onClick = vm::openConflictSheet
+                ) {
+                    Text("${syncConflicts.size}", style = MaterialTheme.typography.titleMedium, color = ExpenseRed)
+                }
+            }
+
+            SettingsListItem(
+                title = "Find duplicate transactions",
+                icon = Icons.Filled.ContentCopy,
+                onClick = vm::openDuplicatesSheet
+            ) {
+                Text(
+                    text = if (possibleDuplicates.isEmpty()) "None" else "${possibleDuplicates.size} groups",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             SettingsListItem(title = "Backup to Google Sheets") {
@@ -720,9 +831,14 @@ private fun themeLabel(option: AppThemeOption): String = when (option) {
     AppThemeOption.RED -> "Red"
 }
 
-private fun cashFlowChartStyleLabel(style: CashFlowChartStyle): String = when (style) {
-    CashFlowChartStyle.BAR -> "Bars"
-    CashFlowChartStyle.LINE -> "Lines"
+/** The palette's money in, money out and saved colours, side by side. */
+@Composable
+private fun PaletteSwatches(palette: ChartPalette) {
+    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        palette.swatches().forEach { color ->
+            Box(Modifier.size(10.dp).background(color, CircleShape))
+        }
+    }
 }
 
 private fun authModeLabel(mode: AppLockAuthMode): String = when (mode) {
@@ -780,7 +896,7 @@ private fun SyncResolutionSheet(
                 style = MaterialTheme.typography.titleLarge
             )
             Text(
-                text = "Review each conflicting timestamp and choose how to resolve it.",
+                text = "These changed differently on this phone and in the Sheet since the last sync. Choose which to keep.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -820,15 +936,12 @@ private fun SyncResolutionSheet(
                                         modifier = Modifier.padding(10.dp),
                                         verticalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
-                                        Text("On Device", style = MaterialTheme.typography.labelLarge)
+                                        Text("On this phone", style = MaterialTheme.typography.labelLarge)
+                                        ConflictValue("Date", conflict.localTx.date, false)
                                         ConflictValue("Amount", conflict.localTx.amount.toString(), false)
                                         ConflictValue("Category", conflict.localTx.category.ifBlank { "-" }, false)
                                         ConflictValue("Description", conflict.localTx.description.ifBlank { "-" }, false)
-                                        ConflictValue(
-                                            "Timestamp",
-                                            normalizeTimestampKey(conflict.localTx.remoteTimestamp) ?: "-",
-                                            false
-                                        )
+                                        ConflictValue("Remarks", conflict.localTx.remarks.ifBlank { "-" }, false)
                                     }
                                 }
                                 Surface(
@@ -844,17 +957,15 @@ private fun SyncResolutionSheet(
                                         val amountDiff = !approximatelyEqual(conflict.localTx.amount, conflict.sheetTx.amount)
                                         val categoryDiff = !conflict.localTx.category.trim().equals(cloudCategory.trim(), ignoreCase = true)
                                         val descriptionDiff = !conflict.localTx.description.trim().equals(conflict.sheetTx.description.trim(), ignoreCase = true)
-                                        val timestampDiff = normalizeTimestampKey(conflict.localTx.remoteTimestamp) != normalizeTimestampKey(conflict.sheetTx.timestamp)
+                                        val dateDiff = conflict.localTx.date != conflict.sheetTx.date
+                                        val remarksDiff = conflict.localTx.remarks.trim() != conflict.sheetTx.remarks.trim()
 
-                                        Text("In Cloud", style = MaterialTheme.typography.labelLarge)
+                                        Text("In the Sheet", style = MaterialTheme.typography.labelLarge)
+                                        ConflictValue("Date", conflict.sheetTx.date, dateDiff)
                                         ConflictValue("Amount", conflict.sheetTx.amount.toString(), amountDiff)
                                         ConflictValue("Category", cloudCategory.ifBlank { "-" }, categoryDiff)
                                         ConflictValue("Description", conflict.sheetTx.description.ifBlank { "-" }, descriptionDiff)
-                                        ConflictValue(
-                                            "Timestamp",
-                                            normalizeTimestampKey(conflict.sheetTx.timestamp) ?: "-",
-                                            timestampDiff
-                                        )
+                                        ConflictValue("Remarks", conflict.sheetTx.remarks.ifBlank { "-" }, remarksDiff)
                                     }
                                 }
                             }
@@ -868,14 +979,14 @@ private fun SyncResolutionSheet(
                                     enabled = canResolve,
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Text("Keep Local")
+                                    Text("Keep phone's")
                                 }
                                 OutlinedButton(
                                     onClick = { onUpdateDevice(conflict) },
                                     enabled = canResolve,
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Text("Update Device")
+                                    Text("Keep Sheet's")
                                 }
                             }
                             Row(
@@ -887,14 +998,14 @@ private fun SyncResolutionSheet(
                                     enabled = canResolve,
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Text("Keep Both")
+                                    Text("Keep both")
                                 }
                                 OutlinedButton(
                                     onClick = { onDeleteFromCloud(conflict) },
                                     enabled = canResolve,
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Text("Delete from Cloud")
+                                    Text("Delete everywhere")
                                 }
                             }
                         }
@@ -909,6 +1020,68 @@ private fun SyncResolutionSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DuplicatesSheet(
+    groups: List<List<ExpenseRecord>>,
+    onDelete: (ExpenseRecord) -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("Possible duplicates", style = MaterialTheme.typography.titleLarge)
+            Text(
+                text = "These look identical: same date, type, category, amount, description and account. " +
+                    "Two coffees on the same day can be genuine, so nothing is deleted unless you choose. " +
+                    "A deleted copy is removed from the Sheet too.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (groups.isEmpty()) {
+                Text("No possible duplicates found.", modifier = Modifier.padding(vertical = 24.dp))
+            }
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 560.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                itemsIndexed(groups) { _, group ->
+                    val first = group.first()
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        shape = MaterialTheme.shapes.large,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "${first.date} · ${first.category.ifBlank { first.type }} · ${first.amount}",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(
+                                text = "${group.size} copies" + (first.description.takeIf { it.isNotBlank() }?.let { " of \"$it\"" } ?: ""),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            group.forEachIndexed { index, record ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "Copy ${index + 1}" + (record.remarks.takeIf { it.isNotBlank() }?.let { ": $it" } ?: ""),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    TextButton(onClick = { onDelete(record) }) { Text("Delete", color = ExpenseRed) }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -1,6 +1,10 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
+import androidx.compose.material3.SecondaryScrollableTabRow
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,6 +22,9 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
@@ -35,6 +42,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -42,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
+import com.issaczerubbabel.ledgar.data.local.entity.DropdownRole
 import com.issaczerubbabel.ledgar.viewmodel.DropdownManagementViewModel
 import com.issaczerubbabel.ledgar.viewmodel.DropdownOptionType
 
@@ -68,7 +79,7 @@ fun DropdownManagementScreen(
                         Icon(Icons.Filled.Add, contentDescription = "Add option")
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
             )
@@ -90,7 +101,7 @@ fun DropdownManagementScreen(
                 .padding(scaffoldPadding)
                 .padding(bottom = innerPadding.calculateBottomPadding())
         ) {
-            ScrollableTabRow(
+            SecondaryScrollableTabRow(
                 selectedTabIndex = vm.types.indexOf(state.selectedType).coerceAtLeast(0),
                 containerColor = MaterialTheme.colorScheme.surface,
                 contentColor = MaterialTheme.colorScheme.onSurface
@@ -133,6 +144,8 @@ fun DropdownManagementScreen(
                 items(state.options, key = { it.id }) { option ->
                     DropdownOptionRow(
                         option = option,
+                        statsRole = state.selectedType.statsRole,
+                        onSetRole = { vm.setRole(option, it) },
                         canMoveUp = state.options.firstOrNull()?.id != option.id,
                         canMoveDown = state.options.lastOrNull()?.id != option.id,
                         onMoveUp = { vm.moveUp(option) },
@@ -175,9 +188,17 @@ fun DropdownManagementScreen(
     }
 }
 
+private fun ordinaryLabel(role: String) = when (role) {
+    DropdownRole.SAVING -> "Spending"
+    DropdownRole.REFUND -> "Earnings"
+    else -> "Ordinary accounts"
+}
+
 @Composable
 private fun DropdownOptionRow(
     option: DropdownOption,
+    statsRole: Pair<String, String>?,
+    onSetRole: (String) -> Unit,
     canMoveUp: Boolean,
     canMoveDown: Boolean,
     onMoveUp: () -> Unit,
@@ -191,13 +212,48 @@ private fun DropdownOptionRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text(
-            text = option.name,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.weight(1f)
-        )
+        var roleMenuOpen by remember { mutableStateOf(false) }
+        Box(Modifier.weight(1f)) {
+            Column(
+                modifier = if (statsRole != null) {
+                    Modifier.fillMaxWidth().heightIn(min = 40.dp).clickable(onClickLabel = "Choose how Stats counts it") { roleMenuOpen = true }
+                } else {
+                    Modifier.fillMaxWidth()
+                },
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = option.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontWeight = FontWeight.Medium
+                )
+                if (statsRole != null && option.role == statsRole.first) {
+                    Text(
+                        text = "Counts as ${statsRole.second.lowercase()} in Stats",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            if (statsRole != null) {
+                DropdownMenu(expanded = roleMenuOpen, onDismissRequest = { roleMenuOpen = false }) {
+                    Text(
+                        "Counts as",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                    listOf("" to ordinaryLabel(statsRole.first), statsRole).forEach { (value, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            leadingIcon = { RadioButton(selected = option.role == value, onClick = null) },
+                            onClick = { onSetRole(value); roleMenuOpen = false }
+                        )
+                    }
+                }
+            }
+        }
 
         FilledTonalIconButton(onClick = onMoveUp, enabled = canMoveUp, modifier = Modifier.size(36.dp)) {
             Icon(Icons.Filled.ArrowUpward, contentDescription = "Move up")

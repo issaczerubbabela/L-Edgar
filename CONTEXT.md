@@ -40,6 +40,40 @@ _Avoid_: envelope, budget (the legacy per-category plan)
 **Bucket category**:
 The routing of one expense Category into one Bucket for one cycle. A Category sits in at most one Bucket per cycle; Categories in none count as Unbucketed.
 
+**Stats role**:
+The part a Dropdown option plays in Stats, stored in its `role`: an expense Category can be **Saving**, an income Category can be **Refund**, and an Account group can be **Savings**. Most options have no role.
+_Avoid_: flag, tag
+
+**Earned**:
+Income in a period, not counting Refunds.
+_Avoid_: total income (when Refunds are included)
+
+**Spent**:
+Expenses in a period, not counting Saving Categories, minus Refunds.
+_Avoid_: total expenses (when Saving Categories are included)
+
+**Saved**:
+Money put aside in a period: Expenses in Saving Categories, plus Transfers into a Savings Account group from outside it, minus Transfers out of one. Saved money is never Spent.
+_Avoid_: invested, spent (for Saving Categories)
+
+**Refund**:
+An Income in a Refund Category. It reduces Spent instead of adding to Earned, and it isn't tied to any expense Category.
+
+**Left over**:
+Earned minus Spent minus Saved, for a week, month, year or custom range.
+_Avoid_: kept, balance, savings
+
+**Left to spend**:
+A Salary cycle's spendable amount minus every Expense in it, Saving Categories included and Refunds not taken off: the same figure the Budget tab shows, because a Bucket can hold savings. Once the cycle is over, the Stats tab calls it "Left unspent".
+_Avoid_: left over (which is based on Earned, not the spendable amount)
+
+**Usual**:
+What a Category normally costs in Stats: its average over the three periods of the same kind before this one (months for a month, cycles for a cycle).
+_Avoid_: average (without saying over what)
+
+**Chart palette**:
+The set of colours Stats charts use for money in, money out and saved, picked in Settings. Every palette except Classic keeps the three apart for red-green colour blindness.
+
 **Dropdown option**:
 A user-editable choice for Categories and Account groups. `PAYMENT_MODE` options are legacy: Accounts replaced them, and they are never backed up.
 
@@ -49,7 +83,7 @@ A flag the user puts on a Transaction to find it again in the Bookmarks list.
 ## Google Sheets
 
 **Sheet**:
-The user's own Google Sheet. Its `_responses` tab holds one row per Transaction. The `_accounts`, `_dropdowns` and `_budgets` tabs hold Backups.
+The user's own Google Sheet. Its `_responses` tab holds one row per Transaction, which the user may also edit by hand. The `_accounts`, `_dropdowns` and `_budgets` tabs hold Backups.
 _Avoid_: server, backend, cloud database
 
 **Apps Script**:
@@ -57,26 +91,44 @@ The web app each user deploys over their own Sheet from `scripts/AppsScript.gs`.
 _Avoid_: API, server
 
 **Sync**:
-Sending a Transaction's pending change (insert, update or delete) from the phone to the Sheet.
+Bringing the phone and the Sheet into agreement on Transactions: a Pull when needed, then a Push.
 _Avoid_: upload, backup (for Transactions)
 
+**Push**:
+Sending the phone's pending changes to the Sheet as upserts and deletes by Transaction ID.
+
+**Pull**:
+Reading the whole Sheet and merging it into the phone, one Transaction ID at a time. It runs on app open, on "Sync now", and when the script refuses a stale write.
+_Avoid_: import (for this automatic merge), download
+
+**Transaction ID**:
+The permanent ID shared by a Transaction on the phone and its row in the Sheet's ID column.
+_Avoid_: row number, timestamp (as an identifier)
+
+**Revision**:
+The script's hash of a Sheet row's content. It changes whenever the row is edited, by anyone. The phone stores the Revision it last agreed on, to tell whether the Sheet changed since.
+_Avoid_: version (that's the phone's `localVersion`), fingerprint
+
 **Backup**:
-Replacing a Sheet tab with the phone's full current list of Accounts, Dropdown options or Budgets. It runs on every Sync.
+Replacing a Sheet tab with the phone's full current list of Accounts, Dropdown options or Budgets. Before a phone's first Backup, the phone takes in whatever the Sheet's lists have that it lacks.
 _Avoid_: sync (for these lists)
 
 **Import**:
-Reading the Sheet into the phone ("Import from Google Sheets"). It adds Transactions the phone doesn't have yet and reports Sync conflicts.
+The "Import from Google Sheets" action: it replaces the phone's Accounts, Dropdown options and Budgets with the Sheet's, then Pulls Transactions.
 _Avoid_: restore, download
 
 **Sync action**:
 The change a Transaction is waiting to Sync: `INSERT`, `UPDATE` or `DELETE`, or `NONE` once it has synced. A deleted Transaction stays on the phone, hidden, until its delete has synced.
 
 **Remote timestamp**:
-The value in a Transaction's Timestamp column that identifies its row in the Sheet (`M/d/yyyy HH:mm:ss`).
+The value in a Transaction's Timestamp column (`M/d/yyyy HH:mm:ss`). It no longer identifies the row; it's used only once, to link rows from before Transaction IDs.
 _Avoid_: created time, sync time
 
 **Sync conflict**:
-A local Transaction and a Sheet row that share a Remote timestamp but differ in content. It's found during Import, and the user picks which one to keep.
+A Transaction changed differently on the phone and in the Sheet since they last agreed. It isn't pushed until the user picks the phone's version, the Sheet's, both, or deletes it everywhere.
+
+**Held deletion**:
+A Transaction a Pull found missing from the Sheet but didn't delete from the phone, because too many went missing at once. The user decides whether to delete it or put it back in the Sheet.
 
 ## Entry points
 

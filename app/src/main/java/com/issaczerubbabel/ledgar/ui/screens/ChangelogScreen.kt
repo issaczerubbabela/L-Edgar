@@ -46,7 +46,7 @@ fun ChangelogScreen(
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
             )
@@ -86,19 +86,19 @@ fun ChangelogScreen(
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                         ChangelogSection(
-                            title = "Features",
-                            items = release.features,
+                            title = "Added",
+                            items = release.added,
                             accent = IncomeGreen
                         )
                         ChangelogSection(
-                            title = "Fixes",
-                            items = release.fixes,
-                            accent = ExpenseOrange
+                            title = "Changed",
+                            items = release.changed,
+                            accent = IncomeBlue
                         )
                         ChangelogSection(
-                            title = "QoL",
-                            items = release.qol,
-                            accent = IncomeBlue
+                            title = "Fixed",
+                            items = release.fixed,
+                            accent = ExpenseOrange
                         )
                     }
                 }

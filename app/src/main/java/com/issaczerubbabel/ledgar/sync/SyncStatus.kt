@@ -3,13 +3,14 @@ package com.issaczerubbabel.ledgar.sync
 import androidx.work.WorkInfo
 
 /** Where the Sync status indicator stands. */
-enum class SyncStatus { Idle, Syncing, Synced, Failed }
+enum class SyncStatus { Idle, Syncing, Synced, Failed, NeedsScriptUpdate }
 
 /** The part of a Sync job's WorkInfo that decides [SyncStatus]. */
 data class SyncJob(
     val state: WorkInfo.State,
     val runAttemptCount: Int,
-    val stopReason: Int = WorkInfo.STOP_REASON_NOT_STOPPED
+    val stopReason: Int = WorkInfo.STOP_REASON_NOT_STOPPED,
+    val scriptOutdated: Boolean = false
 )
 
 /**
@@ -21,6 +22,7 @@ fun syncStatusOf(jobs: List<SyncJob>): SyncStatus = when {
     jobs.any { it.state == WorkInfo.State.RUNNING } -> SyncStatus.Syncing
     jobs.any { it.isWaitingToRetryAfterFailure() } -> SyncStatus.Failed
     jobs.any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.BLOCKED } -> SyncStatus.Syncing
+    jobs.any { it.state == WorkInfo.State.FAILED && it.scriptOutdated } -> SyncStatus.NeedsScriptUpdate
     jobs.any { it.state == WorkInfo.State.FAILED } -> SyncStatus.Failed
     jobs.any { it.state == WorkInfo.State.SUCCEEDED } -> SyncStatus.Synced
     else -> SyncStatus.Idle
