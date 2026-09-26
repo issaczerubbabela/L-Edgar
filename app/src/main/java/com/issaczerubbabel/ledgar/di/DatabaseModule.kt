@@ -222,7 +222,7 @@ object DatabaseModule {
             .addMigrations(BucketBudgetMigration.MIGRATION_16_17)
             .addMigrations(MIGRATION_17_18)
             .addMigrations(MIGRATION_18_19)
-            .fallbackToDestructiveMigration()
+            .fallbackToDestructiveMigration(dropAllTables = true)
             .addCallback(callback)
             .build()
     }

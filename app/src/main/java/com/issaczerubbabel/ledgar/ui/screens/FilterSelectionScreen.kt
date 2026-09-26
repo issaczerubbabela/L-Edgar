@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -153,7 +154,7 @@ fun FilterSelectionScreen(
                 }
             }
 
-            TabRow(selectedTabIndex = state.activeTab.ordinal) {
+            SecondaryTabRow(selectedTabIndex = state.activeTab.ordinal) {
                 Tab(
                     selected = state.activeTab == FilterSelectionTab.INCOME,
                     onClick = { vm.setActiveTab(FilterSelectionTab.INCOME) },

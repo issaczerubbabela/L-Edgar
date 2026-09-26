@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -1004,13 +1005,13 @@ private fun PeriodTabRow(
     selected: Int, bg: Color, textColor: Color,
     onSelect: (Int) -> Unit
 ) {
-    TabRow(
+    SecondaryTabRow(
         selectedTabIndex = selected,
         containerColor   = bg,
         contentColor     = textColor,
-        indicator = { positions ->
-            TabRowDefaults.Indicator(
-                modifier = Modifier.tabIndicatorOffset(positions[selected]),
+        indicator = {
+            TabRowDefaults.SecondaryIndicator(
+                modifier = Modifier.tabIndicatorOffset(selected),
                 color    = MaterialTheme.colorScheme.primary,
                 height   = 2.5.dp
             )

@@ -1,5 +1,10 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.ClipEntry
+import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -37,7 +42,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
@@ -1164,7 +1168,8 @@ fun AppsScriptSetupScreen(
     vm: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
+    val clipboardScope = rememberCoroutineScope()
   val keyboardController = LocalSoftwareKeyboardController.current
   val configuredUrl by vm.scriptUrl.collectAsStateWithLifecycle()
   val connectionState by vm.connectionTestState.collectAsStateWithLifecycle()
@@ -1204,8 +1209,10 @@ fun AppsScriptSetupScreen(
               style = MaterialTheme.typography.bodyMedium
             )
             Button(onClick = {
-              clipboardManager.setText(AnnotatedString(APPS_SCRIPT_CODE))
-              Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
+              clipboardScope.launch {
+                clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Apps Script", APPS_SCRIPT_CODE)))
+                Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
+              }
             }) {
               Text("Copy Script Code")
             }
@@ -1248,12 +1255,16 @@ fun AppsScriptSetupScreen(
               trailingIcon = {
                 IconButton(
                   onClick = {
-                    clipboardManager.getText()?.text?.let { pastedText ->
-                      urlInput = pastedText
-                      showValidationError = false
-                      vm.resetConnectionTestState()
+                    clipboardScope.launch {
+                      clipboard.getClipEntry()?.clipData?.takeIf { it.itemCount > 0 }
+                        ?.getItemAt(0)?.coerceToText(context)?.toString()
+                        ?.let { pastedText ->
+                          urlInput = pastedText
+                          showValidationError = false
+                          vm.resetConnectionTestState()
+                        }
+                      keyboardController?.hide()
                     }
-                    keyboardController?.hide()
                   }
                 ) {
                   Icon(

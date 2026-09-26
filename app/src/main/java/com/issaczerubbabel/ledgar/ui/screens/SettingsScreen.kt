@@ -1,5 +1,7 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
@@ -296,7 +298,7 @@ fun SettingsScreen(
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = themeDropdownExpanded) },
                         colors = ExposedDropdownMenuDefaults.textFieldColors(),
                         modifier = Modifier
-                            .menuAnchor()
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                             .widthIn(min = 132.dp, max = 188.dp)
                     )
 
@@ -336,7 +338,7 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsListItem(title = "Chart colours", icon = Icons.Filled.ShowChart) {
+            SettingsListItem(title = "Chart colours", icon = Icons.AutoMirrored.Filled.ShowChart) {
                 ExposedDropdownMenuBox(
                     expanded = chartStyleDropdownExpanded,
                     onExpandedChange = { chartStyleDropdownExpanded = !chartStyleDropdownExpanded }
@@ -353,7 +355,7 @@ fun SettingsScreen(
                         },
                         colors = ExposedDropdownMenuDefaults.textFieldColors(),
                         modifier = Modifier
-                            .menuAnchor()
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                             .widthIn(min = 132.dp, max = 200.dp)
                     )
 
@@ -427,7 +429,7 @@ fun SettingsScreen(
                             },
                             colors = ExposedDropdownMenuDefaults.textFieldColors(),
                             modifier = Modifier
-                                .menuAnchor()
+                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                                 .widthIn(min = 166.dp, max = 220.dp)
                         )
                         ExposedDropdownMenu(
@@ -478,7 +480,7 @@ fun SettingsScreen(
                             },
                             colors = ExposedDropdownMenuDefaults.textFieldColors(),
                             modifier = Modifier
-                                .menuAnchor()
+                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                                 .widthIn(min = 110.dp, max = 160.dp)
                         )
                         ExposedDropdownMenu(
