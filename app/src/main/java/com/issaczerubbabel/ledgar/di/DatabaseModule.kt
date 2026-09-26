@@ -7,12 +7,16 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
+import com.issaczerubbabel.ledgar.data.local.dao.AccountAliasDao
 import com.issaczerubbabel.ledgar.data.local.dao.AccountDao
 import com.issaczerubbabel.ledgar.data.local.dao.BucketBudgetDao
 import com.issaczerubbabel.ledgar.data.local.dao.BudgetDao
+import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
 import com.issaczerubbabel.ledgar.data.local.migration.BucketBudgetMigration
+import com.issaczerubbabel.ledgar.data.local.migration.CaptureMigration
 import com.issaczerubbabel.ledgar.data.local.dao.DropdownOptionDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
+import com.issaczerubbabel.ledgar.data.local.dao.MerchantRuleDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -201,6 +205,7 @@ object DatabaseModule {
             .addMigrations(MIGRATION_15_16)
             .addMigrations(BucketBudgetMigration.MIGRATION_16_17)
             .addMigrations(MIGRATION_17_18)
+            .addMigrations(CaptureMigration.MIGRATION_18_19)
             .fallbackToDestructiveMigration()
             .addCallback(callback)
             .build()
@@ -220,4 +225,13 @@ object DatabaseModule {
 
     @Provides
     fun provideDropdownOptionDao(db: SheetSyncDatabase): DropdownOptionDao = db.dropdownOptionDao()
+
+    @Provides
+    fun provideCaptureDao(db: SheetSyncDatabase): CaptureDao = db.captureDao()
+
+    @Provides
+    fun provideMerchantRuleDao(db: SheetSyncDatabase): MerchantRuleDao = db.merchantRuleDao()
+
+    @Provides
+    fun provideAccountAliasDao(db: SheetSyncDatabase): AccountAliasDao = db.accountAliasDao()
 }

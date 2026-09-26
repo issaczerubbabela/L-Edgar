@@ -13,6 +13,7 @@ val changelogReleases: List<ChangelogRelease> = listOf(
         version = "v1.0.3",
         date = "2026-04-18",
         features = listOf(
+            "Auto-capture data layer (foundation, not yet visible in the app): new captured_transactions, merchant_rules and account_aliases tables, plus a bank/UPI alert parser (HDFC, City Union Bank) that turns raw notification/SMS text into structured amount, direction, account and merchant fields — the first step toward reviewing and confirming bank alerts as transactions instead of typing them by hand",
             "Insights screen now supports flexible period scopes (Weekly, Monthly, Yearly, Select Period) with period navigation and custom date-range selection",
             "Expense Breakdown now includes tabbed Expense and Income category views with the same interactive donut experience",
             "Cash Flow now supports category filtering with an explicit All Categories option and time bucketing controls for Daily, Weekly, Monthly, and Yearly views",
