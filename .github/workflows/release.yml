@@ -97,10 +97,25 @@ jobs:
           rm -f "$RELEASE_STORE_FILE"
 
       - name: Verify the signature
+        env:
+          # SHA-256 of the certificate the installed app is signed with. An APK signed with any
+          # other key can't install as an update, so it must never be published.
+          EXPECTED_CERT_SHA256: 90fd7f87fba98d1b1ea48ad824b7cf28ee62b022e293b559a23030ad6d7e8911
         run: |
           apk=app/build/outputs/apk/release/app-release.apk
           apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
-          "$apksigner" verify --print-certs "$apk" | grep -E "Signer #1 certificate (DN|SHA-256)"
+          out=$("$apksigner" verify --verbose --print-certs "$apk" 2>&1) || true
+          echo "$out"
+          if ! echo "$out" | grep -q "^Verifies"; then
+            echo "::error::The release APK's signature does not verify"
+            exit 1
+          fi
+          sha=$(echo "$out" | grep -m1 -oiE "certificate SHA-256 digest: [0-9a-f]{64}" | grep -oiE "[0-9a-f]{64}")
+          if [ "$sha" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "::error::Signed with certificate ${sha:-(none found)}, but the installed app uses $EXPECTED_CERT_SHA256"
+            exit 1
+          fi
+          echo "Signed with the expected certificate $sha"
           mkdir -p dist
           cp "$apk" "dist/ledgar-$TAG.apk"
           (cd dist && sha256sum "ledgar-$TAG.apk" > "ledgar-$TAG.apk.sha256")
