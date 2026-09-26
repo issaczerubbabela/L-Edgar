@@ -69,6 +69,10 @@ This is enforced by a `PreToolUse` hook (`.github/hooks/changelog-enforcer.json`
 
 Issues live in GitHub Issues (`issaczerubbabela/L-Edgar`), managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
+### Triage labels
+
+Default vocabulary: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix. See `docs/agents/triage-labels.md`.
+
 ### Domain docs
 
 Single-context: a `CONTEXT.md` glossary and ADRs in `docs/adr/` at the repo root. See `docs/agents/domain.md`.
