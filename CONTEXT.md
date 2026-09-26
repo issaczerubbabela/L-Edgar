@@ -46,6 +46,28 @@ A user-editable choice for Categories and Account groups. `PAYMENT_MODE` options
 **Bookmark**:
 A flag the user puts on a Transaction to find it again in the Bookmarks list.
 
+## Auto-capture
+
+**Captured transaction**:
+A bank or UPI alert the app has parsed but not yet turned into a Transaction. It waits in the review inbox until the user acts on it.
+_Avoid_: pending transaction, alert, capture (as a standalone noun)
+
+**Confirm**:
+Turning a Captured transaction into a real Transaction. Only the user confirms; nothing about auto-capture does this on its own.
+_Avoid_: auto-log, auto-add
+
+**Merchant rule**:
+A saved mapping from a normalized merchant name to a Category, used to categorize future Captured transactions from the same merchant. Either set by the user or learned from repeated confirmations.
+_Avoid_: category rule
+
+**Account alias**:
+A saved mapping from a bank account's last four digits or a UPI VPA to one of the user's Accounts, used to work out which Account a Captured transaction belongs to.
+_Avoid_: account mapping
+
+**Confidence band**:
+High, Check or Low: how sure auto-capture is about a Captured transaction's suggested Category. Only High, with its Account already resolved, notifies the user; everything else waits in the inbox.
+_Avoid_: confidence score
+
 ## Google Sheets
 
 **Sheet**:
