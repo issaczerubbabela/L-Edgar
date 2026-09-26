@@ -28,6 +28,10 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
+      # The runner's JDK 17 throws a NullPointerException reading cgroup v2 limits
+      # (CgroupV2Subsystem "anyController is null") when the Android Gradle plugin locks the
+      # debug keystore. Skipping container detection avoids it and changes nothing else here.
+      JAVA_TOOL_OPTIONS: -XX:-UseContainerSupport
       TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
