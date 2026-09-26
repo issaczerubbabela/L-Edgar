@@ -316,9 +316,9 @@ private fun DrawScope.roundedTop(color: Color, x: Float, top: Float, width: Floa
     val path = Path().apply {
         moveTo(x, top + height)
         lineTo(x, top + r)
-        quadraticBezierTo(x, top, x + r, top)
+        quadraticTo(x, top, x + r, top)
         lineTo(x + width - r, top)
-        quadraticBezierTo(x + width, top, x + width, top + r)
+        quadraticTo(x + width, top, x + width, top + r)
         lineTo(x + width, top + height)
         close()
     }

@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
+import androidx.compose.material3.SecondaryScrollableTabRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -78,7 +79,7 @@ fun DropdownManagementScreen(
                         Icon(Icons.Filled.Add, contentDescription = "Add option")
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
             )
@@ -100,7 +101,7 @@ fun DropdownManagementScreen(
                 .padding(scaffoldPadding)
                 .padding(bottom = innerPadding.calculateBottomPadding())
         ) {
-            ScrollableTabRow(
+            SecondaryScrollableTabRow(
                 selectedTabIndex = vm.types.indexOf(state.selectedType).coerceAtLeast(0),
                 containerColor = MaterialTheme.colorScheme.surface,
                 contentColor = MaterialTheme.colorScheme.onSurface

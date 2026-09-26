@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -112,17 +113,13 @@ fun FilteredTransactionsScreen(
         ) {
             AppliedFiltersBar(filters = state.appliedFilters)
 
-            TabRow(
+            SecondaryTabRow(
                 selectedTabIndex = selectedTab,
                 containerColor = headerBg,
                 contentColor = headerText,
-                indicator = { positions ->
-                    TabRowDefaults.Indicator(
-                        modifier = if (positions.isNotEmpty()) {
-                            Modifier.tabIndicatorOffset(positions[selectedTab])
-                        } else {
-                            Modifier
-                        },
+                indicator = {
+                    TabRowDefaults.SecondaryIndicator(
+                        modifier = Modifier.tabIndicatorOffset(selectedTab),
                         color = MaterialTheme.colorScheme.primary
                     )
                 }

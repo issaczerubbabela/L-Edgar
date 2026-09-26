@@ -69,7 +69,7 @@ graph TD
 
 - `SyncTriggers` (started in `SheetSyncApp`) watches Room: any Transaction waiting to sync requests a Sync, and any change to accounts, dropdowns, budgets or transactions requests a Backup. Screens never schedule sync work. All work is queued through `SyncScheduler`. `SyncWorker` sends pending Transaction changes. It's queued with `APPEND_OR_REPLACE`, so a running Sync is never cancelled, and it retries with exponential backoff.
 - `BackupWorker` replaces the Sheet's accounts, dropdowns, budgets and bucket-budget tabs (cycles, buckets and category routing). It runs as a separate, delayed job, so a failing Backup can't hold Transactions back. Before a phone's first Backup, `SheetListsMerger` adds the Sheet's accounts, dropdowns and budgets that the phone lacks (matched by name), and takes in the Sheet's salary cycles if it has none, so a fresh install's defaults can never replace the Sheet's real lists.
-- Sync is safe to repeat (ADR-0003). A Transaction's Remote timestamp is saved in Room before its first request, every insert/update is sent as the script's overwrite-or-append `update`, and a Transaction is only marked synced if its `localVersion` (raised by a SQLite trigger on every change) hasn't moved since Sync read it.
+- Sync is two-way and safe to repeat (ADR-0003). Every Transaction has a permanent Transaction ID (`syncId`, assigned by a Room trigger) shared with the Sheet's ID column. `TransactionSyncer` Pulls when needed (app open, "Sync now", rows without an ID yet, or after a stale refusal) and merges each ID three ways in `SheetMerge`, then Pushes pending changes as `upsert`/`delete_ids` by ID. Each upsert carries the row revision the phone last agreed on (`syncedRevision`), and the script refuses it as stale if the row changed since, so a Sheet edit is merged rather than overwritten. A Transaction is only settled if its `localVersion` (raised by a SQLite trigger on every change) hasn't moved since Sync read it.
 
 ## 3. Navigation Architecture
 
@@ -120,24 +120,29 @@ sequenceDiagram
     Room-->>WM: SyncTriggers sees the unsynced row → SyncScheduler.requestSync() (APPEND_OR_REPLACE; a delayed BackupWorker too)
 
     WM->>Worker: run doWork()
-    Worker->>Room: save a unique Remote timestamp on pending rows that lack one
-    Worker->>Room: read pending rows (with localVersion)
 
-    alt INSERT/UPDATE exists (batches of 20)
-        Worker->>API: syncRecords(update, records)
-        API->>GAS: POST
-        GAS->>Sheet: overwrite row with that timestamp, or append
-        GAS-->>API: ok
-        API-->>Worker: ok
-        Worker->>Room: markSyncedIfUnchanged(id, localVersion)
+    opt Pull (app open, Sync now, unlinked rows)
+        Worker->>API: importRecords(transactions)
+        API->>GAS: GET (under lock: assign missing IDs)
+        GAS-->>Worker: rows with id + revision, scriptVersion 2
+        Worker->>Room: apply SheetMerge steps (version-checked, one Room transaction)
     end
 
-    alt DELETE exists
-        Worker->>API: syncRecords(delete, targetTimestamp)
-        API->>GAS: POST delete
-        GAS->>Sheet: delete row by timestamp
-        GAS-->>API: ok (count 0 = already gone)
-        Worker->>Room: deleteSyncedDeleteIfUnchanged(id, localVersion)
+    alt pending INSERT/UPDATE (batches of 50)
+        Worker->>API: syncRecords(upsert, transactions with base revision)
+        API->>GAS: POST (under lock)
+        GAS->>Sheet: overwrite row with that ID, or append; refuse rows changed since base
+        GAS-->>Worker: ok, revisions, stale
+        Worker->>Room: markSyncedIfUnchanged(id, localVersion, revision)
+        opt any stale
+            Worker->>API: Pull and merge (conflict or settle)
+        end
+    end
+
+    alt pending DELETE
+        Worker->>API: syncRecords(delete_ids, ids)
+        GAS->>Sheet: delete rows by ID (missing = already gone)
+        Worker->>Room: finishDeleteIfUnchanged(id, localVersion)
     end
 ```
 
@@ -146,10 +151,8 @@ sequenceDiagram
 ### Google Sheets Import
 
 1. Settings triggers importFromSheets.
-2. Repository imports dropdowns and overwrites local options.
-3. Repository imports budgets and overwrites local budget rows.
-3a. Repository imports bucket_budgets (cycles with nested buckets and categories) and replaces the local cycle tables.
-4. Repository imports transactions and deduplicates against local comparable fields.
+2. Repository imports dropdowns, accounts and budgets and overwrites the local lists, then bucket_budgets (cycles with nested buckets and categories), replacing the local cycle tables.
+3. Transactions come in through the same Pull as every Sync (`TransactionSyncer`), merged by Transaction ID; conflicts appear in Settings.
 
 ### CSV Import
 
@@ -188,6 +191,10 @@ erDiagram
         bool isSynced
         string remoteTimestamp
         string syncAction
+        long localVersion
+        string syncId UK
+        string syncedRevision
+        string sheetConflictJson
     }
 
     BUDGETS {
@@ -243,6 +250,8 @@ erDiagram
   - Soft delete for sync by setting syncAction=DELETE.
   - Hard delete after successful remote delete.
   - isSynced + syncAction drives worker behavior.
+  - Triggers: `localVersion` rises on every change; a Transaction inserted unsynced gets a `syncId`.
+  - `syncedRevision` is the Sheet row revision both sides last agreed on; `sheetConflictJson` holds the Sheet's version while in a Sync conflict.
 
 ### account_records
 

@@ -1,90 +1,15 @@
-package com.issaczerubbabel.ledgar.ui.screens
-
-import kotlinx.coroutines.launch
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.platform.LocalClipboard
-import androidx.compose.ui.platform.ClipEntry
-import android.content.ClipData
-import android.content.Intent
-import android.net.Uri
-import android.widget.Toast
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.background
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.issaczerubbabel.ledgar.viewmodel.ConnectionTestState
-import com.issaczerubbabel.ledgar.viewmodel.SettingsViewModel
-
-private const val SCRIPT_URL_PREFIX = "https://script.google.com/macros/s/"
-
-private val APPS_SCRIPT_CODE = """
 /**
  * SheetSync — Google Apps Script (Transactions + Dropdowns + Budgets + Accounts)
  *
  * Transaction Date Output Contract:
  * - doGet(target=transactions) must emit `date` as `yyyy-MM-dd`.
  * - Android import uses this for month grouping in the Trans/History tab.
- *
- * Transaction ID Contract (SCRIPT_VERSION 2):
- * - Every transaction row carries a permanent ID in the column headed "ID".
- *   Reading transactions gives an ID to any row without one (e.g. typed in by hand).
- * - "upsert" and "delete_ids" write by ID and are safe to repeat. New data never
- *   travels in `records`: scripts older than version 2 file `records` as transactions.
- * - Every row has a `revision`: a hash of its stored content cells, so any edit to the
- *   row, including one typed by hand, changes it. An upsert carrying the `base` revision
- *   the app last saw is refused for that row (listed in `stale`) if the row has changed
- *   since, so the app can merge instead of overwriting the edit.
- * - Every reply carries `scriptVersion`, which the app checks before syncing.
- * - Every request runs under a script lock, so requests never interleave.
  */
 
 var TRANSACTIONS_SHEET = "_responses";
 var DROPDOWNS_SHEET = "_dropdowns";
 var BUDGETS_SHEET = "_budgets";
 var ACCOUNTS_SHEET = "_accounts";
-
-var SCRIPT_VERSION = 2;
-var ID_HEADER = "ID";
-var LOCK_TIMEOUT_MS = 30000;
-// Text columns are kept as plain text so Sheets never turns "1/2" into a date or "=x" into a formula.
-var TRANSACTION_TEXT_COLUMNS = [4, 5, 6, 8, 9, 10, 11];
 var CYCLES_SHEET = "_cycles";
 var BUCKETS_SHEET = "_buckets";
 var BUCKET_CATEGORIES_SHEET = "_bucket_categories";
@@ -121,262 +46,9 @@ var TRANSACTION_HEADERS_V2 = [
 ];
 
 function jsonOut(obj) {
-  obj.scriptVersion = SCRIPT_VERSION;
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
     ContentService.MimeType.JSON,
   );
-}
-
-function withScriptLock(fn) {
-  var lock = LockService.getScriptLock();
-  lock.waitLock(LOCK_TIMEOUT_MS);
-  try {
-    return fn();
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-// Content cells covered by a row's revision: everything but Timestamp (1) and Synced At (12).
-var REVISION_COLUMNS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13];
-
-function cellText(value) {
-  if (value instanceof Date) return value.toISOString();
-  if (value === null || value === undefined) return "";
-  return String(value);
-}
-
-/** 64-bit FNV-1a over the row's content cells, as 16 hex digits. */
-function rowRevision(row) {
-  var text = REVISION_COLUMNS.map(function (column) {
-    return cellText(row[column - 1]);
-  }).join("\u001f");
-  var h1 = 0x811c9dc5;
-  var h2 = 0x01000193;
-  for (var i = 0; i < text.length; i++) {
-    var c = text.charCodeAt(i);
-    h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
-    h2 = Math.imul(h2 ^ c, 0x811c9dc5) >>> 0;
-  }
-  return ("00000000" + h1.toString(16)).slice(-8) + ("00000000" + h2.toString(16)).slice(-8);
-}
-
-/** Returns the 1-based ID column, adding it after the last used column if the sheet has none. */
-function ensureIdColumn(txSheet) {
-  var width = Math.max(txSheet.getLastColumn(), TRANSACTION_HEADERS_V2.length);
-  var header = txSheet.getRange(1, 1, 1, width).getDisplayValues()[0];
-  for (var c = 0; c < header.length; c++) {
-    if (String(header[c]).trim() === ID_HEADER) return c + 1;
-  }
-  var idColumn = width + 1;
-  if (txSheet.getMaxColumns() < idColumn) {
-    txSheet.insertColumnsAfter(txSheet.getMaxColumns(), idColumn - txSheet.getMaxColumns());
-  }
-  txSheet.getRange(1, idColumn).setValues([[ID_HEADER]]);
-  return idColumn;
-}
-
-function formatTransactionTextColumns(txSheet, idColumn) {
-  var rows = txSheet.getMaxRows();
-  txSheet.getRange(1, idColumn, rows, 1).setNumberFormat("@");
-  TRANSACTION_TEXT_COLUMNS.forEach(function (column) {
-    txSheet.getRange(1, column, rows, 1).setNumberFormat("@");
-  });
-}
-
-/**
- * Gives every transaction row (one with a Type) that has no ID a new one. A row copied and pasted
- * in the Sheet carries its original's ID, so a repeated ID is replaced too: the first row keeps it.
- */
-function assignMissingIds(txSheet, idColumn) {
-  var lastRow = txSheet.getLastRow();
-  if (lastRow < 2) return 0;
-  var types = txSheet.getRange(2, 3, lastRow - 1, 1).getValues();
-  var ids = txSheet.getRange(2, idColumn, lastRow - 1, 1).getValues();
-  var seen = {};
-  var assigned = 0;
-  for (var i = 0; i < ids.length; i++) {
-    if (!String(types[i][0] || "").trim()) continue;
-    var id = String(ids[i][0] || "").trim();
-    if (!id || seen[id]) {
-      id = Utilities.getUuid();
-      ids[i][0] = id;
-      assigned++;
-    }
-    seen[id] = true;
-  }
-  if (assigned > 0) txSheet.getRange(2, idColumn, ids.length, 1).setValues(ids);
-  return assigned;
-}
-
-/** Maps each ID to its 1-based sheet row. */
-function rowsById(txSheet, idColumn) {
-  var lastRow = txSheet.getLastRow();
-  var map = {};
-  if (lastRow < 2) return map;
-  var ids = txSheet.getRange(2, idColumn, lastRow - 1, 1).getValues();
-  for (var i = 0; i < ids.length; i++) {
-    var id = String(ids[i][0] || "").trim();
-    if (id && !map[id]) map[id] = i + 2;
-  }
-  return map;
-}
-
-function prepareTransactionSheet(spreadsheet) {
-  var txSheet = ensureSheet(spreadsheet, TRANSACTIONS_SHEET);
-  if (txSheet.getLastRow() === 0) {
-    txSheet
-      .getRange(1, 1, 1, TRANSACTION_HEADERS_V2.length)
-      .setValues([TRANSACTION_HEADERS_V2]);
-  }
-  var idColumn = ensureIdColumn(txSheet);
-  formatTransactionTextColumns(txSheet, idColumn);
-  return { sheet: txSheet, idColumn: idColumn };
-}
-
-/** The 13 canonical transaction cells for one record from the app. */
-function transactionRowData(r, timestamp, timeZone, syncedAtIso) {
-  var txDateObj = new Date(r.date);
-  var formattedTxDate = isNaN(txDateObj.getTime())
-    ? String(r.date || "")
-    : Utilities.formatDate(txDateObj, timeZone, "M/d/yyyy");
-  var type = String(r.type || "");
-  var isTransfer = type.trim().toLowerCase() === "transfer";
-  var fromAccountName = String(r.fromAccountName || "").trim();
-  var toAccountName = String(r.toAccountName || "").trim();
-  var accountName = String(r.accountName || "").trim();
-  if (isTransfer && accountName && (!fromAccountName || !toAccountName)) {
-    var parts = splitTransferAccounts(accountName);
-    if (!fromAccountName) fromAccountName = parts.fromAccountName;
-    if (!toAccountName) toAccountName = parts.toAccountName;
-  }
-  return [
-    timestamp,
-    formattedTxDate,
-    type,
-    String(r.expCategory || ""),
-    String(r.incCategory || ""),
-    String(r.description || ""),
-    Number(r.amount) || 0,
-    accountName,
-    isTransfer ? fromAccountName : "",
-    isTransfer ? toAccountName : "",
-    String(r.remarks || ""),
-    syncedAtIso,
-    toBool(r.isBookmarked),
-  ];
-}
-
-/**
- * Inserts or overwrites each transaction by its ID. Repeating the same batch changes nothing.
- * A transaction whose `base` revision no longer matches its row is left alone and listed in `stale`.
- */
-function upsertTransactions(spreadsheet, transactions, timeZone) {
-  var prepared = prepareTransactionSheet(spreadsheet);
-  var txSheet = prepared.sheet;
-  var idColumn = prepared.idColumn;
-  var existing = rowsById(txSheet, idColumn);
-  var now = new Date();
-  var generatedTimestamp = Utilities.formatDate(now, timeZone, "M/d/yyyy HH:mm:ss");
-  var syncedAtIso = now.toISOString();
-  var appended = [];
-  var appendedIndexById = {};
-  var updated = 0;
-  var stale = [];
-  var written = {};
-
-  transactions.forEach(function (r) {
-    var id = String(r.id || "").trim();
-    if (!id) throw new Error("Every transaction needs an id");
-    var row = existing[id];
-    if (row) {
-      var base = String(r.base || "");
-      if (base) {
-        var current = txSheet.getRange(row, 1, 1, TRANSACTION_HEADERS_V2.length).getValues()[0];
-        if (rowRevision(current) !== base) {
-          stale.push(id);
-          return;
-        }
-      }
-      var keptTimestamp = txSheet.getRange(row, 1).getDisplayValues()[0][0];
-      var data = transactionRowData(
-        r,
-        keptTimestamp || normalizeTimestampKey(r.timestamp, timeZone) || generatedTimestamp,
-        timeZone,
-        syncedAtIso,
-      );
-      txSheet.getRange(row, 1, 1, data.length).setValues([data]);
-      written[id] = true;
-      updated++;
-      return;
-    }
-    var fresh = transactionRowData(
-      r,
-      normalizeTimestampKey(r.timestamp, timeZone) || generatedTimestamp,
-      timeZone,
-      syncedAtIso,
-    );
-    while (fresh.length < idColumn - 1) fresh.push("");
-    fresh.push(id);
-    if (appendedIndexById[id] !== undefined) {
-      appended[appendedIndexById[id]] = fresh;
-    } else {
-      appendedIndexById[id] = appended.length;
-      appended.push(fresh);
-    }
-    written[id] = true;
-  });
-
-  if (appended.length > 0) {
-    txSheet
-      .getRange(txSheet.getLastRow() + 1, 1, appended.length, idColumn)
-      .setValues(appended);
-  }
-  return {
-    status: "ok",
-    action: "upserted",
-    updated: updated,
-    inserted: appended.length,
-    stale: stale,
-    revisions: revisionsOf(txSheet, idColumn, written),
-  };
-}
-
-/** Revisions of the given rows as now stored (Sheets may have converted what was written). */
-function revisionsOf(txSheet, idColumn, ids) {
-  var revisions = {};
-  var lastRow = txSheet.getLastRow();
-  if (lastRow < 2) return revisions;
-  var data = txSheet.getRange(2, 1, lastRow - 1, idColumn).getValues();
-  for (var i = 0; i < data.length; i++) {
-    var id = String(data[i][idColumn - 1] || "").trim();
-    if (ids[id] && !revisions[id]) revisions[id] = rowRevision(data[i]);
-  }
-  return revisions;
-}
-
-/** Deletes rows by ID. An ID that isn't there counts as already deleted. */
-function deleteTransactionsById(spreadsheet, ids) {
-  var prepared = prepareTransactionSheet(spreadsheet);
-  var byId = rowsById(prepared.sheet, prepared.idColumn);
-  var rows = [];
-  var missing = [];
-  ids.forEach(function (raw) {
-    var id = String(raw || "").trim();
-    if (byId[id]) {
-      rows.push(byId[id]);
-      delete byId[id];
-    } else {
-      missing.push(id);
-    }
-  });
-  rows.sort(function (a, b) {
-    return b - a;
-  });
-  rows.forEach(function (row) {
-    prepared.sheet.deleteRow(row);
-  });
-  return { status: "ok", action: "deleted_ids", deleted: rows.length, missing: missing };
 }
 
 function toBool(value) {
@@ -900,16 +572,6 @@ function readBucketBudgets(spreadsheet) {
 
 function doPost(e) {
   try {
-    return withScriptLock(function () {
-      return handlePost(e);
-    });
-  } catch (err) {
-    return jsonOut({ status: "error", message: err.message });
-  }
-}
-
-function handlePost(e) {
-  try {
     var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
     var payload = parsePayload(e);
     var target = String(payload.target || "transactions").toLowerCase();
@@ -920,14 +582,6 @@ function handlePost(e) {
 
     if (target === "transactions" && action === "migrate") {
       return jsonOut(migrateTransactionsSheetToV2());
-    }
-
-    if (target === "transactions" && action === "upsert") {
-      return jsonOut(upsertTransactions(spreadsheet, payload.transactions || [], timeZone));
-    }
-
-    if (target === "transactions" && action === "delete_ids") {
-      return jsonOut(deleteTransactionsById(spreadsheet, payload.ids || []));
     }
 
     // =============================================================
@@ -1110,7 +764,6 @@ function handlePost(e) {
           "Name",
           "Display Order",
           "Last Backed Up",
-          "Role",
         ]);
       } else {
         rows.push(["ID", "MonthYear", "Category", "Amount", "Last Backed Up"]);
@@ -1124,7 +777,6 @@ function handlePost(e) {
             r.name,
             Number(r.displayOrder) || 0,
             backupAt,
-            r.role ? String(r.role) : "",
           ]);
         } else {
           rows.push([
@@ -1259,16 +911,6 @@ function handlePost(e) {
 
 function doGet(e) {
   try {
-    return withScriptLock(function () {
-      return handleGet(e);
-    });
-  } catch (err) {
-    return jsonOut({ status: "error", message: err.message, data: [] });
-  }
-}
-
-function handleGet(e) {
-  try {
     var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
     var timeZone = Session.getScriptTimeZone();
     var target = String(
@@ -1312,7 +954,6 @@ function handleGet(e) {
           optionType: String(dropdownData[d][1] || ""),
           name: String(dropdownData[d][2] || ""),
           displayOrder: Number(dropdownData[d][3]) || 0,
-          role: String(dropdownData[d][5] || ""),
         });
       }
       return jsonOut({ status: "ok", data: dropdowns });
@@ -1349,8 +990,6 @@ function handleGet(e) {
     // =============================================================
     var txSheet = spreadsheet.getSheetByName(TRANSACTIONS_SHEET);
     if (!txSheet) return jsonOut({ status: "ok", count: 0, data: [] });
-    var idColumn = ensureIdColumn(txSheet);
-    var idsAssigned = assignMissingIds(txSheet, idColumn);
 
     var headerRow = txSheet
       .getRange(
@@ -1365,10 +1004,7 @@ function handleGet(e) {
     var txData = txSheet.getDataRange().getValues();
     var txRecords = [];
     for (var t = 1; t < txData.length; t++) {
-      var fullRow = txData[t];
-      var id = String(fullRow[idColumn - 1] || "").trim();
-      // Parse without the ID cell so the legacy shifted-row check never mistakes it for data.
-      var row = fullRow.slice(0, idColumn - 1);
+      var row = txData[t];
       if (!row[2]) continue;
       var normalizedTimestamp = row[0]
         ? normalizeTimestampKey(row[0], timeZone)
@@ -1376,8 +1012,6 @@ function handleGet(e) {
       var parsed = parseTransactionRow(row, schemaMode);
 
       txRecords.push({
-        id: id,
-        revision: rowRevision(fullRow),
         timestamp: normalizedTimestamp,
         date: formatDate(row[1]),
         type: String(row[2] || ""),
@@ -1394,12 +1028,7 @@ function handleGet(e) {
       });
     }
 
-    return jsonOut({
-      status: "ok",
-      count: txRecords.length,
-      idsAssigned: idsAssigned,
-      data: txRecords,
-    });
+    return jsonOut({ status: "ok", count: txRecords.length, data: txRecords });
   } catch (err) {
     return jsonOut({ status: "error", message: err.message, data: [] });
   }
@@ -1467,182 +1096,4 @@ function runDescriptionRepair() {
       "\nEach save triggers an UPDATE sync which writes the description to the sheet."
     );
   }
-}
-""".trimIndent()
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AppsScriptSetupScreen(
-    innerPadding: PaddingValues,
-    onBack: () -> Unit,
-    vm: SettingsViewModel = hiltViewModel()
-) {
-    val context = LocalContext.current
-    val clipboard = LocalClipboard.current
-    val clipboardScope = rememberCoroutineScope()
-  val keyboardController = LocalSoftwareKeyboardController.current
-  val configuredUrl by vm.scriptUrl.collectAsStateWithLifecycle()
-  val connectionState by vm.connectionTestState.collectAsStateWithLifecycle()
-
-    var urlInput by remember(configuredUrl) { mutableStateOf(configuredUrl.orEmpty()) }
-    var showValidationError by remember { mutableStateOf(false) }
-
-    Scaffold(
-      containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = { Text("Database Setup") },
-                colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.background
-          ),
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
-        }
-    ) { scaffoldPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-              .background(MaterialTheme.colorScheme.background)
-                .padding(scaffoldPadding)
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text("Step 1: The Code", style = MaterialTheme.typography.titleMedium)
-            Text(
-              "Deploy a private Google Apps Script as your sync backend. Copy this script and paste it into Apps Script.",
-              style = MaterialTheme.typography.bodyMedium
-            )
-            Button(onClick = {
-              clipboardScope.launch {
-                clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Apps Script", APPS_SCRIPT_CODE)))
-                Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
-              }
-            }) {
-              Text("Copy Script Code")
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Text("Step 2: Deployment", style = MaterialTheme.typography.titleMedium)
-            Text(
-              "- Create a new Google Sheet\n- Go to Extensions > Apps Script\n- Paste the copied code\n- Click Deploy > New Deployment > Web App (Execute as: Me, Access: Anyone)\n- Copy the resulting Web App URL",
-              style = MaterialTheme.typography.bodyMedium
-            )
-            TextButton(onClick = {
-              val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://docs.google.com/spreadsheets"))
-              context.startActivity(intent)
-            }) {
-              Text("Open Google Sheets")
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Text("Step 3: Connect", style = MaterialTheme.typography.titleMedium)
-            Text("Paste your deployed Web App URL and save it.", style = MaterialTheme.typography.bodyMedium)
-
-            OutlinedTextField(
-              value = urlInput,
-              onValueChange = {
-                urlInput = it
-                showValidationError = false
-                vm.resetConnectionTestState()
-              },
-              modifier = Modifier.fillMaxWidth(),
-              singleLine = true,
-              label = { Text("Web App URL") },
-              isError = showValidationError,
-              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-              trailingIcon = {
-                IconButton(
-                  onClick = {
-                    clipboardScope.launch {
-                      clipboard.getClipEntry()?.clipData?.takeIf { it.itemCount > 0 }
-                        ?.getItemAt(0)?.coerceToText(context)?.toString()
-                        ?.let { pastedText ->
-                          urlInput = pastedText
-                          showValidationError = false
-                          vm.resetConnectionTestState()
-                        }
-                      keyboardController?.hide()
-                    }
-                  }
-                ) {
-                  Icon(
-                    imageVector = Icons.Default.ContentPaste,
-                    contentDescription = "Paste URL"
-                  )
-                }
-              }
-            )
-
-            if (showValidationError) {
-              Text(
-                text = "URL must start with $SCRIPT_URL_PREFIX",
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 2.dp)
-              )
-            }
-
-            Button(
-              onClick = {
-                val normalized = urlInput.trim()
-                val isValid = normalized.startsWith(SCRIPT_URL_PREFIX)
-                if (!isValid) {
-                  showValidationError = true
-                  return@Button
-                }
-                vm.updateScriptUrl(normalized)
-                Toast.makeText(context, "Connected", Toast.LENGTH_SHORT).show()
-              },
-              modifier = Modifier.padding(top = 4.dp)
-            ) {
-              Text("Save & Connect")
-            }
-
-            OutlinedButton(
-              onClick = {
-                val normalized = urlInput.trim()
-                val isValid = normalized.startsWith(SCRIPT_URL_PREFIX)
-                if (!isValid) {
-                  showValidationError = true
-                  vm.resetConnectionTestState()
-                  return@OutlinedButton
-                }
-                vm.testScriptConnection(normalized)
-              }
-            ) {
-              Text("Test Connection")
-            }
-
-            when (val state = connectionState) {
-              ConnectionTestState.Idle -> Unit
-              ConnectionTestState.Testing -> Text(
-                text = "Testing...",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall
-              )
-              ConnectionTestState.Success -> Text(
-                text = "Connected: URL is reachable",
-                color = androidx.compose.ui.graphics.Color(0xFF2E7D32),
-                style = MaterialTheme.typography.bodySmall
-              )
-              is ConnectionTestState.Error -> Text(
-                text = "Connection failed: ${state.message}",
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall
-              )
-            }
-        }
-    }
 }

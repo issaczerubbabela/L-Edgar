@@ -77,6 +77,45 @@ class DropdownRoleMigrationTest {
         db.close()
     }
 
+    /**
+     * A development build numbered the roles migration 18 -> 19 before sync phase 2 took that number,
+     * so a phone that ran it sits at "version 19" with roles but none of the sync columns.
+     */
+    @Test
+    fun aRolesOnlyVersion19FromADevelopmentBuildStillUpgrades() = runBlocking {
+        context.deleteDatabase(DB_NAME)
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            SupportSQLiteOpenHelper.Configuration.builder(context)
+                .name(DB_NAME)
+                .callback(object : SupportSQLiteOpenHelper.Callback(19) {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        VERSION_16_SCHEMA.forEach(db::execSQL)
+                        com.issaczerubbabel.ledgar.data.local.migration.BucketBudgetMigration.MIGRATION_16_17.migrate(db)
+                        DatabaseModule.MIGRATION_17_18.migrate(db)
+                        db.execSQL("ALTER TABLE dropdown_options ADD COLUMN role TEXT NOT NULL DEFAULT ''")
+                        db.execSQL("INSERT INTO dropdown_options (optionType, name, displayOrder, role) VALUES ('EXPENSE_CATEGORY', 'Investments/Savings', 0, 'SAVING')")
+                        db.execSQL(
+                            "INSERT INTO expense_records (date, type, category, description, amount, remarks, isBookmarked, isSynced, remoteTimestamp, syncAction) " +
+                                "VALUES ('2026-09-01', 'Expense', 'Food', 'Kept through the upgrade', 42.5, '', 0, 0, NULL, 'INSERT')"
+                        )
+                    }
+                    override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+                })
+                .build()
+        )
+        helper.writableDatabase
+        helper.close()
+
+        val db = DatabaseModule.provideDatabase(context)
+        assertEquals("Kept through the upgrade", db.expenseDao().getAllRecordsSnapshot().single().description)
+        assertEquals(DropdownRole.SAVING, db.dropdownOptionDao().getAllOptionsSnapshot().single().role)
+        val columns = db.openHelper.readableDatabase.query("PRAGMA table_info(expense_records)").use { c ->
+            generateSequence { if (c.moveToNext()) c.getString(c.getColumnIndexOrThrow("name")) else null }.toSet()
+        }
+        assertEquals(setOf("syncId", "syncedRevision", "sheetConflictJson"), columns.intersect(setOf("syncId", "syncedRevision", "sheetConflictJson")))
+        db.close()
+    }
+
     private companion object {
         const val DB_NAME = "sheetsync.db"
 

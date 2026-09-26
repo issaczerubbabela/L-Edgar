@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.ui.components
 
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -29,7 +30,7 @@ fun DropdownField(label: String, options: List<String>, selected: String, onSele
                 }
             },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            modifier = Modifier.menuAnchor().fillMaxWidth()
+            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth()
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { option ->

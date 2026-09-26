@@ -1,5 +1,27 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.automirrored.filled.TrendingFlat
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import android.provider.Settings
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -36,9 +58,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.TrendingDown
-import androidx.compose.material.icons.filled.TrendingFlat
-import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -49,7 +68,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -57,7 +75,6 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -130,6 +147,10 @@ fun InsightsScreen(
     val palette by vm.chartPalette.collectAsStateWithLifecycle()
     val detail by vm.detail.collectAsStateWithLifecycle()
     val colors = rememberChartColors(palette)
+    // Held here, not in the ViewModel, so the row and the sheet flip on the same frame.
+    var openLook by remember { mutableStateOf<RowLook?>(null) }
+    val openDetail: (DetailRequest, RowLook) -> Unit = { request, look -> vm.openDetail(request); openLook = look }
+    val closeDetail = { openLook = null; vm.closeDetail() }
     val listState = rememberLazyListState()
     val compact by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
     val reduceMotion = animationsOff()
@@ -137,7 +158,9 @@ fun InsightsScreen(
     var showDatePicker by remember { mutableStateOf(false) }
     var showRangePicker by remember { mutableStateOf(false) }
 
-    Box(Modifier.fillMaxSize().padding(innerPadding)) {
+    SharedTransitionLayout(Modifier.fillMaxSize().padding(innerPadding)) {
+    CompositionLocalProvider(LocalDetailMotion provides DetailMotion(this, openLook?.key)) {
+    Box(Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
@@ -160,7 +183,7 @@ fun InsightsScreen(
                 return@LazyColumn
             }
 
-            val cards = statsCards(state, colors, vm, onSetUpCycle)
+            val cards = statsCards(state, colors, vm, onSetUpCycle, openDetail)
             cards.forEachIndexed { index, (key, content) ->
                 item(key = key) {
                     Entrance(index, enabled = !firstVisitDone && !reduceMotion) { content() }
@@ -196,6 +219,17 @@ fun InsightsScreen(
                 }
             }
         }
+
+        DetailOverlay(
+            look = openLook,
+            data = detail?.second,
+            colors = colors,
+            period = state.period,
+            rupees = vm::formatRupee,
+            onDismiss = closeDetail
+        )
+    }
+    }
     }
 
     LaunchedEffect(state.loading) {
@@ -220,10 +254,6 @@ fun InsightsScreen(
             onConfirm = { a, b -> vm.selectCustomRange(a, b); showRangePicker = false }
         )
     }
-
-    detail?.let { (request, data) ->
-        DetailSheet(request, data, colors, state.period, vm::formatRupee, onDismiss = vm::closeDetail)
-    }
 }
 
 /** The cards below the header, in order, each with a stable key for the list. */
@@ -231,7 +261,8 @@ private fun statsCards(
     state: StatsUiState,
     colors: ChartColors,
     vm: StatsViewModel,
-    onSetUpCycle: () -> Unit
+    onSetUpCycle: () -> Unit,
+    onOpen: (DetailRequest, RowLook) -> Unit
 ): List<Pair<String, @Composable () -> Unit>> {
     val report = state.report
     val rupees = vm::formatRupee
@@ -245,10 +276,10 @@ private fun statsCards(
     val cycle = report.cycle
     if (cycle != null) {
         cards += "buckets" to {
-            BucketsCard(cycle.summary.buckets, cycle.summary.unbucketed.sumOf { it.amount }, cycle.summary.unbucketed.map { it.category }, colors, rupees) { vm.openDetail(it) }
+            BucketsCard(cycle.summary.buckets, cycle.summary.unbucketed.sumOf { it.amount }, cycle.summary.unbucketed.map { it.category }, colors, rupees, onOpen)
         }
     } else {
-        cards += "categories" to { CategoriesCard(report, colors, rupees, state.period) { vm.openDetail(it) } }
+        cards += "categories" to { CategoriesCard(report, colors, rupees, state.period, onOpen) }
     }
     if (report.days.isNotEmpty()) cards += "calendar" to { CalendarCard(report.days, colors, rupees) }
     cards += "paid" to { PaidFromCard(report, rupees) }
@@ -447,7 +478,7 @@ private fun ChangeChip(text: String, up: Boolean?, goodWhenUp: Boolean) {
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Icon(
-            when (up) { true -> Icons.Filled.TrendingUp; false -> Icons.Filled.TrendingDown; null -> Icons.Filled.TrendingFlat },
+            when (up) { true -> Icons.AutoMirrored.Filled.TrendingUp; false -> Icons.AutoMirrored.Filled.TrendingDown; null -> Icons.AutoMirrored.Filled.TrendingFlat },
             contentDescription = null, tint = tint, modifier = Modifier.size(16.dp)
         )
         Text(text, style = tabularNumbers(MaterialTheme.typography.labelMedium), color = tint, maxLines = 1)
@@ -538,7 +569,7 @@ private fun PaceCard(state: StatsUiState, colors: ChartColors, rupees: (Double) 
     val pace = report.pace
     var selected by remember(state.period) { mutableStateOf<Int?>(null) }
     val previousName = when (state.period) {
-        is StatsPeriod.Month -> (state.period.previous() as StatsPeriod.Month).month.month.getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH)
+        is StatsPeriod.Month -> state.period.previous().month.month.getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH)
         is StatsPeriod.Year -> (state.period.year - 1).toString()
         is StatsPeriod.Week, is StatsPeriod.Cycle -> "Last"
         else -> "Before"
@@ -590,7 +621,7 @@ private fun BucketsCard(
     unbucketedCategories: List<String>,
     colors: ChartColors,
     rupees: (Double) -> String,
-    onOpen: (DetailRequest) -> Unit
+    onOpen: (DetailRequest, RowLook) -> Unit
 ) {
     StatsCard {
         CardTitle("Buckets")
@@ -599,13 +630,24 @@ private fun BucketsCard(
             val limit = b.bucket.allocatedAmount
             val max = maxOf(b.spent, limit).coerceAtLeast(1.0)
             val over = (b.spent - limit).coerceAtLeast(0.0)
-            RankedRow(
+            val look = RowLook(
+                key = "bucket-${b.bucket.id}",
                 name = b.bucket.name,
                 amount = "${rupees(b.spent)} / ${shortRupees(limit)}",
                 fraction = (minOf(b.spent, limit) / max).toFloat(),
                 barColor = colors.muted.copy(alpha = 0.7f),
-                track = track,
                 overFraction = (over / max).toFloat(),
+                bucketColorIndex = b.bucket.colorIndex
+            )
+            SharedSlot(look.key) { shared ->
+            RankedRow(
+                name = look.name,
+                amount = look.amount,
+                fraction = look.fraction,
+                barColor = look.barColor,
+                track = track,
+                modifier = shared,
+                overFraction = look.overFraction,
                 overColor = colors.over,
                 note = if (over > 0) "Over by ${rupees(over)}" else "${rupees(limit - b.spent)} left",
                 noteColor = if (over > 0) colors.over else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -613,25 +655,30 @@ private fun BucketsCard(
                     if (over > 0) Icon(Icons.Filled.Warning, contentDescription = "Over its limit", tint = colors.over, modifier = Modifier.size(16.dp))
                     else ColorDot(bucketColor(b.bucket.colorIndex))
                 },
-                onClick = { onOpen(DetailRequest(b.bucket.name, b.categories.map { it.category }.toSet(), b.bucket.colorIndex)) }
+                onClick = { onOpen(DetailRequest(b.bucket.name, b.categories.map { it.category }.toSet(), b.bucket.colorIndex), look) }
             )
+            }
         }
         if (unbucketedSpent > 0) {
+            val look = RowLook("bucket-none", "Not in a bucket", rupees(unbucketedSpent), 0f, colors.muted)
+            SharedSlot(look.key) { shared ->
             RankedRow(
-                name = "Not in a bucket",
-                amount = rupees(unbucketedSpent),
+                name = look.name,
+                amount = look.amount,
                 fraction = 0f,
                 barColor = colors.muted,
                 track = Color.Transparent,
+                modifier = shared,
                 note = unbucketedCategories.take(3).joinToString(", ") + if (unbucketedCategories.size > 3) " +${unbucketedCategories.size - 3}" else "",
-                onClick = { onOpen(DetailRequest("Not in a bucket", unbucketedCategories.toSet())) }
+                onClick = { onOpen(DetailRequest("Not in a bucket", unbucketedCategories.toSet()), look) }
             )
+            }
         }
     }
 }
 
 @Composable
-private fun CategoriesCard(report: StatsReportUi, colors: ChartColors, rupees: (Double) -> String, period: StatsPeriod, onOpen: (DetailRequest) -> Unit) {
+private fun CategoriesCard(report: StatsReportUi, colors: ChartColors, rupees: (Double) -> String, period: StatsPeriod, onOpen: (DetailRequest, RowLook) -> Unit) {
     var showAll by rememberSaveable(period.start, period.end) { mutableStateOf(false) }
     val rows = if (showAll) report.categories else report.categories.take(6)
     val max = report.categories.maxOfOrNull { maxOf(it.amount, it.usual ?: 0.0) }?.coerceAtLeast(1.0) ?: 1.0
@@ -648,12 +695,15 @@ private fun CategoriesCard(report: StatsReportUi, colors: ChartColors, rupees: (
         rows.forEach { row ->
             val usual = row.usual
             val delta = usual?.takeIf { it > 0 }?.let { ((row.amount - it) / it * 100).roundToInt() }
+            val look = RowLook("cat-${row.category}", row.category, rupees(row.amount), (row.amount / max).toFloat(), colors.moneyOut)
+            SharedSlot(look.key) { shared ->
             RankedRow(
-                name = row.category,
-                amount = rupees(row.amount),
-                fraction = (row.amount / max).toFloat(),
-                barColor = colors.moneyOut,
+                name = look.name,
+                amount = look.amount,
+                fraction = look.fraction,
+                barColor = look.barColor,
                 track = track,
+                modifier = shared,
                 usualFraction = usual?.let { (it / max).toFloat() },
                 note = when {
                     usual == null -> if (hasHistory) "New this period" else null
@@ -661,8 +711,9 @@ private fun CategoriesCard(report: StatsReportUi, colors: ChartColors, rupees: (
                     delta > 0 -> "▲ $delta% above your usual ${rupees(usual)}"
                     else -> "▼ ${-delta}% below your usual ${rupees(usual)}"
                 },
-                onClick = { onOpen(DetailRequest(row.category, setOf(row.category))) }
+                onClick = { onOpen(DetailRequest(row.category, setOf(row.category)), look) }
             )
+            }
         }
         if (report.totals.refunds > 0) {
             Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -814,52 +865,182 @@ private fun LoadingCards(reduceMotion: Boolean) {
 
 // ---- drill-down ----------------------------------------------------------------------------------
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** What a breakdown row looks like, so the detail sheet's header can start out as that row. */
+private data class RowLook(
+    val key: String,
+    val name: String,
+    val amount: String,
+    val fraction: Float,
+    val barColor: Color,
+    val overFraction: Float = 0f,
+    val bucketColorIndex: Int? = null
+)
+
+/** The shared-element scope, and which row (if any) has flown into the sheet. */
+@OptIn(ExperimentalSharedTransitionApi::class)
+private class DetailMotion(val scope: SharedTransitionScope, val openKey: String?)
+
+private val LocalDetailMotion = compositionLocalOf<DetailMotion?> { null }
+
+/**
+ * Holds a breakdown row. While its sheet is open the row flies into the sheet header and back on
+ * close; the slot keeps the row's height so the list doesn't jump.
+ */
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-private fun DetailSheet(
-    request: DetailRequest,
-    data: CategoryDetail,
+private fun SharedSlot(key: String, content: @Composable (Modifier) -> Unit) {
+    val motion = LocalDetailMotion.current
+    if (motion == null) {
+        content(Modifier)
+        return
+    }
+    val density = LocalDensity.current
+    var height by remember { mutableIntStateOf(0) }
+    Box(if (height > 0) Modifier.height(with(density) { height.toDp() }) else Modifier) {
+        AnimatedVisibility(visible = motion.openKey != key, enter = fadeIn(tween(200)), exit = fadeOut(tween(120))) {
+            with(motion.scope) {
+                content(
+                    Modifier
+                        .onSizeChanged { height = it.height }
+                        .sharedBounds(rememberSharedContentState(key), this@AnimatedVisibility)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The drill-down sheet. It opens inside the screen (not a separate window like ModalBottomSheet)
+ * so the tapped row can travel into its header. Back, a tap on the scrim, or dragging the header
+ * down closes it.
+ */
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+private fun DetailOverlay(
+    look: RowLook?,
+    data: CategoryDetail?,
     colors: ChartColors,
     period: StatsPeriod,
     rupees: (Double) -> String,
     onDismiss: () -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)) {
-        LazyColumn(
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+    val motion = LocalDetailMotion.current ?: return
+    val open = look != null
+    // Keep the last contents while the sheet animates away.
+    var shownLook by remember { mutableStateOf(look) }
+    var shownData by remember { mutableStateOf(data) }
+    if (look != null) shownLook = look
+    if (data != null && open) shownData = data
+    LaunchedEffect(look?.key) { if (look != null && data?.title != look.name) shownData = null }
+
+    BackHandler(enabled = open, onBack = onDismiss)
+
+    AnimatedVisibility(visible = open, enter = fadeIn(tween(250)), exit = fadeOut(tween(200))) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.45f))
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClickLabel = "Close", onClick = onDismiss)
+        )
+    }
+
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+        AnimatedVisibility(
+            visible = open,
+            enter = slideInVertically(tween(320, easing = EmphasizedDecelerate)) { it / 5 } + fadeIn(tween(200)),
+            exit = slideOutVertically(tween(220, easing = EmphasizedAccelerate)) { it / 5 } + fadeOut(tween(180))
         ) {
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    request.bucketColorIndex?.let { ColorDot(bucketColor(it)) }
-                    Text(request.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
+            val sheetLook = shownLook ?: return@AnimatedVisibility
+            var drag by remember { mutableFloatStateOf(0f) }
+            val dismissAt = with(LocalDensity.current) { 140.dp.toPx() }
+            Surface(
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                shadowElevation = 8.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.86f)
+                    .offset { IntOffset(0, drag.roundToInt()) }
+            ) {
+                Column {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .draggable(
+                                orientation = Orientation.Vertical,
+                                state = rememberDraggableState { delta -> drag = (drag + delta).coerceAtLeast(0f) },
+                                onDragStopped = { velocity ->
+                                    if (drag > dismissAt || velocity > 1800f) onDismiss()
+                                    else animate(drag, 0f, animationSpec = tween(200)) { value, _ -> drag = value }
+                                }
+                            )
+                            .padding(horizontal = 20.dp)
+                            .padding(top = 10.dp, bottom = 4.dp)
+                    ) {
+                        Box(
+                            Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .size(width = 36.dp, height = 4.dp)
+                                .background(MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(2.dp))
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        with(motion.scope) {
+                            RankedRow(
+                                name = sheetLook.name,
+                                amount = sheetLook.amount,
+                                fraction = sheetLook.fraction,
+                                barColor = sheetLook.barColor,
+                                track = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                overFraction = sheetLook.overFraction,
+                                overColor = colors.over,
+                                leading = sheetLook.bucketColorIndex?.let { { ColorDot(bucketColor(it)) } },
+                                modifier = Modifier
+                                    .sharedBounds(rememberSharedContentState(sheetLook.key), this@AnimatedVisibility)
+                                    .semantics { heading() }
+                            )
+                        }
+                        Text(periodTitle(period), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    DetailBody(shownData, sheetLook.name, colors, rupees)
                 }
-                Text(periodTitle(period), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Stat("This period", rupees(data.spent), Modifier.weight(1f))
-                    Stat("Usual", data.usual?.let(rupees) ?: "—", Modifier.weight(1f))
-                    Stat("Per day", rupees(data.perDay), Modifier.weight(1f))
-                }
-            }
-            if (data.trend.size > 1) {
-                item {
-                    var selected by remember { mutableStateOf<Int?>(null) }
-                    Text(
-                        selected?.let { "${data.trend[it].label} · ${rupees(data.trend[it].spent)}" } ?: "Tap a bar",
-                        style = tabularNumbers(MaterialTheme.typography.bodySmall),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    TrendChart(data.trend, colors, selected, { selected = it }, "${request.title} over time")
-                }
-            }
-            item { Text("Transactions", style = MaterialTheme.typography.titleSmall) }
-            if (data.transactions.isEmpty()) {
-                item { Text("None in this period", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            }
-            items(data.transactions.take(100), key = { it.id }) { TransactionLine(it, rupees) }
         }
+    }
+}
+
+@Composable
+private fun DetailBody(data: CategoryDetail?, title: String, colors: ChartColors, rupees: (Double) -> String) {
+    if (data == null) {
+        Box(Modifier.fillMaxWidth().height(160.dp))
+        return
+    }
+    LazyColumn(
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Stat("This period", rupees(data.spent), Modifier.weight(1f))
+                Stat("Usual", data.usual?.let(rupees) ?: "—", Modifier.weight(1f))
+                Stat("Per day", rupees(data.perDay), Modifier.weight(1f))
+            }
+        }
+        if (data.trend.size > 1) {
+            item {
+                var selected by remember { mutableStateOf<Int?>(null) }
+                Text(
+                    selected?.let { "${data.trend[it].label} · ${rupees(data.trend[it].spent)}" } ?: "Tap a bar",
+                    style = tabularNumbers(MaterialTheme.typography.bodySmall),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TrendChart(data.trend, colors, selected, { selected = it }, "$title over time")
+            }
+        }
+        item { Text("Transactions", style = MaterialTheme.typography.titleSmall) }
+        if (data.transactions.isEmpty()) {
+            item { Text("None in this period", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        items(data.transactions.take(100), key = { it.id }) { TransactionLine(it, rupees) }
     }
 }
 
