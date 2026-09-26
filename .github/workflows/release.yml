@@ -78,7 +78,7 @@ jobs:
           ./gradlew testDebugUnitTest
 
       - name: Apps Script tests
-        run: node --test scripts/tests/bucket-budgets.test.js
+        run: node --test scripts/tests/bucket-budgets.test.js scripts/tests/transaction-sync.test.js
 
       - name: Build the signed release APK
         env:

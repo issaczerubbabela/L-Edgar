@@ -25,6 +25,11 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Add Transaction and Quick Add show which bucket the category falls in and what's left of it as you type
 - Sheets sync: a screen to resolve conflicts between the phone and the Sheet
 - Accounts: set the exact time a starting balance applies from, with a Set to now shortcut
+- Two-way sync with Google Sheets: edits and rows typed into the Sheet come to the phone when you open the app or tap Sync now
+- Every transaction has a permanent ID shared with a new ID column in the Sheet, so syncing again or reinstalling never duplicates rows
+- A transaction changed both on the phone and in the Sheet becomes a conflict for you to resolve in Settings, instead of one side silently winning
+- Settings: Sync now, Resolve sync conflicts, and Find duplicate transactions
+- Deleting many rows in the Sheet at once asks before removing them from the phone, and lets you put them back
 
 ### Changed
 
@@ -38,7 +43,9 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Rupee amounts use Indian digit grouping (₹1,20,000), with digits that line up as they change
 - The Cash Flow Graph setting (bars or lines) is replaced by Chart colours
 - Rebuilt on Kotlin 2.3 and Compose 1.11 with Material 3 1.4, for smoother screens
-- Redeploy the Apps Script from Database Setup once so buckets and category roles are backed up. Syncing keeps working if you don't
+- On a fresh install, transactions pulled from the Sheet land on your restored accounts instead of a placeholder Cash account
+- Sync pauses with an Update script notice when your Apps Script is too old, instead of writing to it unsafely
+- Update your Apps Script from Database Setup after installing: two-way sync needs it, and it backs up buckets and category roles
 
 ### Fixed
 
@@ -65,8 +72,10 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 ### Developer
 
 - Stats numbers come from one pure, tested StatsReport module; StatsPeriod owns period stepping
+- Two-way sync (ADR-0003): Transaction IDs, idempotent locked upserts in the Apps Script, version-checked pulls and a script version handshake, with transaction-sync node tests
+- Room migrations 18 -> 19 (sync IDs, synced revisions, sheet conflicts) and 19 -> 20 (dropdown roles, tolerant of builds that added the column earlier)
 - CONTEXT.md glossary and ADRs 0001-0004 (offline-first writes, per-user Apps Script, two-way sync by Transaction ID, Stats roles)
-- Room migrations to v19 (bucket budgets, dropdown roles) with migration tests; the legacy budgets table is kept for restores
+- Bucket-budget tables with migration tests; the legacy budgets table is kept for restores
 - Instrumented cycle tests on a real in-memory Room database; Apps Script node tests cover both script copies and fail if they drift
 - Toolchain: Kotlin 2.3.21 with the Compose compiler plugin, Compose BOM 2026.06.01, Room 2.8.5, Hilt 2.57.2, KSP 2.3.12; all deprecations cleared
 - New Release workflow: pushing a vX.Y.Z tag publishes a signed APK and this changelog section as a GitHub Release

@@ -32,7 +32,7 @@ jobs:
         node-version: '22'
 
     - name: Apps Script tests
-      run: node --test scripts/tests/bucket-budgets.test.js
+      run: node --test scripts/tests/bucket-budgets.test.js scripts/tests/transaction-sync.test.js
 
     - name: Build with Gradle
       run: ./gradlew assembleDebug

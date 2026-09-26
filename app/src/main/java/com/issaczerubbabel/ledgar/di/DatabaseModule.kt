@@ -1,7 +1,7 @@
 package com.issaczerubbabel.ledgar.di
 
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownRole
-import com.issaczerubbabel.ledgar.data.local.entity.ExpenseVersionTrigger
+import com.issaczerubbabel.ledgar.data.local.entity.ExpenseTableTriggers
 import android.content.Context
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -75,14 +75,33 @@ object DatabaseModule {
     private val MIGRATION_17_18 = object : Migration(17, 18) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE expense_records ADD COLUMN localVersion INTEGER NOT NULL DEFAULT 0")
-            ExpenseVersionTrigger.install(db)
+            db.execSQL(ExpenseTableTriggers.CREATE_SQL)
         }
     }
 
-    /** Adds Dropdown option Stats roles (ADR-0004) and gives the defaults once. */
-    internal val MIGRATION_18_19 = object : Migration(18, 19) {
+    /** Existing rows keep a null Transaction ID: Sync links them to their Sheet row by Remote timestamp. */
+    private val MIGRATION_18_19 = object : Migration(18, 19) {
         override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("ALTER TABLE dropdown_options ADD COLUMN role TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE expense_records ADD COLUMN syncId TEXT")
+            db.execSQL("ALTER TABLE expense_records ADD COLUMN syncedRevision TEXT")
+            db.execSQL("ALTER TABLE expense_records ADD COLUMN sheetConflictJson TEXT")
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_expense_records_syncId` ON `expense_records` (`syncId`)")
+            ExpenseTableTriggers.install(db)
+        }
+    }
+
+    /**
+     * Adds Dropdown option Stats roles (ADR-0004) and gives the defaults once. The column is only
+     * added if missing: a development build numbered this migration 18 -> 19 before sync phase 2 took
+     * that number.
+     */
+    internal val MIGRATION_19_20 = object : Migration(19, 20) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            val hasRole = db.query("PRAGMA table_info(dropdown_options)").use { cursor ->
+                val nameColumn = cursor.getColumnIndexOrThrow("name")
+                generateSequence { if (cursor.moveToNext()) cursor.getString(nameColumn) else null }.any { it == "role" }
+            }
+            if (!hasRole) db.execSQL("ALTER TABLE dropdown_options ADD COLUMN role TEXT NOT NULL DEFAULT ''")
             applyDefaultRoles(db)
         }
     }
@@ -198,14 +217,14 @@ object DatabaseModule {
         val callback = object : RoomDatabase.Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
                 super.onCreate(db)
-                ExpenseVersionTrigger.install(db)
+                ExpenseTableTriggers.install(db)
                 android.util.Log.d("DatabaseModule", "Database created, seeding defaults...")
                 seedDropdownDefaultsIfEmpty(db)
             }
 
             override fun onOpen(db: SupportSQLiteDatabase) {
                 super.onOpen(db)
-                ExpenseVersionTrigger.install(db)
+                ExpenseTableTriggers.install(db)
                 // Seed defaults on first open as a fallback (in case onCreate wasn't called due to migrations)
                 // This is safe because seedDropdownDefaultsIfEmpty checks if data already exists
                 seedDropdownDefaultsIfEmpty(db)
@@ -222,6 +241,7 @@ object DatabaseModule {
             .addMigrations(BucketBudgetMigration.MIGRATION_16_17)
             .addMigrations(MIGRATION_17_18)
             .addMigrations(MIGRATION_18_19)
+            .addMigrations(MIGRATION_19_20)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .addCallback(callback)
             .build()
