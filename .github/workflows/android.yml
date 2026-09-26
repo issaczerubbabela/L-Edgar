@@ -35,7 +35,7 @@ jobs:
       run: node --test scripts/tests/bucket-budgets.test.js scripts/tests/transaction-sync.test.js
 
     - name: Build with Gradle
-      run: ./gradlew assembleDebug
+      run: ./gradlew assembleDebug --stacktrace
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
