@@ -817,6 +817,7 @@ function doPost(e) {
           "Name",
           "Display Order",
           "Last Backed Up",
+          "Role",
         ]);
       } else {
         rows.push(["ID", "MonthYear", "Category", "Amount", "Last Backed Up"]);
@@ -830,6 +831,7 @@ function doPost(e) {
             r.name,
             Number(r.displayOrder) || 0,
             backupAt,
+            r.role ? String(r.role) : "",
           ]);
         } else {
           rows.push([
@@ -1007,6 +1009,7 @@ function doGet(e) {
           optionType: String(dropdownData[d][1] || ""),
           name: String(dropdownData[d][2] || ""),
           displayOrder: Number(dropdownData[d][3]) || 0,
+          role: String(dropdownData[d][5] || ""),
         });
       }
       return jsonOut({ status: "ok", data: dropdowns });

@@ -5,7 +5,9 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.*
@@ -28,7 +30,8 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.issaczerubbabel.ledgar.data.preferences.CashFlowChartStyle
+import com.issaczerubbabel.ledgar.data.preferences.ChartPalette
+import com.issaczerubbabel.ledgar.ui.theme.swatches
 import com.issaczerubbabel.ledgar.data.remote.ImportRecordDto
 import com.issaczerubbabel.ledgar.data.repository.SyncConflict
 import com.issaczerubbabel.ledgar.ui.theme.AppThemeOption
@@ -72,7 +75,7 @@ fun SettingsScreen(
     val appLockAuthMode by vm.appLockAuthMode.collectAsStateWithLifecycle()
     val appLockTimeoutMinutes by vm.appLockTimeoutMinutes.collectAsStateWithLifecycle()
     val hasAppPinConfigured by vm.hasAppPinConfigured.collectAsStateWithLifecycle()
-    val cashFlowChartStyle by vm.cashFlowChartStyle.collectAsStateWithLifecycle()
+    val chartPalette by vm.chartPalette.collectAsStateWithLifecycle()
     var themeDropdownExpanded by remember { mutableStateOf(false) }
     var chartStyleDropdownExpanded by remember { mutableStateOf(false) }
     var authModeDropdownExpanded by remember { mutableStateOf(false) }
@@ -333,44 +336,52 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsListItem(title = "Cash Flow Graph", icon = Icons.Filled.ShowChart) {
+            SettingsListItem(title = "Chart colours", icon = Icons.Filled.ShowChart) {
                 ExposedDropdownMenuBox(
                     expanded = chartStyleDropdownExpanded,
                     onExpandedChange = { chartStyleDropdownExpanded = !chartStyleDropdownExpanded }
                 ) {
                     TextField(
-                        value = cashFlowChartStyleLabel(cashFlowChartStyle),
+                        value = chartPalette.label,
                         onValueChange = {},
                         readOnly = true,
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyMedium,
+                        leadingIcon = { PaletteSwatches(chartPalette) },
                         trailingIcon = {
                             ExposedDropdownMenuDefaults.TrailingIcon(expanded = chartStyleDropdownExpanded)
                         },
                         colors = ExposedDropdownMenuDefaults.textFieldColors(),
                         modifier = Modifier
                             .menuAnchor()
-                            .widthIn(min = 132.dp, max = 188.dp)
+                            .widthIn(min = 132.dp, max = 200.dp)
                     )
 
                     ExposedDropdownMenu(
                         expanded = chartStyleDropdownExpanded,
                         onDismissRequest = { chartStyleDropdownExpanded = false }
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("Bars") },
-                            onClick = {
-                                vm.updateCashFlowChartStyle(CashFlowChartStyle.BAR)
-                                chartStyleDropdownExpanded = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Lines") },
-                            onClick = {
-                                vm.updateCashFlowChartStyle(CashFlowChartStyle.LINE)
-                                chartStyleDropdownExpanded = false
-                            }
-                        )
+                        ChartPalette.entries.forEach { palette ->
+                            DropdownMenuItem(
+                                leadingIcon = { PaletteSwatches(palette) },
+                                text = {
+                                    Column {
+                                        Text(palette.label)
+                                        if (!palette.colourBlindSafe) {
+                                            Text(
+                                                text = "Not colour-blind safe",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                },
+                                onClick = {
+                                    vm.updateChartPalette(palette)
+                                    chartStyleDropdownExpanded = false
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -720,9 +731,14 @@ private fun themeLabel(option: AppThemeOption): String = when (option) {
     AppThemeOption.RED -> "Red"
 }
 
-private fun cashFlowChartStyleLabel(style: CashFlowChartStyle): String = when (style) {
-    CashFlowChartStyle.BAR -> "Bars"
-    CashFlowChartStyle.LINE -> "Lines"
+/** The palette's money in, money out and saved colours, side by side. */
+@Composable
+private fun PaletteSwatches(palette: ChartPalette) {
+    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        palette.swatches().forEach { color ->
+            Box(Modifier.size(10.dp).background(color, CircleShape))
+        }
+    }
 }
 
 private fun authModeLabel(mode: AppLockAuthMode): String = when (mode) {

@@ -10,7 +10,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.work.WorkInfo
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.preferences.AppLockAuthMode
-import com.issaczerubbabel.ledgar.data.preferences.CashFlowChartStyle
+import com.issaczerubbabel.ledgar.data.preferences.ChartPalette
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
 import com.issaczerubbabel.ledgar.data.remote.ApiService
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
@@ -94,25 +94,17 @@ class SettingsViewModel @Inject constructor(
     val hasAppPinConfigured: StateFlow<Boolean> = themeRepository.hasAppPinConfigured
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
-    val cashFlowChartStyle: StateFlow<CashFlowChartStyle> = themeRepository.cashFlowChartStyle
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CashFlowChartStyle.BAR)
+    val chartPalette: StateFlow<ChartPalette> = themeRepository.chartPalette
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChartPalette.STANDARD)
 
     fun updateTheme(option: AppThemeOption) {
         viewModelScope.launch { themeRepository.updateTheme(option) }
     }
 
-    fun updateCashFlowChartStyle(style: CashFlowChartStyle) {
+    fun updateChartPalette(palette: ChartPalette) {
         viewModelScope.launch {
-            themeRepository.updateCashFlowChartStyle(style)
-            _uiEvents.emit(
-                SettingsUiEvent.ShowMessage(
-                    if (style == CashFlowChartStyle.LINE) {
-                        "Cash flow chart style set to line"
-                    } else {
-                        "Cash flow chart style set to bar"
-                    }
-                )
-            )
+            themeRepository.updateChartPalette(palette)
+            _uiEvents.emit(SettingsUiEvent.ShowMessage("Chart colours set to ${palette.label}"))
         }
     }
 

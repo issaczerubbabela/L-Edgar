@@ -12,6 +12,38 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 
+/** Material date-range picker in a dialog, converted in UTC for the same reason as [SingleDatePickerDialog]. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DateRangePickerDialog(
+    initialStart: LocalDate,
+    initialEnd: LocalDate,
+    onDismiss: () -> Unit,
+    onConfirm: (LocalDate, LocalDate) -> Unit
+) {
+    fun LocalDate.millis() = atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+    fun Long.date() = Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
+    val state = androidx.compose.material3.rememberDateRangePickerState(
+        initialSelectedStartDateMillis = initialStart.millis(),
+        initialSelectedEndDateMillis = initialEnd.millis()
+    )
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                enabled = state.selectedStartDateMillis != null,
+                onClick = {
+                    val start = state.selectedStartDateMillis?.date() ?: return@TextButton
+                    onConfirm(start, state.selectedEndDateMillis?.date() ?: start)
+                }
+            ) { Text("OK") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    ) {
+        androidx.compose.material3.DateRangePicker(state = state, modifier = androidx.compose.ui.Modifier.weight(1f))
+    }
+}
+
 /**
  * Material date picker in a dialog. The picker works in UTC-midnight milliseconds, so the
  * conversion in both directions is done in UTC; using the device time zone shifts the

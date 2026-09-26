@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.di
 
+import com.issaczerubbabel.ledgar.data.local.entity.DropdownRole
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseVersionTrigger
 import android.content.Context
 import androidx.room.Room
@@ -75,6 +76,24 @@ object DatabaseModule {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE expense_records ADD COLUMN localVersion INTEGER NOT NULL DEFAULT 0")
             ExpenseVersionTrigger.install(db)
+        }
+    }
+
+    /** Adds Dropdown option Stats roles (ADR-0004) and gives the defaults once. */
+    internal val MIGRATION_18_19 = object : Migration(18, 19) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE dropdown_options ADD COLUMN role TEXT NOT NULL DEFAULT ''")
+            applyDefaultRoles(db)
+        }
+    }
+
+    /** Matches names case-insensitively and leaves any role the user already chose alone. */
+    private fun applyDefaultRoles(db: SupportSQLiteDatabase) {
+        DropdownRole.DEFAULTS.forEach { (optionType, name, role) ->
+            db.execSQL(
+                "UPDATE dropdown_options SET role = ? WHERE optionType = ? AND LOWER(TRIM(name)) = LOWER(?) AND role = ''",
+                arrayOf<Any>(role, optionType, name)
+            )
         }
     }
 
@@ -161,6 +180,7 @@ object DatabaseModule {
                     )
                 )
 
+                applyDefaultRoles(db)
                 db.setTransactionSuccessful()
             } finally {
                 db.endTransaction()
@@ -201,6 +221,7 @@ object DatabaseModule {
             .addMigrations(MIGRATION_15_16)
             .addMigrations(BucketBudgetMigration.MIGRATION_16_17)
             .addMigrations(MIGRATION_17_18)
+            .addMigrations(MIGRATION_18_19)
             .fallbackToDestructiveMigration()
             .addCallback(callback)
             .build()

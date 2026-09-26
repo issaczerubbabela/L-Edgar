@@ -60,10 +60,22 @@ class SheetListsMerger @Inject constructor(
             }
 
             val dropdownDao = database.dropdownOptionDao()
-            val localOptions = dropdownDao.getAllOptionsSnapshot().map { it.optionType to it.name.key() }.toMutableSet()
+            val localOptions = dropdownDao.getAllOptionsSnapshot().associateBy { it.optionType to it.name.key() }.toMutableMap()
             sheetDropdowns
-                .filter { it.optionType != "PAYMENT_MODE" && it.name.isNotBlank() && localOptions.add(it.optionType to it.name.key()) }
-                .forEach { dto -> dropdownDao.insert(DropdownOption(optionType = dto.optionType, name = dto.name, displayOrder = dto.displayOrder)) }
+                .filter { it.optionType != "PAYMENT_MODE" && it.name.isNotBlank() }
+                .forEach { dto ->
+                    val key = dto.optionType to dto.name.key()
+                    val sheetRole = dto.role.orEmpty().trim()
+                    val local = localOptions[key]
+                    if (local == null) {
+                        val option = DropdownOption(optionType = dto.optionType, name = dto.name, displayOrder = dto.displayOrder, role = sheetRole)
+                        localOptions[key] = option
+                        dropdownDao.insert(option)
+                    } else if (local.role.isBlank() && sheetRole.isNotEmpty()) {
+                        // A reinstall seeds the options before Import, so a role only the Sheet knows still arrives.
+                        dropdownDao.update(local.copy(role = sheetRole))
+                    }
+                }
 
             val budgetDao = database.budgetDao()
             val localBudgets = budgetDao.getAllBudgetsSnapshot().map { it.monthYear to it.category.key() }.toMutableSet()

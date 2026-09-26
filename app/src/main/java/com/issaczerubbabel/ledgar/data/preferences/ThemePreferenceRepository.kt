@@ -26,9 +26,16 @@ enum class AppLockAuthMode {
     SYSTEM_OR_PIN
 }
 
-enum class CashFlowChartStyle {
-    BAR,
-    LINE
+/**
+ * The colours Stats charts use for money in, money out and saved. Every palette except [CLASSIC]
+ * keeps the three apart for red-green colour blindness; the colours live in ui/theme/ChartColors.kt.
+ */
+enum class ChartPalette(val label: String, val colourBlindSafe: Boolean) {
+    STANDARD("Standard", true),
+    OKABE_ITO("Okabe-Ito", true),
+    DUSK("Dusk", true),
+    SUNSET("Sunset", true),
+    CLASSIC("Classic green and red", false)
 }
 
 @Singleton
@@ -43,7 +50,7 @@ class ThemePreferenceRepository @Inject constructor(
     private val APP_LOCK_TIMEOUT_MINUTES = intPreferencesKey("app_lock_timeout_minutes")
     private val APP_PIN_HASH = stringPreferencesKey("app_pin_hash")
     private val APP_PIN_SALT = stringPreferencesKey("app_pin_salt")
-    private val CASH_FLOW_CHART_STYLE = stringPreferencesKey("cash_flow_chart_style")
+    private val CHART_PALETTE = stringPreferencesKey("chart_palette")
 
     val themePreference: Flow<AppThemeOption> = context.dataStore.data.map { prefs ->
         val raw = (prefs[THEME_PREFERENCE] ?: AppThemeOption.SYSTEM.name).uppercase()
@@ -78,11 +85,8 @@ class ThemePreferenceRepository @Inject constructor(
             !prefs[APP_PIN_HASH].isNullOrBlank() && !prefs[APP_PIN_SALT].isNullOrBlank()
         }
 
-    val cashFlowChartStyle: Flow<CashFlowChartStyle> = context.dataStore.data
-        .map { prefs ->
-            val raw = (prefs[CASH_FLOW_CHART_STYLE] ?: CashFlowChartStyle.BAR.name).uppercase()
-            CashFlowChartStyle.entries.firstOrNull { it.name == raw } ?: CashFlowChartStyle.BAR
-        }
+    val chartPalette: Flow<ChartPalette> = context.dataStore.data
+        .map { prefs -> ChartPalette.entries.firstOrNull { it.name == prefs[CHART_PALETTE] } ?: ChartPalette.STANDARD }
 
     suspend fun updateTheme(option: AppThemeOption) {
         context.dataStore.edit { prefs ->
@@ -157,9 +161,9 @@ class ThemePreferenceRepository @Inject constructor(
         return PinSecurity.verifyPin(rawPin, storedSalt, storedHash)
     }
 
-    suspend fun updateCashFlowChartStyle(style: CashFlowChartStyle) {
+    suspend fun updateChartPalette(palette: ChartPalette) {
         context.dataStore.edit { prefs ->
-            prefs[CASH_FLOW_CHART_STYLE] = style.name
+            prefs[CHART_PALETTE] = palette.name
         }
     }
 }
