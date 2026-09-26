@@ -72,7 +72,7 @@ object DatabaseModule {
         }
     }
 
-    private val MIGRATION_17_18 = object : Migration(17, 18) {
+    internal val MIGRATION_17_18 = object : Migration(17, 18) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE expense_records ADD COLUMN localVersion INTEGER NOT NULL DEFAULT 0")
             db.execSQL(ExpenseTableTriggers.CREATE_SQL)
@@ -80,7 +80,7 @@ object DatabaseModule {
     }
 
     /** Existing rows keep a null Transaction ID: Sync links them to their Sheet row by Remote timestamp. */
-    private val MIGRATION_18_19 = object : Migration(18, 19) {
+    internal val MIGRATION_18_19 = object : Migration(18, 19) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE expense_records ADD COLUMN syncId TEXT")
             db.execSQL("ALTER TABLE expense_records ADD COLUMN syncedRevision TEXT")
@@ -97,14 +97,20 @@ object DatabaseModule {
      */
     internal val MIGRATION_19_20 = object : Migration(19, 20) {
         override fun migrate(db: SupportSQLiteDatabase) {
-            val hasRole = db.query("PRAGMA table_info(dropdown_options)").use { cursor ->
-                val nameColumn = cursor.getColumnIndexOrThrow("name")
-                generateSequence { if (cursor.moveToNext()) cursor.getString(nameColumn) else null }.any { it == "role" }
+            // That development build's "version 19" had roles but not the sync columns, so add them here too.
+            if ("syncId" !in columnsOf(db, "expense_records")) MIGRATION_18_19.migrate(db)
+            if ("role" !in columnsOf(db, "dropdown_options")) {
+                db.execSQL("ALTER TABLE dropdown_options ADD COLUMN role TEXT NOT NULL DEFAULT ''")
             }
-            if (!hasRole) db.execSQL("ALTER TABLE dropdown_options ADD COLUMN role TEXT NOT NULL DEFAULT ''")
             applyDefaultRoles(db)
         }
     }
+
+    private fun columnsOf(db: SupportSQLiteDatabase, table: String): Set<String> =
+        db.query("PRAGMA table_info($table)").use { cursor ->
+            val nameColumn = cursor.getColumnIndexOrThrow("name")
+            generateSequence { if (cursor.moveToNext()) cursor.getString(nameColumn) else null }.toSet()
+        }
 
     /** Matches names case-insensitively and leaves any role the user already chose alone. */
     private fun applyDefaultRoles(db: SupportSQLiteDatabase) {
