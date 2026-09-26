@@ -78,7 +78,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Bucket-budget tables with migration tests; the legacy budgets table is kept for restores
 - Instrumented cycle tests on a real in-memory Room database; Apps Script node tests cover both script copies and fail if they drift
 - Toolchain: Kotlin 2.3.21 with the Compose compiler plugin, Compose BOM 2026.06.01, Room 2.8.5, Hilt 2.57.2, KSP 2.3.12; all deprecations cleared
-- New Release workflow: pushing a vX.Y.Z tag publishes a signed APK and this changelog section as a GitHub Release
+- New Release workflow: pushing a vX.Y.Z tag publishes a signed APK and this changelog section as a GitHub Release. It prints apksigner's full output and refuses to publish unless the APK verifies with the installed app's certificate
 - New staging build type: the release build with R8, installed as .staging and signed with the debug key, for testing shrunk builds
 - versionCode is derived from versionName (major*10000 + minor*100 + patch)
 - Debug builds install next to the release app as L.Edgar (Debug) and can use a test Apps Script from APPS_SCRIPT_URL_DEBUG
