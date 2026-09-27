@@ -7,6 +7,7 @@ import com.issaczerubbabel.ledgar.data.local.dao.BucketBudgetDao
 import com.issaczerubbabel.ledgar.data.local.dao.BudgetDao
 import com.issaczerubbabel.ledgar.data.local.dao.DropdownOptionDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
+import com.issaczerubbabel.ledgar.data.local.dao.RecurringRuleDao
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
 import com.issaczerubbabel.ledgar.data.local.entity.Budget
@@ -14,6 +15,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.BudgetBucket
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetCycle
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.data.local.entity.RecurringRule
 
 @Database(
     entities = [
@@ -23,9 +25,10 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
         DropdownOption::class,
         BudgetCycle::class,
         BudgetBucket::class,
-        BucketCategory::class
+        BucketCategory::class,
+        RecurringRule::class
     ],
-    version = 20,
+    version = 21,
     exportSchema = false
 )
 abstract class SheetSyncDatabase : RoomDatabase() {
@@ -34,4 +37,5 @@ abstract class SheetSyncDatabase : RoomDatabase() {
     abstract fun bucketBudgetDao(): BucketBudgetDao
     abstract fun accountDao(): AccountDao
     abstract fun dropdownOptionDao(): DropdownOptionDao
+    abstract fun recurringRuleDao(): RecurringRuleDao
 }

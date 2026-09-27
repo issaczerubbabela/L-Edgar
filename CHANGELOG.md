@@ -30,6 +30,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - A transaction changed both on the phone and in the Sheet becomes a conflict for you to resolve in Settings, instead of one side silently winning
 - Settings: Sync now, Resolve sync conflicts, and Find duplicate transactions
 - Deleting many rows in the Sheet at once asks before removing them from the phone, and lets you put them back
+- Add Transaction: a Repeat chip for rent, SIPs and salary. Weekly, biweekly, monthly, quarterly or yearly rules add themselves automatically when they're due, catching up on any missed while the app was closed. Recurring rules aren't backed up to your Sheet yet, so a reinstall loses the rule (not the transactions it already made)
 
 ### Changed
 

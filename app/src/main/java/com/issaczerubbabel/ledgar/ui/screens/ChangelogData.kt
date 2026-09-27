@@ -38,7 +38,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Every transaction has a permanent ID shared with a new ID column in the Sheet, so syncing again or reinstalling never duplicates rows",
             "A transaction changed both on the phone and in the Sheet becomes a conflict for you to resolve in Settings, instead of one side silently winning",
             "Settings: Sync now, Resolve sync conflicts, and Find duplicate transactions",
-            "Deleting many rows in the Sheet at once asks before removing them from the phone, and lets you put them back"
+            "Deleting many rows in the Sheet at once asks before removing them from the phone, and lets you put them back",
+            "Add Transaction: a Repeat chip for rent, SIPs and salary. Weekly, biweekly, monthly, quarterly or yearly rules add themselves automatically when they're due, catching up on any missed while the app was closed. Recurring rules aren't backed up to your Sheet yet, so a reinstall loses the rule (not the transactions it already made)"
         ),
         changed = listOf(
             "Stats: new periods slide in from the side you moved towards, views fade through, numbers count to their new value and charts move smoothly. All of it turns off with Android's animations",
