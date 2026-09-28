@@ -38,7 +38,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Every transaction has a permanent ID shared with a new ID column in the Sheet, so syncing again or reinstalling never duplicates rows",
             "A transaction changed both on the phone and in the Sheet becomes a conflict for you to resolve in Settings, instead of one side silently winning",
             "Settings: Sync now, Resolve sync conflicts, and Find duplicate transactions",
-            "Deleting many rows in the Sheet at once asks before removing them from the phone, and lets you put them back"
+            "Deleting many rows in the Sheet at once asks before removing them from the phone, and lets you put them back",
+            "Trans. tab: deleting a transaction (single or bulk) now shows a snackbar with Undo instead of just vanishing"
         ),
         changed = listOf(
             "Stats: new periods slide in from the side you moved towards, views fade through, numbers count to their new value and charts move smoothly. All of it turns off with Android's animations",
@@ -53,7 +54,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Rebuilt on Kotlin 2.3 and Compose 1.11 with Material 3 1.4, for smoother screens",
             "On a fresh install, transactions pulled from the Sheet land on your restored accounts instead of a placeholder Cash account",
             "Sync pauses with an Update script notice when your Apps Script is too old, instead of writing to it unsafely",
-            "Update your Apps Script from Database Setup after installing: two-way sync needs it, and it backs up buckets and category roles"
+            "Update your Apps Script from Database Setup after installing: two-way sync needs it, and it backs up buckets and category roles",
+            "Trans. tab: bulk delete no longer shows a confirmation dialog first; delete then Undo replaces it"
         ),
         fixed = listOf(
             "Stats: \"Spent vs last period\" compares the same days of each period. A flat month used to show +58% because the 1st's rent was skipped",
@@ -88,7 +90,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "New staging build type: the release build with R8, installed as .staging and signed with the debug key, for testing shrunk builds",
             "versionCode is derived from versionName (major*10000 + minor*100 + patch)",
             "Debug builds install next to the release app as L.Edgar (Debug) and can use a test Apps Script from APPS_SCRIPT_URL_DEBUG",
-            "Android CI also builds claude/** branches, with an Oracle JDK to match the pinned toolchain"
+            "Android CI also builds claude/** branches, with an Oracle JDK to match the pinned toolchain",
+            "ExpenseDao/ExpenseRepository: delete now snapshots the pre-delete row and restoreDeleted reverses it, covered by Room tests for a pending delete, a delete already hard-deleted by Sync, and a version bump blocking an in-flight finishDeleteIfUnchanged"
         )
     ),
     ChangelogRelease(

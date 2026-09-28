@@ -100,7 +100,7 @@ class ExpenseRepositoryImpl @Inject constructor(
     override suspend fun setBookmarked(id: Long, isBookmarked: Boolean) =
         dao.updateBookmarkStatus(id = id, isBookmarked = isBookmarked)
 
-    override suspend fun deleteTransactionsByIds(ids: List<Long>) = dao.markTransactionsDeletedByIds(ids)
+    override suspend fun deleteTransactionsByIds(ids: List<Long>): List<ExpenseRecord> = dao.markDeletedAndSnapshotByIds(ids)
 
     override suspend fun updateTransactionsDateByIds(ids: List<Long>, newDate: String) =
         dao.updateTransactionsDateByIds(ids = ids, newDate = newDate)
@@ -114,9 +114,11 @@ class ExpenseRepositoryImpl @Inject constructor(
     override suspend fun updateTransactionsDescriptionByIds(ids: List<Long>, newDescription: String) =
         dao.updateTransactionsDescriptionByIds(ids = ids, newDescription = newDescription)
 
-    override suspend fun delete(record: ExpenseRecord) = dao.markTransactionDeletedById(record.id)
+    override suspend fun delete(record: ExpenseRecord): ExpenseRecord? = dao.markDeletedAndSnapshot(record.id)
 
     override suspend fun deleteAll() = dao.deleteAll()
+
+    override suspend fun restoreDeleted(snapshots: List<ExpenseRecord>) = dao.restoreDeletedSnapshots(snapshots)
 
     override suspend fun isDuplicate(date: String, type: String, category: String, amount: Double): Boolean =
         dao.findDuplicate(date, type, category, amount) != null

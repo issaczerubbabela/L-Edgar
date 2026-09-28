@@ -30,6 +30,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - A transaction changed both on the phone and in the Sheet becomes a conflict for you to resolve in Settings, instead of one side silently winning
 - Settings: Sync now, Resolve sync conflicts, and Find duplicate transactions
 - Deleting many rows in the Sheet at once asks before removing them from the phone, and lets you put them back
+- Trans. tab: deleting a transaction (single or bulk) now shows a snackbar with Undo instead of just vanishing
 
 ### Changed
 
@@ -46,6 +47,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - On a fresh install, transactions pulled from the Sheet land on your restored accounts instead of a placeholder Cash account
 - Sync pauses with an Update script notice when your Apps Script is too old, instead of writing to it unsafely
 - Update your Apps Script from Database Setup after installing: two-way sync needs it, and it backs up buckets and category roles
+- Trans. tab: bulk delete no longer shows a confirmation dialog first; delete then Undo replaces it
 
 ### Fixed
 
@@ -83,6 +85,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - versionCode is derived from versionName (major*10000 + minor*100 + patch)
 - Debug builds install next to the release app as L.Edgar (Debug) and can use a test Apps Script from APPS_SCRIPT_URL_DEBUG
 - Android CI also builds claude/** branches, with an Oracle JDK to match the pinned toolchain
+- ExpenseDao/ExpenseRepository: delete now snapshots the pre-delete row and restoreDeleted reverses it, covered by Room tests for a pending delete, a delete already hard-deleted by Sync, and a version bump blocking an in-flight finishDeleteIfUnchanged
 
 ## [1.0.2] - 2026-04-10
 

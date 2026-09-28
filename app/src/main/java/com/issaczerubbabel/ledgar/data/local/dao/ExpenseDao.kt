@@ -45,6 +45,9 @@ interface ExpenseDao {
     @Query("SELECT * FROM expense_records WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): ExpenseRecord?
 
+    @Query("SELECT * FROM expense_records WHERE id IN (:ids)")
+    suspend fun getByIds(ids: List<Long>): List<ExpenseRecord>
+
     @Query("SELECT * FROM expense_records WHERE syncAction != 'DELETE' ORDER BY date DESC")
     fun getAllRecords(): Flow<List<ExpenseRecord>>
 
@@ -181,6 +184,59 @@ interface ExpenseDao {
         """
     )
     suspend fun markTransactionDeletedById(id: Long)
+
+    /** Soft-deletes one Transaction, returning its pre-delete state read in the same transaction so Undo has a true snapshot. */
+    @Transaction
+    suspend fun markDeletedAndSnapshot(id: Long): ExpenseRecord? {
+        val current = getById(id) ?: return null
+        markTransactionDeletedById(id)
+        return current
+    }
+
+    /** As [markDeletedAndSnapshot], for a batch delete. */
+    @Transaction
+    suspend fun markDeletedAndSnapshotByIds(ids: List<Long>): List<ExpenseRecord> {
+        if (ids.isEmpty()) return emptyList()
+        val current = getByIds(ids)
+        markTransactionsDeletedByIds(ids)
+        return current
+    }
+
+    @Query(
+        """
+        UPDATE expense_records
+        SET isSynced = 0,
+            syncAction = CASE WHEN syncedRevision IS NULL THEN 'INSERT' ELSE 'UPDATE' END
+        WHERE id IN (:ids) AND syncAction = 'DELETE'
+        """
+    )
+    suspend fun restoreDeleted(ids: List<Long>)
+
+    /**
+     * Undoes a delete. A row Sync has not hard-deleted yet is flipped back to pending (raising its
+     * `localVersion`, so an in-flight [finishDeleteIfUnchanged] for the old delete becomes a no-op).
+     * A row Sync already removed for good is re-inserted from its snapshot, keeping its Transaction ID
+     * (`syncId`) so the next Push updates the same Sheet row instead of creating a duplicate.
+     */
+    @Transaction
+    suspend fun restoreDeletedSnapshots(snapshots: List<ExpenseRecord>) {
+        if (snapshots.isEmpty()) return
+        val ids = snapshots.map { it.id }
+        restoreDeleted(ids)
+        val stillPresent = getByIds(ids).map { it.id }.toSet()
+        snapshots.filter { it.id !in stillPresent }.forEach { snapshot ->
+            insertIgnoringDuplicateSyncId(
+                snapshot.copy(
+                    id = 0,
+                    isSynced = false,
+                    syncAction = "INSERT",
+                    syncedRevision = null,
+                    sheetConflictJson = null,
+                    localVersion = 0
+                )
+            )
+        }
+    }
 
     @Query(
         """

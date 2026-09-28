@@ -44,13 +44,20 @@ interface ExpenseRepository {
     fun getAccountBalance(accountId: Long): Flow<Double>
     fun getRecordsByDateRange(startDate: String, endDate: String): Flow<List<ExpenseRecord>>
     suspend fun setBookmarked(id: Long, isBookmarked: Boolean)
-    suspend fun deleteTransactionsByIds(ids: List<Long>)
+
+    /** Soft-deletes the given Transactions, returning their pre-delete state for [restoreDeleted] to undo. */
+    suspend fun deleteTransactionsByIds(ids: List<Long>): List<ExpenseRecord>
     suspend fun updateTransactionsDateByIds(ids: List<Long>, newDate: String)
     suspend fun updateTransactionsCategoryByIds(ids: List<Long>, newCategory: String)
     suspend fun updateTransactionsAssetByIds(ids: List<Long>, accountId: Long)
     suspend fun updateTransactionsDescriptionByIds(ids: List<Long>, newDescription: String)
-    suspend fun delete(record: ExpenseRecord)
+
+    /** Soft-deletes [record], returning its pre-delete state for [restoreDeleted] to undo, or null if it was already gone. */
+    suspend fun delete(record: ExpenseRecord): ExpenseRecord?
     suspend fun deleteAll()
+
+    /** Undoes a delete for the given pre-delete snapshots, as returned by [delete] or [deleteTransactionsByIds]. */
+    suspend fun restoreDeleted(snapshots: List<ExpenseRecord>)
     suspend fun isDuplicate(date: String, type: String, category: String, amount: Double): Boolean
     suspend fun importFromGoogleSheets(): GoogleSheetsImportResult
 
