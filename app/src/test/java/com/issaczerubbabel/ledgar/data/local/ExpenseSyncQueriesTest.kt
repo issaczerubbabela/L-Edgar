@@ -164,6 +164,79 @@ class ExpenseSyncQueriesTest {
     }
 
     @Test
+    fun `undo before any Sync keeps a never-pushed row an insert and a synced row an update`() = runBlocking {
+        val neverPushed = dao.insert(transaction())
+        val synced = dao.insert(transaction(isSynced = true, syncAction = "NONE"))
+        dao.setBaseIfUnchanged(synced, dao.getById(synced)!!.localVersion, FINGERPRINT)
+
+        val neverPushedSnapshot = dao.markDeletedAndSnapshot(neverPushed)!!
+        val syncedSnapshot = dao.markDeletedAndSnapshot(synced)!!
+
+        dao.restoreDeletedSnapshots(listOf(neverPushedSnapshot, syncedSnapshot))
+
+        assertEquals("INSERT", dao.getById(neverPushed)!!.syncAction)
+        assertFalse(dao.getById(neverPushed)!!.isSynced)
+        assertEquals("UPDATE", dao.getById(synced)!!.syncAction)
+        assertFalse(dao.getById(synced)!!.isSynced)
+        assertEquals(FINGERPRINT, dao.getById(synced)!!.syncedRevision)
+    }
+
+    @Test
+    fun `undo survives a delete Push already in flight because the restore raises the version`() = runBlocking {
+        val id = dao.insert(transaction(isSynced = true, syncAction = "NONE"))
+        dao.setBaseIfUnchanged(id, dao.getById(id)!!.localVersion, FINGERPRINT)
+
+        val snapshot = dao.markDeletedAndSnapshot(id)!!
+        // The version Sync would have read for this pending delete, before Undo raises it further.
+        val versionSyncRead = dao.getById(id)!!.localVersion
+
+        dao.restoreDeletedSnapshots(listOf(snapshot))
+
+        // The in-flight Push still holds the version it read for the delete; it must not remove the restored row.
+        assertEquals(0, dao.finishDeleteIfUnchanged(id, versionSyncRead))
+        assertNotNull(dao.getById(id))
+        assertEquals("UPDATE", dao.getById(id)!!.syncAction)
+    }
+
+    @Test
+    fun `undo after a delete already hard-deleted the row re-inserts it under the same Transaction ID`() = runBlocking {
+        // A Transaction born locally (so it has a Transaction ID), then successfully pushed once.
+        val id = dao.insert(transaction())
+        dao.markSyncedIfUnchanged(id, dao.getById(id)!!.localVersion, FINGERPRINT)
+        val syncId = dao.getById(id)!!.syncId!!
+
+        val snapshot = dao.markDeletedAndSnapshot(id)!!
+        // Simulate the delete's Push settling and finishDeleteIfUnchanged hard-deleting the row.
+        assertEquals(1, dao.finishDeleteIfUnchanged(id, dao.getById(id)!!.localVersion))
+        assertNull(dao.getById(id))
+
+        dao.restoreDeletedSnapshots(listOf(snapshot))
+
+        val restored = dao.getAllRecordsSnapshot().single { it.syncId == syncId }
+        assertEquals("INSERT", restored.syncAction)
+        assertFalse(restored.isSynced)
+        assertNull(restored.syncedRevision)
+        assertEquals(snapshot.amount, restored.amount, 0.0)
+    }
+
+    @Test
+    fun `restoring a mixed batch handles a still-pending row and a hard-deleted row together`() = runBlocking {
+        val stillPending = dao.insert(transaction())
+        val hardDeleted = dao.insert(transaction())
+        dao.markSyncedIfUnchanged(hardDeleted, dao.getById(hardDeleted)!!.localVersion, FINGERPRINT)
+        val hardDeletedSyncId = dao.getById(hardDeleted)!!.syncId!!
+
+        val snapshots = dao.markDeletedAndSnapshotByIds(listOf(stillPending, hardDeleted))
+        assertEquals(1, dao.finishDeleteIfUnchanged(hardDeleted, dao.getById(hardDeleted)!!.localVersion))
+        assertNull(dao.getById(hardDeleted))
+
+        dao.restoreDeletedSnapshots(snapshots)
+
+        assertEquals("INSERT", dao.getById(stillPending)!!.syncAction)
+        assertTrue(dao.getAllRecordsSnapshot().any { it.syncId == hardDeletedSyncId && it.syncAction == "INSERT" })
+    }
+
+    @Test
     fun `deleting an account's Transactions marks them for a synced delete instead of erasing them`() = runBlocking {
         val accountId = db.accountDao().insert(AccountRecord(groupName = "Bank", accountName = "Savings", initialBalance = 0.0))
         val id = dao.insert(transaction(accountId = accountId, isSynced = true, syncAction = "NONE"))

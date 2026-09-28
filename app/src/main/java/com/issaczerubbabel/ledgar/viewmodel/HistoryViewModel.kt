@@ -73,6 +73,13 @@ class HistoryViewModel @Inject constructor(
     private var shouldAutoFocusLatestMonth = true
     val selectedTxIds = mutableStateListOf<Long>()
 
+    /** The latest delete's pre-delete snapshots, for [undoLastDelete]. Only the most recent delete can be undone. */
+    private var pendingUndoSnapshots: List<ExpenseRecord> = emptyList()
+
+    private val _undoDeleteEvents = MutableSharedFlow<String>(replay = 0)
+    /** A message to show in an Undo snackbar each time one or more Transactions are deleted. */
+    val undoDeleteEvents: SharedFlow<String> = _undoDeleteEvents.asSharedFlow()
+
     val accounts: StateFlow<List<AccountRecord>> = accountRepository
         .getAllVisibleAccounts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -197,7 +204,9 @@ class HistoryViewModel @Inject constructor(
 
     fun delete(record: ExpenseRecord) {
         viewModelScope.launch {
-            repository.delete(record)
+            val snapshot = repository.delete(record) ?: return@launch
+            pendingUndoSnapshots = listOf(snapshot)
+            _undoDeleteEvents.emit(undoDeleteMessage(listOf(snapshot)))
         }
     }
 
@@ -237,9 +246,32 @@ class HistoryViewModel @Inject constructor(
         val ids = selectedTxIds.toList()
         if (ids.isEmpty()) return
         viewModelScope.launch {
-            repository.deleteTransactionsByIds(ids)
+            val snapshots = repository.deleteTransactionsByIds(ids)
             clearSelection()
+            if (snapshots.isNotEmpty()) {
+                pendingUndoSnapshots = snapshots
+                _undoDeleteEvents.emit(undoDeleteMessage(snapshots))
+            }
         }
+    }
+
+    /** Reverses the most recent delete. A later delete replaces what Undo can reverse. */
+    fun undoLastDelete() {
+        val snapshots = pendingUndoSnapshots
+        if (snapshots.isEmpty()) return
+        pendingUndoSnapshots = emptyList()
+        viewModelScope.launch {
+            repository.restoreDeleted(snapshots)
+        }
+    }
+
+    private fun undoDeleteMessage(snapshots: List<ExpenseRecord>): String {
+        if (snapshots.size == 1) {
+            val record = snapshots[0]
+            val label = if (record.type == "Transfer") "Transfer" else record.category
+            return "Deleted ₹ %,.2f · %s".format(record.amount, label)
+        }
+        return "Deleted ${snapshots.size} transactions"
     }
 
     fun updateSelectedDates(newDate: String) {

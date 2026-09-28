@@ -49,6 +49,7 @@ import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 private val TABS = listOf("Daily", "Calendar", "Monthly")
@@ -137,7 +138,6 @@ fun HistoryScreen(
     var selectedTransaction by remember { mutableStateOf<ExpenseRecord?>(null) }
     var pendingCopyTransaction by remember { mutableStateOf<ExpenseRecord?>(null) }
     var showCopyDateDialog by remember { mutableStateOf(false) }
-    var showDeleteSelectedDialog by remember { mutableStateOf(false) }
     var isBatchMenuExpanded by remember { mutableStateOf(false) }
     var pendingBatchAction by remember { mutableStateOf<BatchAction?>(null) }
     var selectedCategory by remember { mutableStateOf("") }
@@ -149,6 +149,26 @@ fun HistoryScreen(
     val selectedCount = vm.selectedTxIds.size
     val selectedSum = vm.selectedSum(allVisibleRecords)
     val selectedIdSet = vm.selectedTxIds.toSet()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(Unit) {
+        var activeSnackbarJob: Job? = null
+        vm.undoDeleteEvents.collect { message ->
+            activeSnackbarJob?.cancel()
+            snackbarHostState.currentSnackbarData?.dismiss()
+            activeSnackbarJob = launch {
+                val result = snackbarHostState.showSnackbar(
+                    message = message,
+                    actionLabel = "Undo",
+                    withDismissAction = true,
+                    duration = SnackbarDuration.Long
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    vm.undoLastDelete()
+                }
+            }
+        }
+    }
 
     // Follow settledPage, not currentPage. currentPage changes on every page an animation passes,
     // so tapping a distant tab (Daily -> Total) wrote the intermediate pages back into selectedTab,
@@ -189,12 +209,18 @@ fun HistoryScreen(
     val canOpenMonthPicker = selectedTab == 0 || selectedTab == 1
 
     Scaffold(
+        snackbarHost = {
+            SnackbarHost(
+                snackbarHostState,
+                modifier = Modifier.padding(bottom = navInsets.calculateBottomPadding())
+            )
+        },
         topBar = {
             if (selectedCount > 0) {
                 ContextualSelectionAppBar(
                     selectedCount = selectedCount,
                     selectedSum = selectedSum,
-                    onDeleteClick = { showDeleteSelectedDialog = true },
+                    onDeleteClick = { vm.deleteSelectedTransactions() },
                     isMenuExpanded = isBatchMenuExpanded,
                     onMenuExpandedChange = { isBatchMenuExpanded = it },
                     onSelectBatchAction = { action ->
@@ -452,27 +478,6 @@ fun HistoryScreen(
                     ) {
                         Text("Cancel")
                     }
-                }
-            }
-        )
-    }
-
-    if (showDeleteSelectedDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteSelectedDialog = false },
-            title = { Text("Delete selected transactions?") },
-            text = { Text("This action will remove all selected transactions.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showDeleteSelectedDialog = false
-                    vm.deleteSelectedTransactions()
-                }) {
-                    Text("Delete")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteSelectedDialog = false }) {
-                    Text("Cancel")
                 }
             }
         )
