@@ -46,6 +46,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - On a fresh install, transactions pulled from the Sheet land on your restored accounts instead of a placeholder Cash account
 - Sync pauses with an Update script notice when your Apps Script is too old, instead of writing to it unsafely
 - Update your Apps Script from Database Setup after installing: two-way sync needs it, and it backs up buckets and category roles
+- Add Transaction keeps the date you picked for the next transaction instead of going back to today after every save
 
 ### Fixed
 
@@ -68,6 +69,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Long bucket names wrap, and bucket amounts line up
 - Export no longer shows its date hint in red before you type anything
 - The Apps Script shown in Database Setup includes description support again
+- Picking a date on Add Transaction, the Trans. tab's bulk Change dates, or an account's As-of date no longer moves it to the day before in time zones ahead of UTC, and the As-of date now keeps its time of day
 
 ### Developer
 
