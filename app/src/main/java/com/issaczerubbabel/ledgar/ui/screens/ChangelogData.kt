@@ -88,7 +88,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "New staging build type: the release build with R8, installed as .staging and signed with the debug key, for testing shrunk builds",
             "versionCode is derived from versionName (major*10000 + minor*100 + patch)",
             "Debug builds install next to the release app as L.Edgar (Debug) and can use a test Apps Script from APPS_SCRIPT_URL_DEBUG",
-            "Android CI also builds claude/** branches, with an Oracle JDK to match the pinned toolchain"
+            "Android CI also builds claude/** branches, with an Oracle JDK to match the pinned toolchain",
+            "/daily-idea and /daily-ship Claude Code commands: research and file one improvement issue a day, and ship one issue as a pull request a day"
         )
     ),
     ChangelogRelease(
