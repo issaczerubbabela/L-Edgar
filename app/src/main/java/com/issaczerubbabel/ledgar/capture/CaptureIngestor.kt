@@ -88,6 +88,31 @@ class CaptureIngestor @Inject constructor(
     }
 
     /**
+     * Run again over captures still waiting without a category, using the raw text they came from.
+     * Call after the category mapping changes: a keyword that was unmapped may now resolve. It only
+     * ever fills in a missing category, never changes one already suggested or chosen.
+     */
+    suspend fun recategorizePending() {
+        val expenseCategories = dropdownOptions
+            .getOptionsByType(TransactionType.EXPENSE_CATEGORY_OPTION).first().map { it.name }
+        val mapping = settings.categoryMapping()
+        captureDao.getPendingWithoutCategory().forEach { capture ->
+            val parsed = registry.parse(capture.sender, capture.rawText) ?: return@forEach
+            val result = pipeline.categorize(parsed, mapping, expenseCategories)
+            val category = result.category ?: return@forEach
+            captureDao.update(
+                capture.copy(
+                    suggestedType = result.type,
+                    suggestedCategory = category,
+                    confidence = result.confidence,
+                    decidedBy = result.decidedBy,
+                    traceJson = gson.toJson(mapOf("rule" to result.decidedBy, "why" to result.why))
+                )
+            )
+        }
+    }
+
+    /**
      * Apps re-post the same notification, but a real repeat (two ₹20 chai payments) can carry
      * identical text too. With a reference number the text is unique per payment; without one, the
      * text only counts as a repeat within the same ten-minute window.

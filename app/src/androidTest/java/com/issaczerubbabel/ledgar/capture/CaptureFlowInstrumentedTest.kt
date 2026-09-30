@@ -220,6 +220,43 @@ class CaptureFlowInstrumentedTest {
     }
 
     @Test
+    fun confirmingTeachesEarlierCapturesOnTheSameAccountNumber() = runBlocking {
+        val first = (ingestor.ingest(CaptureSource.NOTIFICATION, "HDFC Bank", hdfcP2p) as IngestResult.Captured).id
+        val second = (ingestor.ingest(
+            CaptureSource.NOTIFICATION, "HDFC Bank",
+            "Sent Rs.80.00 From HDFC Bank A/C *1234 To Bob On 26/09/26 Ref 66353123456789"
+        ) as IngestResult.Captured).id
+        assertNull(db.captureDao().getById(second)!!.accountId)
+
+        repository.confirm(first, CaptureEdits("Expense", "Food", accountId, "Mrs Jane Doe"))
+
+        assertEquals(accountId, db.captureDao().getById(second)!!.accountId)
+    }
+
+    @Test
+    fun mappingACategoryLaterFillsInCapturesThatWereWaiting() = runBlocking {
+        settings.mapping = emptyMap()
+        val id = (ingestor.ingest(CaptureSource.NOTIFICATION, "AXISBK", axisFuel("435476373861")) as IngestResult.Captured).id
+        assertNull(db.captureDao().getById(id)!!.suggestedCategory)
+
+        settings.mapping = mapOf("fuel" to "Fuel")
+        ingestor.recategorizePending()
+
+        assertEquals("Fuel", db.captureDao().getById(id)!!.suggestedCategory)
+    }
+
+    @Test
+    fun recategorizingNeverChangesACategoryAlreadySuggested() = runBlocking {
+        val id = (ingestor.ingest(CaptureSource.NOTIFICATION, "AXISBK", axisFuel("435476373861")) as IngestResult.Captured).id
+        assertEquals("Fuel", db.captureDao().getById(id)!!.suggestedCategory)
+
+        settings.mapping = mapOf("fuel" to "Groceries")
+        ingestor.recategorizePending()
+
+        assertEquals("Fuel", db.captureDao().getById(id)!!.suggestedCategory)
+    }
+
+    @Test
     fun aliasRowsFollowTheirAccountWhenItIsDeleted() = runBlocking {
         db.accountAliasDao().upsert(AccountAlias("1236", accountId))
 

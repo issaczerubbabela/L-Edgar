@@ -50,6 +50,16 @@ interface CaptureDao {
     @Query("UPDATE captured_transactions SET status = 'DISMISSED' WHERE id = :id")
     suspend fun markDismissed(id: Long)
 
+    /** Once an account number is known, earlier captures waiting with that number pick it up too. */
+    @Query(
+        "UPDATE captured_transactions SET accountId = :accountId WHERE accountHint = :hint AND accountId IS NULL " +
+            "AND status IN ('PENDING', 'POSSIBLE_DUPLICATE')"
+    )
+    suspend fun assignAccountToPending(hint: String, accountId: Long)
+
+    @Query("SELECT * FROM captured_transactions WHERE status IN ('PENDING', 'POSSIBLE_DUPLICATE') AND suggestedCategory IS NULL")
+    suspend fun getPendingWithoutCategory(): List<CapturedTransaction>
+
     /** R3-Q1: turning auto-capture off clears queued work but never touches learned data. */
     @Query("DELETE FROM captured_transactions WHERE status = 'PENDING'")
     suspend fun deleteAllPending()

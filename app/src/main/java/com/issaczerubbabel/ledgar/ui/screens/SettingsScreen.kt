@@ -56,6 +56,7 @@ fun SettingsScreen(
     onNavigateToDropdownManagement: () -> Unit,
     onNavigateToAppsScriptSetup: () -> Unit,
     onNavigateToChangelog: () -> Unit,
+    onNavigateToCaptureSettings: () -> Unit,
     vm: SettingsViewModel = hiltViewModel(),
     exportVm: ExportViewModel = hiltViewModel()
 ) {
@@ -569,6 +570,19 @@ fun SettingsScreen(
                 overflow = TextOverflow.Ellipsis,
                 softWrap = false
             )
+
+            SettingsListItem(
+                title = "Auto-capture",
+                icon = Icons.Filled.Sync,
+                onClick = onNavigateToCaptureSettings
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
 
             SettingsListItem(
                 title = "Manage Categories & Dropdowns",

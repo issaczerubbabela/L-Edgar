@@ -21,6 +21,9 @@ class KeywordDictionary(keywordsByCanonical: Map<String, List<String>>) {
             .map { Entry(canonical, it, Regex("""(?<![a-z0-9])${Regex.escape(it)}(?![a-z0-9])""")) }
     }
 
+    /** The canonical keys this dictionary can produce, in a stable order, for the mapping screen. */
+    val canonicalKeys: List<String> = keywordsByCanonical.keys.toList()
+
     fun match(merchantNorm: String, merchantRaw: String?): KeywordMatch? {
         val haystack = "${merchantNorm.lowercase()} ${merchantRaw.orEmpty().lowercase()}"
         return entries

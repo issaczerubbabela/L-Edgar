@@ -57,7 +57,10 @@ class CaptureRepositoryImpl @Inject constructor(
 
         // Picking an account for an alert we couldn't place teaches the alias for next time.
         capture.accountHint?.let { hint ->
-            if (aliasDao.getByAlias(hint) == null) aliasDao.upsert(AccountAlias(hint, edits.accountId))
+            if (aliasDao.getByAlias(hint) == null) {
+                aliasDao.upsert(AccountAlias(hint, edits.accountId))
+                captureDao.assignAccountToPending(hint, edits.accountId)
+            }
         }
 
         capture.merchantNorm?.let { merchant ->
