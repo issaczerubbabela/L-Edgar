@@ -142,6 +142,7 @@ fun CaptureInboxScreen(
                         accountName = row.accountId?.let { accountNames[it] },
                         onPickCategory = { picker = Picker.ForCategory(row) },
                         onPickAccount = { picker = Picker.ForAccount(row) },
+                        onAlwaysUseChange = { vm.setAlwaysUse(row.capture.id, it) },
                         onConfirm = { vm.confirm(row) },
                         onDismiss = { vm.dismiss(row.capture.id) }
                     )
@@ -185,6 +186,7 @@ private fun CaptureCard(
     accountName: String?,
     onPickCategory: () -> Unit,
     onPickAccount: () -> Unit,
+    onAlwaysUseChange: (Boolean) -> Unit,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -241,6 +243,21 @@ private fun CaptureCard(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (row.canOfferAlwaysUse) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onAlwaysUseChange(!row.alwaysUse) }
+                ) {
+                    Checkbox(checked = row.alwaysUse, onCheckedChange = onAlwaysUseChange)
+                    Text(
+                        "Always use ${row.category} for ${row.title}",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
             if (showOriginal) {
                 Text(
                     capture.rawText,

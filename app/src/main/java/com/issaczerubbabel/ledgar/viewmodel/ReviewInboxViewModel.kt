@@ -33,10 +33,14 @@ data class CaptureRowUi(
     val accountId: Long?,
     val band: ConfidenceBand,
     val why: String?,
-    val categoryPickedByUser: Boolean = false
+    val categoryPickedByUser: Boolean = false,
+    val alwaysUse: Boolean = false
 ) {
     val isIncome: Boolean get() = type == TransactionType.INCOME
     val canConfirm: Boolean get() = !category.isNullOrBlank() && accountId != null
+
+    /** Only a capture with a merchant can have a rule saved for it. */
+    val canOfferAlwaysUse: Boolean get() = !capture.merchantNorm.isNullOrBlank() && !category.isNullOrBlank()
 
     /** Safe to confirm in bulk: a High-confidence guess whose Category and Account are both known. */
     val isBulkCandidate: Boolean get() = band == ConfidenceBand.HIGH && canConfirm
@@ -44,7 +48,7 @@ data class CaptureRowUi(
     val title: String get() = capture.displayTitle()
 }
 
-private data class RowEdit(val category: String? = null, val accountId: Long? = null)
+private data class RowEdit(val category: String? = null, val accountId: Long? = null, val alwaysUse: Boolean = false)
 
 @HiltViewModel
 class ReviewInboxViewModel @Inject constructor(
@@ -71,7 +75,8 @@ class ReviewInboxViewModel @Inject constructor(
                 // Picking a Category yourself is a decision, so it no longer needs a second look.
                 band = if (edit?.category != null) ConfidenceBand.HIGH else ConfidenceBand.of(capture.confidence, capture.suggestedCategory != null),
                 why = parseWhy(capture.traceJson),
-                categoryPickedByUser = edit?.category != null
+                categoryPickedByUser = edit?.category != null,
+                alwaysUse = edit?.alwaysUse ?: false
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -91,6 +96,10 @@ class ReviewInboxViewModel @Inject constructor(
 
     fun setCategory(captureId: Long, category: String) {
         edits.update { it + (captureId to (it[captureId] ?: RowEdit()).copy(category = category)) }
+    }
+
+    fun setAlwaysUse(captureId: Long, alwaysUse: Boolean) {
+        edits.update { it + (captureId to (it[captureId] ?: RowEdit()).copy(alwaysUse = alwaysUse)) }
     }
 
     fun setAccount(captureId: Long, accountId: Long) {
@@ -117,7 +126,10 @@ class ReviewInboxViewModel @Inject constructor(
         val accountId = row.accountId ?: return
         captureRepository.confirm(
             row.capture.id,
-            CaptureEdits(type = row.type, category = category, accountId = accountId, description = row.title)
+            CaptureEdits(
+                type = row.type, category = category, accountId = accountId,
+                description = row.title, alwaysUse = row.alwaysUse
+            )
         )
         notifier.cancel(row.capture.id)
         edits.update { it - row.capture.id }

@@ -257,6 +257,31 @@ class CaptureFlowInstrumentedTest {
     }
 
     @Test
+    fun alwaysUseMakesTheNextCaptureHighConfidenceAfterASingleConfirm() = runBlocking {
+        val first = (ingestor.ingest(CaptureSource.NOTIFICATION, "AXISBK", axisFuel("435476373861")) as IngestResult.Captured).id
+        repository.confirm(first, CaptureEdits("Expense", "Fuel", accountId, "Ujagar Fuels", alwaysUse = true))
+
+        val rule = db.merchantRuleDao().getByMerchant("SHRI UJAGAR FUELS")!!
+        assertEquals(MerchantRuleOrigin.USER, rule.origin)
+        assertEquals("Fuel", rule.category)
+
+        val next = ingestor.ingest(CaptureSource.NOTIFICATION, "AXISBK", axisFuel("435476373862")) as IngestResult.Captured
+        assertEquals(ConfidenceBand.HIGH, next.band)
+        assertTrue(next.shouldNotify)
+    }
+
+    @Test
+    fun aUserRuleSurvivesALaterConfirmWithADifferentCategory() = runBlocking {
+        val first = (ingestor.ingest(CaptureSource.NOTIFICATION, "AXISBK", axisFuel("435476373861")) as IngestResult.Captured).id
+        repository.confirm(first, CaptureEdits("Expense", "Fuel", accountId, "x", alwaysUse = true))
+        val second = (ingestor.ingest(CaptureSource.NOTIFICATION, "AXISBK", axisFuel("435476373862")) as IngestResult.Captured).id
+
+        repository.confirm(second, CaptureEdits("Expense", "Groceries", accountId, "x"))
+
+        assertEquals("Fuel", db.merchantRuleDao().getByMerchant("SHRI UJAGAR FUELS")!!.category)
+    }
+
+    @Test
     fun aliasRowsFollowTheirAccountWhenItIsDeleted() = runBlocking {
         db.accountAliasDao().upsert(AccountAlias("1236", accountId))
 
