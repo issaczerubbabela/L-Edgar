@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar
 
+import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.os.Build
 import android.content.Intent
@@ -27,6 +28,9 @@ class QuickLogTileService : TileService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // Lint can't see through the lambda that the Intent overload is only reached below Android 14,
+        // where it is the supported call; from Android 14 the PendingIntent overload is used.
+        @SuppressLint("StartActivityAndCollapseDeprecated")
         val launchQuickLogAction = {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 startActivityAndCollapse(pendingIntent)

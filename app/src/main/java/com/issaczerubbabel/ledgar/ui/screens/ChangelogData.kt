@@ -65,6 +65,7 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Add Transaction: creating a category inline and then switching between Expense and Income before it finished no longer selects it under the wrong type"
         ),
         qol = listOf(
+            "The splash screen theme settings now live in an Android 12+ resource folder, since older versions never used them; nothing changes on screen. Lint no longer reports them, nor two checks that were false alarms (the Quick Settings tile's Android 14 guard and the widget's icon tint), which are now marked as reviewed",
             "Quick Settings tile click now stays in quick-entry flow and updates tile state without opening the main app tabs",
             "Add Transaction keypad keys now morph their corner radius on press for tactile feedback, the commit key fades smoothly between its enabled/disabled colors, the amount pulses briefly on a successful save, and the category/account chip row and the picker sheet's search-to-add-option swap now animate instead of snapping",
             "Quick Add now lays out like Add Transaction, with the amount, category chip and keypad pinned to the bottom of the sheet instead of the keypad floating near the top",
