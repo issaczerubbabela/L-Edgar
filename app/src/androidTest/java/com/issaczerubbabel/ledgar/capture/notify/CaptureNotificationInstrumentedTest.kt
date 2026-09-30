@@ -25,7 +25,6 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -87,6 +86,17 @@ class CaptureNotificationInstrumentedTest {
         (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).activeNotifications
             .filter { it.tag == CaptureNotifier.TAG }
 
+    /** The system posts and cancels notifications asynchronously, so wait for the list to settle. */
+    private fun awaitCaptureNotifications(untilCount: Int) : List<android.service.notification.StatusBarNotification> {
+        val deadline = System.currentTimeMillis() + 5_000
+        var current = activeCaptureNotifications()
+        while (current.size != untilCount && System.currentTimeMillis() < deadline) {
+            Thread.sleep(50)
+            current = activeCaptureNotifications()
+        }
+        return current
+    }
+
     @Test
     fun confirmSavesTheTransactionWithExactPaise() = runBlocking {
         val id = readyCapture("435476373861")
@@ -135,7 +145,7 @@ class CaptureNotificationInstrumentedTest {
 
         notifier.notify(id)
 
-        val posted = activeCaptureNotifications().single().notification
+        val posted = awaitCaptureNotifications(untilCount = 1).single().notification
         assertEquals(listOf("Confirm", "Not mine"), posted.actions.map { it.title.toString() })
         assertTrue(posted.extras.getCharSequence("android.title").toString().contains("100.50"))
         assertEquals(android.app.Notification.VISIBILITY_PRIVATE, posted.visibility)
@@ -148,6 +158,8 @@ class CaptureNotificationInstrumentedTest {
 
         notifier.notify(id)
 
+        // Nothing should ever appear, so give a wrongly-posted one time to show up before judging.
+        Thread.sleep(1_000)
         assertTrue(activeCaptureNotifications().isEmpty())
     }
 
@@ -155,10 +167,10 @@ class CaptureNotificationInstrumentedTest {
     fun cancelRemovesTheNotification() = runBlocking {
         val id = readyCapture("435476373861")
         notifier.notify(id)
-        assertEquals(1, activeCaptureNotifications().size)
+        assertEquals(1, awaitCaptureNotifications(untilCount = 1).size)
 
         notifier.cancel(id)
 
-        assertNull(activeCaptureNotifications().firstOrNull())
+        assertEquals(0, awaitCaptureNotifications(untilCount = 0).size)
     }
 }
