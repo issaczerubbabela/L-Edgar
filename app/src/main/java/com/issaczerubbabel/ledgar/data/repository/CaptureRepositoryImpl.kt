@@ -8,9 +8,11 @@ import com.issaczerubbabel.ledgar.data.local.dao.AccountAliasDao
 import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
 import com.issaczerubbabel.ledgar.data.local.dao.MerchantRuleDao
+import com.issaczerubbabel.ledgar.data.local.dao.UnparsedAlertDao
 import com.issaczerubbabel.ledgar.data.local.entity.AccountAlias
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
 import com.issaczerubbabel.ledgar.util.TransactionType
 import kotlinx.coroutines.flow.Flow
 import java.time.Instant
@@ -22,7 +24,8 @@ class CaptureRepositoryImpl @Inject constructor(
     private val captureDao: CaptureDao,
     private val merchantRuleDao: MerchantRuleDao,
     private val aliasDao: AccountAliasDao,
-    private val expenseDao: ExpenseDao
+    private val expenseDao: ExpenseDao,
+    private val unparsedDao: UnparsedAlertDao
 ) : CaptureRepository {
 
     override fun observePending(): Flow<List<CapturedTransaction>> = captureDao.observePending()
@@ -83,5 +86,16 @@ class CaptureRepositoryImpl @Inject constructor(
 
     override suspend fun dismiss(captureId: Long) = captureDao.markDismissed(captureId)
 
-    override suspend fun clearPending() = captureDao.deleteAllPending()
+    override suspend fun clearPending() {
+        captureDao.deleteAllPending()
+        unparsedDao.deleteAll()
+    }
+
+    override fun observeUnparsed(): Flow<List<UnparsedAlert>> = unparsedDao.observeAll()
+
+    override fun observeUnparsedCount(): Flow<Int> = unparsedDao.observeCount()
+
+    override suspend fun deleteUnparsed(id: Long) = unparsedDao.delete(id)
+
+    override suspend fun clearUnparsed() = unparsedDao.deleteAll()
 }

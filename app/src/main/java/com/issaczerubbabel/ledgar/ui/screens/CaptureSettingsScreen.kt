@@ -62,10 +62,12 @@ private fun humanize(canonical: String): String =
 fun CaptureSettingsScreen(
     innerPadding: PaddingValues,
     onBack: () -> Unit,
+    onNavigateToUnparsed: () -> Unit,
     vm: CaptureSettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val enabled by vm.enabled.collectAsStateWithLifecycle()
+    val unparsedCount by vm.unparsedCount.collectAsStateWithLifecycle()
     val mapping by vm.categoryMapping.collectAsStateWithLifecycle()
     val categories by vm.expenseCategories.collectAsStateWithLifecycle()
     var mappingFor by remember { mutableStateOf<String?>(null) }
@@ -188,6 +190,26 @@ fun CaptureSettingsScreen(
                         )
                     }
                     if (!notificationsAllowed) TextButton(onClick = ::askForNotifications) { Text("Allow") }
+                }
+            }
+            item {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onNavigateToUnparsed)
+                        .padding(top = 12.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Alerts we couldn't read", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            if (unparsedCount == 0) "None. If a bank changes its wording, unreadable alerts show up here."
+                            else "$unparsedCount waiting. Copy one to get its wording supported.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (unparsedCount == 0) MaterialTheme.colorScheme.onSurfaceVariant else ExpenseRed
+                        )
+                    }
+                    Text("Open", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 }
             }
             item {

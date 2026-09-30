@@ -10,6 +10,18 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  */
 object CaptureMigration {
 
+    /** v19 -> v20: adds `unparsed_alerts`, the list of alerts no parser could read. Additive only. */
+    val MIGRATION_19_20: Migration = object : Migration(19, 20) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `unparsed_alerts` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`sender` TEXT NOT NULL, `rawText` TEXT NOT NULL, `rawHash` TEXT NOT NULL, `capturedAt` INTEGER NOT NULL)"
+            )
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_unparsed_alerts_rawHash` ON `unparsed_alerts` (`rawHash`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_unparsed_alerts_capturedAt` ON `unparsed_alerts` (`capturedAt`)")
+        }
+    }
+
     val MIGRATION_18_19: Migration = object : Migration(18, 19) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL(

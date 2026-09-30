@@ -1,6 +1,7 @@
 package com.issaczerubbabel.ledgar.data.repository
 
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
+import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
 import kotlinx.coroutines.flow.Flow
 
 /** What the user settled on when confirming a Captured transaction. */
@@ -26,6 +27,11 @@ interface CaptureRepository {
 
     suspend fun dismiss(captureId: Long)
 
-    /** Clears queued captures only. Learned rules and account aliases are kept. */
+    /** Clears queued captures and the unreadable-alerts list. Learned rules and account aliases are kept. */
     suspend fun clearPending()
+
+    fun observeUnparsed(): Flow<List<UnparsedAlert>>
+    fun observeUnparsedCount(): Flow<Int>
+    suspend fun deleteUnparsed(id: Long)
+    suspend fun clearUnparsed()
 }

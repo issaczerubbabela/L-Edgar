@@ -10,6 +10,7 @@ import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
 import com.issaczerubbabel.ledgar.data.local.dao.DropdownOptionDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
 import com.issaczerubbabel.ledgar.data.local.dao.MerchantRuleDao
+import com.issaczerubbabel.ledgar.data.local.dao.UnparsedAlertDao
 import com.issaczerubbabel.ledgar.data.local.entity.AccountAlias
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
@@ -20,6 +21,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRule
+import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
 
 @Database(
     entities = [
@@ -32,9 +34,10 @@ import com.issaczerubbabel.ledgar.data.local.entity.MerchantRule
         BucketCategory::class,
         CapturedTransaction::class,
         MerchantRule::class,
-        AccountAlias::class
+        AccountAlias::class,
+        UnparsedAlert::class
     ],
-    version = 19,
+    version = 20,
     exportSchema = false
 )
 abstract class SheetSyncDatabase : RoomDatabase() {
@@ -46,4 +49,5 @@ abstract class SheetSyncDatabase : RoomDatabase() {
     abstract fun captureDao(): CaptureDao
     abstract fun merchantRuleDao(): MerchantRuleDao
     abstract fun accountAliasDao(): AccountAliasDao
+    abstract fun unparsedAlertDao(): UnparsedAlertDao
 }

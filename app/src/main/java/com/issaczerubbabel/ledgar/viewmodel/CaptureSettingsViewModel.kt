@@ -30,6 +30,9 @@ class CaptureSettingsViewModel @Inject constructor(
     val enabled: StateFlow<Boolean> = preferences.enabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
+    val unparsedCount: StateFlow<Int> = captureRepository.observeUnparsedCount()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
     val categoryMapping: StateFlow<Map<String, String>> = preferences.categoryMappingFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 

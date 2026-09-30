@@ -5,10 +5,14 @@ import com.issaczerubbabel.ledgar.capture.categorize.CategorizationPipeline
 import com.issaczerubbabel.ledgar.capture.categorize.ConfidenceBand
 import com.issaczerubbabel.ledgar.capture.parse.Direction
 import com.issaczerubbabel.ledgar.capture.parse.ParserRegistry
+import com.issaczerubbabel.ledgar.capture.parse.ParsingUtils
+import com.issaczerubbabel.ledgar.capture.source.CaptureApps
 import com.issaczerubbabel.ledgar.capture.parse.TxnTime
 import com.issaczerubbabel.ledgar.data.local.dao.AccountAliasDao
 import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
+import com.issaczerubbabel.ledgar.data.local.dao.UnparsedAlertDao
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
+import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.util.TransactionType
 import kotlinx.coroutines.flow.first
@@ -40,7 +44,8 @@ class CaptureIngestor @Inject constructor(
     private val aliasDao: AccountAliasDao,
     private val dropdownOptions: DropdownOptionRepository,
     private val pipeline: CategorizationPipeline,
-    private val settings: CaptureSettingsSource
+    private val settings: CaptureSettingsSource,
+    private val unparsedDao: UnparsedAlertDao
 ) {
     private val registry = ParserRegistry.default()
     private val gson = Gson()
@@ -53,7 +58,10 @@ class CaptureIngestor @Inject constructor(
     ): IngestResult {
         if (!settings.isEnabled()) return IngestResult.Ignored("Auto-capture is off")
 
-        val parsed = registry.parse(sender, text) ?: return IngestResult.Unparsed
+        val parsed = registry.parse(sender, text) ?: run {
+            recordUnparsed(source, sender, text, nowMillis)
+            return IngestResult.Unparsed
+        }
 
         val accountId = parsed.accountHint?.let { aliasDao.getByAlias(it)?.accountId }
         val expenseCategories = dropdownOptions
@@ -87,6 +95,24 @@ class CaptureIngestor @Inject constructor(
         val id = captureDao.insert(row)
         if (id == -1L) return IngestResult.Duplicate
         return IngestResult.Captured(id, result.band, shouldNotify = result.band == ConfidenceBand.HIGH && accountId != null)
+    }
+
+    /**
+     * Keeps an alert nobody could read, but only one worth a look: it comes from a watched app or a
+     * bank-style SMS sender, shows an amount, and is not an OTP. A friend's chat never qualifies.
+     */
+    private suspend fun recordUnparsed(source: String, sender: String, text: String, nowMillis: Long) {
+        if (!CaptureApps.looksLikeBankSender(sender)) return
+        if (!ParsingUtils.AMOUNT.containsMatchIn(text) || ParsingUtils.OTP.containsMatchIn(text)) return
+        unparsedDao.purgeOlderThan(nowMillis - UNPARSED_RETENTION_MS)
+        unparsedDao.insert(
+            UnparsedAlert(
+                sender = sender,
+                rawText = text,
+                rawHash = dedupeKey(source, sender, text, null, nowMillis),
+                capturedAt = nowMillis
+            )
+        )
     }
 
     /**
@@ -128,5 +154,6 @@ class CaptureIngestor @Inject constructor(
 
     private companion object {
         const val TEN_MINUTES_MS = 10 * 60 * 1000L
+        const val UNPARSED_RETENTION_MS = 30L * 24 * 60 * 60 * 1000
     }
 }

@@ -17,6 +17,7 @@ import com.issaczerubbabel.ledgar.data.local.migration.CaptureMigration
 import com.issaczerubbabel.ledgar.data.local.dao.DropdownOptionDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
 import com.issaczerubbabel.ledgar.data.local.dao.MerchantRuleDao
+import com.issaczerubbabel.ledgar.data.local.dao.UnparsedAlertDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -206,6 +207,7 @@ object DatabaseModule {
             .addMigrations(BucketBudgetMigration.MIGRATION_16_17)
             .addMigrations(MIGRATION_17_18)
             .addMigrations(CaptureMigration.MIGRATION_18_19)
+            .addMigrations(CaptureMigration.MIGRATION_19_20)
             .fallbackToDestructiveMigration()
             .addCallback(callback)
             .build()
@@ -234,4 +236,7 @@ object DatabaseModule {
 
     @Provides
     fun provideAccountAliasDao(db: SheetSyncDatabase): AccountAliasDao = db.accountAliasDao()
+
+    @Provides
+    fun provideUnparsedAlertDao(db: SheetSyncDatabase): UnparsedAlertDao = db.unparsedAlertDao()
 }

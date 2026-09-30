@@ -66,9 +66,9 @@ class CaptureFlowInstrumentedTest {
             db.merchantRuleDao().getByMerchant(it)
         }
         ingestor = CaptureIngestor(
-            db.captureDao(), db.accountAliasDao(), DropdownOptionRepositoryImpl(db.dropdownOptionDao()), pipeline, settings
+            db.captureDao(), db.accountAliasDao(), DropdownOptionRepositoryImpl(db.dropdownOptionDao()), pipeline, settings, db.unparsedAlertDao()
         )
-        repository = CaptureRepositoryImpl(db, db.captureDao(), db.merchantRuleDao(), db.accountAliasDao(), db.expenseDao())
+        repository = CaptureRepositoryImpl(db, db.captureDao(), db.merchantRuleDao(), db.accountAliasDao(), db.expenseDao(), db.unparsedAlertDao())
     }
 
     @After
@@ -331,6 +331,67 @@ class CaptureFlowInstrumentedTest {
         // What a listener reconnect does: the same notification, read again much later.
         assertEquals(IngestResult.Duplicate, ingestor.ingest(CaptureSource.NOTIFICATION, "Google Pay", text, postedAt))
         assertEquals(1, pending().size)
+    }
+
+    private suspend fun unparsed() = db.unparsedAlertDao().getAllSnapshot()
+
+    @Test
+    fun anUnreadableBankAlertWithAnAmountIsKept() = runBlocking {
+        val text = "Your HDFC Bank statement shows Rs.1,200 dues. Open the app for details."
+
+        assertEquals(IngestResult.Unparsed, ingestor.ingest(CaptureSource.NOTIFICATION, "AD-HDFCBK-T", text))
+
+        val kept = unparsed().single()
+        assertEquals("AD-HDFCBK-T", kept.sender)
+        assertEquals(text, kept.rawText)
+    }
+
+    @Test
+    fun otpsChatsAndAmountlessAlertsAreNeverKept() = runBlocking {
+        ingestor.ingest(CaptureSource.NOTIFICATION, "AD-HDFCBK-T", "123456 is your OTP for txn of Rs.2,500 at FLIPKART.")
+        ingestor.ingest(CaptureSource.NOTIFICATION, "Mom", "Send me Rs.500 for groceries when you can")
+        ingestor.ingest(CaptureSource.NOTIFICATION, "AD-HDFCBK-T", "Your statement is ready to view.")
+        ingestor.ingest(CaptureSource.NOTIFICATION, "Some Shop", "Get Rs.500 off your next order")
+
+        assertTrue(unparsed().isEmpty())
+    }
+
+    @Test
+    fun readingTheSameUnreadableAlertAgainKeepsOneCopy() = runBlocking {
+        val text = "Your HDFC Bank statement shows Rs.1,200 dues."
+        ingestor.ingest(CaptureSource.NOTIFICATION, "AD-HDFCBK-T", text, 5_000_000_000L)
+        ingestor.ingest(CaptureSource.NOTIFICATION, "AD-HDFCBK-T", text, 5_000_000_000L)
+
+        assertEquals(1, unparsed().size)
+    }
+
+    @Test
+    fun unreadableAlertsAreDeletedAfterThirtyDays() = runBlocking {
+        val day = 24L * 60 * 60 * 1000
+        ingestor.ingest(CaptureSource.NOTIFICATION, "AD-HDFCBK-T", "Your HDFC Bank statement shows Rs.100 dues.", 100 * day)
+
+        ingestor.ingest(CaptureSource.NOTIFICATION, "AD-HDFCBK-T", "Your HDFC Bank statement shows Rs.200 dues.", 131 * day)
+
+        assertEquals(listOf("Your HDFC Bank statement shows Rs.200 dues."), unparsed().map { it.rawText })
+    }
+
+    @Test
+    fun nothingIsKeptWhileCaptureIsOff() = runBlocking {
+        settings.enabled = false
+
+        ingestor.ingest(CaptureSource.NOTIFICATION, "AD-HDFCBK-T", "Your HDFC Bank statement shows Rs.1,200 dues.")
+
+        assertTrue(unparsed().isEmpty())
+    }
+
+    @Test
+    fun turningCaptureOffAlsoClearsTheUnreadableList() = runBlocking {
+        ingestor.ingest(CaptureSource.NOTIFICATION, "AD-HDFCBK-T", "Your HDFC Bank statement shows Rs.1,200 dues.")
+        assertEquals(1, unparsed().size)
+
+        repository.clearPending()
+
+        assertTrue(unparsed().isEmpty())
     }
 
     @Test

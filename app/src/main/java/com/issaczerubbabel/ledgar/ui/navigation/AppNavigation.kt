@@ -64,6 +64,7 @@ import com.issaczerubbabel.ledgar.ui.screens.AppsScriptSetupScreen
 import com.issaczerubbabel.ledgar.ui.screens.ChangelogScreen
 import com.issaczerubbabel.ledgar.ui.screens.CaptureInboxScreen
 import com.issaczerubbabel.ledgar.ui.screens.CaptureSettingsScreen
+import com.issaczerubbabel.ledgar.ui.screens.UnparsedAlertsScreen
 import com.issaczerubbabel.ledgar.viewmodel.CaptureBadgeViewModel
 import com.issaczerubbabel.ledgar.data.preferences.AppLockAuthMode
 import com.issaczerubbabel.ledgar.viewmodel.AppLockViewModel
@@ -100,6 +101,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object Changelog : Screen("changelog", "Changelog", Icons.Filled.Settings)
     object CaptureInbox : Screen("capture_inbox", "CaptureInbox", Icons.Filled.Settings)
     object CaptureSettings : Screen("capture_settings", "CaptureSettings", Icons.Filled.Settings)
+    object CaptureUnparsed : Screen("capture_unparsed", "CaptureUnparsed", Icons.Filled.Settings)
 }
 
 private const val LOG_BASE_ROUTE = "log"
@@ -695,6 +697,17 @@ fun AppNavigation() {
             }
             composable(Screen.CaptureSettings.route) {
                 CaptureSettingsScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
+                    onNavigateToUnparsed = {
+                        navController.navigate(Screen.CaptureUnparsed.route) {
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
+            composable(Screen.CaptureUnparsed.route) {
+                UnparsedAlertsScreen(
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() }
                 )

@@ -64,9 +64,9 @@ class CaptureNotificationInstrumentedTest {
         )
         ingestor = CaptureIngestor(
             db.captureDao(), db.accountAliasDao(), DropdownOptionRepositoryImpl(db.dropdownOptionDao()),
-            CategorizationPipeline(KeywordDictionary(emptyMap())) { db.merchantRuleDao().getByMerchant(it) }, settings
+            CategorizationPipeline(KeywordDictionary(emptyMap())) { db.merchantRuleDao().getByMerchant(it) }, settings, db.unparsedAlertDao()
         )
-        val repository = CaptureRepositoryImpl(db, db.captureDao(), db.merchantRuleDao(), db.accountAliasDao(), db.expenseDao())
+        val repository = CaptureRepositoryImpl(db, db.captureDao(), db.merchantRuleDao(), db.accountAliasDao(), db.expenseDao(), db.unparsedAlertDao())
         handler = CaptureActionHandler(db.captureDao(), repository)
         notifier = CaptureNotifier(context, db.captureDao(), db.accountDao())
     }

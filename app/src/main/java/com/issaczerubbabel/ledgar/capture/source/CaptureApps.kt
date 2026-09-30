@@ -26,6 +26,13 @@ object CaptureApps {
      */
     private const val SHELL = "com.android.shell"
 
+    /** Bank SMS come from IDs like "AD-HDFCBK-T" or "JM-HDFCBN-S"; a person's name never looks like that. */
+    private val SMS_SENDER_ID = Regex("""^[A-Za-z]{2}-[A-Za-z0-9]{3,8}(-[A-Za-z0-9])?$""")
+
+    /** True for a watched app's label or a bank-style SMS sender ID: the only alerts worth keeping when unreadable. */
+    fun looksLikeBankSender(sender: String): Boolean =
+        sender in labels.values || SMS_SENDER_ID.matches(sender.trim())
+
     fun isWatched(packageName: String): Boolean =
         packageName in labels || (BuildConfig.DEBUG && packageName == SHELL)
 
