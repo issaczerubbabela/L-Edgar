@@ -1,0 +1,12 @@
+{
+  "food_delivery": ["swiggy", "zomato", "eatsure", "dominos", "domino's", "pizza", "kfc", "mcdonalds", "burger king", "restaurant", "biryani"],
+  "groceries": ["bigbasket", "blinkit", "zepto", "instamart", "dmart", "grocery", "supermarket", "reliance fresh"],
+  "snacks": ["chai", "chaayos", "starbucks", "cafe", "coffee", "bakery", "tea", "juice", "ice cream"],
+  "transport": ["uber", "ola", "rapido", "metro", "irctc", "fastag", "redbus", "bmtc", "namma metro"],
+  "fuel": ["fuel", "fuels", "petrol", "diesel", "indian oil", "iocl", "bpcl", "hpcl", "bharat petroleum"],
+  "shopping": ["amazon", "flipkart", "myntra", "ajio", "meesho", "nykaa"],
+  "bills": ["airtel", "jio", "vodafone", "bescom", "electricity", "broadband", "fibernet", "tata power"],
+  "subscriptions": ["netflix", "spotify", "hotstar", "youtube", "prime video", "apple"],
+  "health": ["apollo", "pharmeasy", "1mg", "medplus", "pharmacy", "hospital", "clinic", "medical"],
+  "cash": ["atm withdrawal", "cash withdrawal"]
+}
