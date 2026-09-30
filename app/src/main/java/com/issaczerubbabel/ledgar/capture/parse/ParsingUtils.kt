@@ -1,5 +1,8 @@
 package com.issaczerubbabel.ledgar.capture.parse
 
+import java.time.DateTimeException
+import java.time.LocalDate
+
 /** Regex building blocks shared by every [TransactionParser]. */
 internal object ParsingUtils {
 
@@ -34,6 +37,27 @@ internal object ParsingUtils {
     private val CARD_HINT = Regex("card", RegexOption.IGNORE_CASE)
     private val NEFT_HINT = Regex("neft", RegexOption.IGNORE_CASE)
     private val IMPS_HINT = Regex("imps", RegexOption.IGNORE_CASE)
+
+    /** "on 26/09/26", "on 25-SEP-26", "on 14-09-2026": the day comes first, as in Indian bank alerts. */
+    private val DATE = Regex(
+        """\bon\s+(\d{1,2})[-/ ]([A-Za-z]{3}|\d{1,2})[-/ ](\d{4}|\d{2})\b""",
+        RegexOption.IGNORE_CASE
+    )
+
+    private val MONTHS = listOf("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+
+    /** The date an alert says the transaction happened, or null if it has none or it is not a real date. */
+    fun dateOf(text: String): LocalDate? {
+        val match = DATE.find(text) ?: return null
+        val (day, monthText, yearText) = match.destructured
+        val month = monthText.toIntOrNull() ?: (MONTHS.indexOf(monthText.lowercase()) + 1).takeIf { it > 0 } ?: return null
+        val year = yearText.toInt().let { if (yearText.length == 2) 2000 + it else it }
+        return try {
+            LocalDate.of(year, month, day.toInt())
+        } catch (e: DateTimeException) {
+            null
+        }
+    }
 
     fun normalizeWhitespace(text: String): String = text.replace(Regex("\\s+"), " ").trim()
 

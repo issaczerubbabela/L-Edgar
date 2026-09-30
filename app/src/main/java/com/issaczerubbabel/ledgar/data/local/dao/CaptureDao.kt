@@ -22,7 +22,7 @@ interface CaptureDao {
     suspend fun getById(id: Long): CapturedTransaction?
 
     @Query(
-        "SELECT * FROM captured_transactions WHERE status IN ('PENDING', 'POSSIBLE_DUPLICATE') ORDER BY txnTime DESC"
+        "SELECT * FROM captured_transactions WHERE status IN ('PENDING', 'POSSIBLE_DUPLICATE') ORDER BY capturedAt DESC, id DESC"
     )
     fun observePending(): Flow<List<CapturedTransaction>>
 

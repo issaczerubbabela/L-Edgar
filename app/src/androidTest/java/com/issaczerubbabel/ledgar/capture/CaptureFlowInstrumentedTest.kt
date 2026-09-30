@@ -282,6 +282,58 @@ class CaptureFlowInstrumentedTest {
     }
 
     @Test
+    fun aLateAlertIsFiledUnderTheDateItStates() = runBlocking {
+        // The Axis alert says 19-12-24, but it is only read on 5 Oct 2026.
+        val arrivedAt = java.time.LocalDateTime.of(2026, 10, 5, 10, 30)
+            .atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val id = (ingestor.ingest(CaptureSource.NOTIFICATION, "AXISBK", axisFuel("435476373861"), arrivedAt) as IngestResult.Captured).id
+
+        val expenseId = repository.confirm(id, CaptureEdits("Expense", "Fuel", accountId, "Ujagar Fuels"))!!
+
+        assertEquals("2024-12-19", db.expenseDao().getById(expenseId)!!.date)
+        assertEquals(arrivedAt, db.captureDao().getById(id)!!.capturedAt)
+    }
+
+    @Test
+    fun aTodayAlertKeepsTodaysDate() = runBlocking {
+        val now = java.time.LocalDate.now()
+        val text = "Sent Rs.70.00 From HDFC Bank A/C *1234 To Mrs Jane Doe On %02d/%02d/%02d Ref 66353123456790"
+            .format(now.dayOfMonth, now.monthValue, now.year % 100)
+        val id = (ingestor.ingest(CaptureSource.NOTIFICATION, "HDFC Bank", text) as IngestResult.Captured).id
+
+        val expenseId = repository.confirm(id, CaptureEdits("Expense", "Food", accountId, "Mrs Jane Doe"))!!
+
+        assertEquals(now.toString(), db.expenseDao().getById(expenseId)!!.date)
+    }
+
+    @Test
+    fun theInboxListsWhatArrivedLastFirstEvenIfItsDateIsOlder() = runBlocking {
+        val zone = java.time.ZoneId.systemDefault()
+        fun at(hour: Int) = java.time.LocalDateTime.of(2026, 9, 30, hour, 0).atZone(zone).toInstant().toEpochMilli()
+        val early = (ingestor.ingest(
+            CaptureSource.NOTIFICATION, "HDFC Bank",
+            "Sent Rs.10.00 From HDFC Bank A/C *1234 To Shop A On 30/09/26 Ref 11111111111", at(10)
+        ) as IngestResult.Captured).id
+        val late = (ingestor.ingest(
+            CaptureSource.NOTIFICATION, "HDFC Bank",
+            "Sent Rs.20.00 From HDFC Bank A/C *1234 To Shop B On 25/09/26 Ref 22222222222", at(11)
+        ) as IngestResult.Captured).id
+
+        assertEquals(listOf(late, early), pending().map { it.id })
+    }
+
+    @Test
+    fun readingTheSameNotificationAgainAtTheSamePostTimeIsNotASecondCapture() = runBlocking {
+        val postedAt = 1_800_000_000_000L
+        val text = "Paid Rs.500 to Ramesh Kumar."
+        ingestor.ingest(CaptureSource.NOTIFICATION, "Google Pay", text, postedAt)
+
+        // What a listener reconnect does: the same notification, read again much later.
+        assertEquals(IngestResult.Duplicate, ingestor.ingest(CaptureSource.NOTIFICATION, "Google Pay", text, postedAt))
+        assertEquals(1, pending().size)
+    }
+
+    @Test
     fun aliasRowsFollowTheirAccountWhenItIsDeleted() = runBlocking {
         db.accountAliasDao().upsert(AccountAlias("1236", accountId))
 

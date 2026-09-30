@@ -5,6 +5,7 @@ import com.issaczerubbabel.ledgar.capture.categorize.CategorizationPipeline
 import com.issaczerubbabel.ledgar.capture.categorize.ConfidenceBand
 import com.issaczerubbabel.ledgar.capture.parse.Direction
 import com.issaczerubbabel.ledgar.capture.parse.ParserRegistry
+import com.issaczerubbabel.ledgar.capture.parse.TxnTime
 import com.issaczerubbabel.ledgar.data.local.dao.AccountAliasDao
 import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
@@ -12,6 +13,7 @@ import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.util.TransactionType
 import kotlinx.coroutines.flow.first
 import java.security.MessageDigest
+import java.time.ZoneId
 import javax.inject.Inject
 
 object CaptureSource {
@@ -64,7 +66,7 @@ class CaptureIngestor @Inject constructor(
             rawText = text,
             rawHash = dedupeKey(source, sender, text, parsed.refNumber, nowMillis),
             capturedAt = nowMillis,
-            txnTime = nowMillis,
+            txnTime = TxnTime.resolve(parsed.txnDate, nowMillis, ZoneId.systemDefault()),
             amount = parsed.amount,
             direction = if (parsed.direction == Direction.CREDIT) "CREDIT" else "DEBIT",
             channel = parsed.channel.name,

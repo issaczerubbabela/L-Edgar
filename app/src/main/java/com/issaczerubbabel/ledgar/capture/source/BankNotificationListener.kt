@@ -54,7 +54,9 @@ class BankNotificationListener : NotificationListenerService() {
         val text = if (title.isBlank() || CaptureApps.labelFor(sbn.packageName) == null) body else "$title\n$body"
 
         scope.launch {
-            val result = runCatching { ingestor.ingest(CaptureSource.NOTIFICATION, sender, text) }
+            // The notification's own post time, not "now": reading the shade again after a reconnect
+            // must give the same alert the same time, or it would be captured a second time.
+            val result = runCatching { ingestor.ingest(CaptureSource.NOTIFICATION, sender, text, sbn.postTime) }
             result.getOrNull()?.let { if (it is IngestResult.Captured && it.shouldNotify) runCatching { notifier.notify(it.id) } }
             Log.d(TAG, "${sbn.packageName}: " + result.fold({ describe(it) }, { "failed: ${it.javaClass.simpleName}" }))
         }

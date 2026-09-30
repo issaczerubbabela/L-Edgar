@@ -5,7 +5,8 @@ class ParserRegistry(private val parsers: List<TransactionParser>) {
 
     fun parse(sender: String, text: String): ParsedTxn? {
         val parser = parsers.firstOrNull { it.canParse(sender, text) } ?: return null
-        return parser.parse(text)
+        val parsed = parser.parse(text) ?: return null
+        return if (parsed.txnDate != null) parsed else parsed.copy(txnDate = ParsingUtils.dateOf(text))
     }
 
     companion object {

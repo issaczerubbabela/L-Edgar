@@ -59,6 +59,16 @@ private sealed interface Picker {
 }
 
 private val timeFormat = DateTimeFormatter.ofPattern("d MMM, h:mm a")
+private val dateFormat = DateTimeFormatter.ofPattern("d MMM")
+
+/** The alert's own date when it differs from the day it arrived, else when it arrived. */
+private fun whenText(arrivedAt: Long, txnTime: Long): String {
+    val zone = ZoneId.systemDefault()
+    val arrived = Instant.ofEpochMilli(arrivedAt).atZone(zone)
+    val txn = Instant.ofEpochMilli(txnTime).atZone(zone)
+    return if (txn.toLocalDate() == arrived.toLocalDate()) timeFormat.format(arrived)
+    else dateFormat.format(txn) + " (date in the alert)"
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -216,7 +226,7 @@ private fun CaptureCard(
             }
             Text(
                 listOfNotNull(
-                    timeFormat.format(Instant.ofEpochMilli(capture.capturedAt).atZone(ZoneId.systemDefault())),
+                    whenText(capture.capturedAt, capture.txnTime),
                     capture.accountHint?.let { "XX$it" },
                     capture.channel.takeIf { it != "UNKNOWN" }
                 ).joinToString(" · "),
