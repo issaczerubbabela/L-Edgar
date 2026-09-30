@@ -32,6 +32,16 @@ class MoneyFormatTest {
     }
 
     @Test
+    fun exactFormatKeepsPaiseOnlyWhenThereAreSome() {
+        assertEquals("₹450", formatRupeesExact(450.0))
+        assertEquals("₹212.40", formatRupeesExact(212.4))
+        assertEquals("₹1,20,000.05", formatRupeesExact(120000.05))
+        assertEquals("₹0.50", formatRupeesExact(0.5))
+        assertEquals("-₹940.25", formatRupeesExact(-940.25))
+        assertEquals("₹0", formatRupeesExact(0.0))
+    }
+
+    @Test
     fun aFieldShowsNoTrailingPointZero() {
         assertEquals("68000", amountToInput(68000.0))
         assertEquals("0", amountToInput(0.0))

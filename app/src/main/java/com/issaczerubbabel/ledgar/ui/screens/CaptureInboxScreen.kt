@@ -46,7 +46,7 @@ import com.issaczerubbabel.ledgar.ui.components.OptionPickerSheet
 import com.issaczerubbabel.ledgar.ui.components.PickerOption
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseOrange
 import com.issaczerubbabel.ledgar.ui.theme.IncomeBlue
-import com.issaczerubbabel.ledgar.util.formatRupees
+import com.issaczerubbabel.ledgar.util.formatRupeesExact
 import com.issaczerubbabel.ledgar.viewmodel.CaptureRowUi
 import com.issaczerubbabel.ledgar.viewmodel.ReviewInboxViewModel
 import java.time.Instant
@@ -127,7 +127,7 @@ fun CaptureInboxScreen(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text("${bulk.size} ready to confirm", style = MaterialTheme.typography.titleSmall)
                                     Text(
-                                        formatRupees(bulk.sumOf { it.capture.amount }) + " in total",
+                                        formatRupeesExact(bulk.sumOf { it.capture.amount }) + " in total",
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                 }
@@ -206,7 +206,7 @@ private fun CaptureCard(
                     modifier = Modifier.weight(1f)
                 )
                 Text(
-                    (if (row.isIncome) "+" else "−") + formatRupees(capture.amount),
+                    (if (row.isIncome) "+" else "−") + formatRupeesExact(capture.amount),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = amountColor
@@ -298,14 +298,14 @@ private fun BulkConfirmDialog(
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
-                        Text(formatRupees(row.capture.amount), style = MaterialTheme.typography.bodyMedium)
+                        Text(formatRupeesExact(row.capture.amount), style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(chosen) }, enabled = chosen.isNotEmpty()) {
-                Text("Confirm ${formatRupees(chosen.sumOf { it.capture.amount })}")
+                Text("Confirm ${formatRupeesExact(chosen.sumOf { it.capture.amount })}")
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }

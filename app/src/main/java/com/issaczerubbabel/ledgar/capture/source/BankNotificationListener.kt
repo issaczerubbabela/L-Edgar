@@ -7,6 +7,7 @@ import android.util.Log
 import com.issaczerubbabel.ledgar.capture.CaptureIngestor
 import com.issaczerubbabel.ledgar.capture.CaptureSource
 import com.issaczerubbabel.ledgar.capture.IngestResult
+import com.issaczerubbabel.ledgar.capture.notify.CaptureNotifier
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +24,7 @@ import javax.inject.Inject
 class BankNotificationListener : NotificationListenerService() {
 
     @Inject lateinit var ingestor: CaptureIngestor
+    @Inject lateinit var notifier: CaptureNotifier
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -53,6 +55,7 @@ class BankNotificationListener : NotificationListenerService() {
 
         scope.launch {
             val result = runCatching { ingestor.ingest(CaptureSource.NOTIFICATION, sender, text) }
+            result.getOrNull()?.let { if (it is IngestResult.Captured && it.shouldNotify) runCatching { notifier.notify(it.id) } }
             Log.d(TAG, "${sbn.packageName}: " + result.fold({ describe(it) }, { "failed: ${it.javaClass.simpleName}" }))
         }
     }

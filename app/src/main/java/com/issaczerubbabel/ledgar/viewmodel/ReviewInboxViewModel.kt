@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.issaczerubbabel.ledgar.capture.categorize.ConfidenceBand
+import com.issaczerubbabel.ledgar.capture.notify.CaptureNotifier
+import com.issaczerubbabel.ledgar.capture.notify.displayTitle
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
@@ -39,9 +41,7 @@ data class CaptureRowUi(
     /** Safe to confirm in bulk: a High-confidence guess whose Category and Account are both known. */
     val isBulkCandidate: Boolean get() = band == ConfidenceBand.HIGH && canConfirm
 
-    val title: String
-        get() = capture.merchantRaw?.trim()?.takeIf { it.isNotEmpty() }
-            ?: if (isIncome) "Money received" else "Payment"
+    val title: String get() = capture.displayTitle()
 }
 
 private data class RowEdit(val category: String? = null, val accountId: Long? = null)
@@ -49,6 +49,7 @@ private data class RowEdit(val category: String? = null, val accountId: Long? = 
 @HiltViewModel
 class ReviewInboxViewModel @Inject constructor(
     private val captureRepository: CaptureRepository,
+    private val notifier: CaptureNotifier,
     accountRepository: AccountRepository,
     dropdownOptionRepository: DropdownOptionRepository
 ) : ViewModel() {
@@ -105,7 +106,10 @@ class ReviewInboxViewModel @Inject constructor(
     }
 
     fun dismiss(captureId: Long) {
-        viewModelScope.launch { captureRepository.dismiss(captureId) }
+        viewModelScope.launch {
+            captureRepository.dismiss(captureId)
+            notifier.cancel(captureId)
+        }
     }
 
     private suspend fun confirmNow(row: CaptureRowUi) {
@@ -115,6 +119,7 @@ class ReviewInboxViewModel @Inject constructor(
             row.capture.id,
             CaptureEdits(type = row.type, category = category, accountId = accountId, description = row.title)
         )
+        notifier.cancel(row.capture.id)
         edits.update { it - row.capture.id }
     }
 

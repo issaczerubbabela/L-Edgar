@@ -1,8 +1,12 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -68,10 +72,30 @@ fun CaptureSettingsScreen(
 
     // The user grants access on a system screen, so look again each time we come back.
     var hasAccess by remember { mutableStateOf(context.hasNotificationAccess()) }
+    var notificationsAllowed by remember { mutableStateOf(NotificationManagerCompat.from(context).areNotificationsEnabled()) }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        notificationsAllowed = granted || NotificationManagerCompat.from(context).areNotificationsEnabled()
+    }
+    fun askForNotifications() {
+        if (Build.VERSION.SDK_INT >= 33 && !notificationsAllowed) {
+            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            runCatching {
+                context.startActivity(
+                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
+        }
+    }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) hasAccess = context.hasNotificationAccess()
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasAccess = context.hasNotificationAccess()
+                notificationsAllowed = NotificationManagerCompat.from(context).areNotificationsEnabled()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -109,7 +133,13 @@ fun CaptureSettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Switch(checked = enabled, onCheckedChange = vm::setEnabled)
+                    Switch(
+                        checked = enabled,
+                        onCheckedChange = { on ->
+                            vm.setEnabled(on)
+                            if (on && !notificationsAllowed) askForNotifications()
+                        }
+                    )
                 }
             }
             item {
@@ -140,6 +170,25 @@ fun CaptureSettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+            item {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Confirm from a notification", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            if (notificationsAllowed) "On. Only a high-confidence capture with a known account asks. The lock screen hides the amount, and Confirm needs your phone unlocked."
+                            else "Off. Allow notifications to confirm high-confidence captures without opening the app.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (!notificationsAllowed) TextButton(onClick = ::askForNotifications) { Text("Allow") }
+                }
             }
             item {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
