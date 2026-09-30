@@ -97,6 +97,8 @@ function loadScript(source) {
     },
     SpreadsheetApp: { getActiveSpreadsheet: () => spreadsheet },
     Session: { getScriptTimeZone: () => "UTC" },
+    // Every request runs under the script lock since script version 2.
+    LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
     Utilities: { formatDate: () => "9/24/2026 12:00:00" },
     Logger: { log() {} },
     console,
@@ -268,6 +270,44 @@ test("the new script never files cycles as transactions", () => {
   const s = loadScript(gsSource);
   s.post({ target: "bucket_budgets", action: "backup", records: [], cycles: CYCLES });
   assert.equal(s.sheets["_responses"], undefined, "the transaction sheet is not even created");
+});
+
+// ---------------------------------------------------------------------------------------------
+// Dropdown option Stats roles (ADR-0004): a sixth `Role` column after "Last Backed Up", so the
+// existing five columns keep their places in Sheets backed up by older scripts.
+// ---------------------------------------------------------------------------------------------
+const OPTIONS = [
+  { id: 1, optionType: "EXPENSE_CATEGORY", name: "Investments/Savings", displayOrder: 0, role: "SAVING" },
+  { id: 2, optionType: "INCOME_CATEGORY", name: "Return", displayOrder: 0, role: "REFUND" },
+  { id: 3, optionType: "EXPENSE_CATEGORY", name: "Food & Snacks", displayOrder: 1, role: "" },
+];
+
+test.describe("dropdown option roles", () => {
+  for (const [label, source] of [["AppsScript.gs", gsSource], ["copy embedded in the app", embedded]]) {
+    test(`${label}: roles survive a backup and come back on import`, () => {
+      const s = loadScript(source);
+      assert.equal(s.post({ target: "dropdowns", action: "backup", records: OPTIONS }).status, "ok");
+      const header = s.sheets["_dropdowns"].getDataRange().getValues()[0];
+      assert.deepEqual(header.slice(4), ["Last Backed Up", "Role"]);
+      assert.deepEqual(s.get("dropdowns").data, OPTIONS);
+    });
+
+    test(`${label}: a Sheet backed up before roles existed imports with empty roles`, () => {
+      const s = loadScript(oldSource);
+      s.post({ target: "dropdowns", action: "backup", records: OPTIONS });
+      assert.equal(s.sheets["_dropdowns"].getDataRange().getValues()[0].length, 5, "old script writes five columns");
+      const fresh = loadScript(source);
+      fresh.sheets["_dropdowns"] = s.sheets["_dropdowns"];
+      assert.deepEqual(fresh.get("dropdowns").data.map((o) => o.role), ["", "", ""]);
+    });
+  }
+
+  test("the two copies of the script handle dropdown roles identically", { skip: Boolean(overridePath) }, () => {
+    const block = (src) => src.slice(src.indexOf("// DROPDOWNS & BUDGETS BACKUP"), src.indexOf("// Batch insert all rows at once")).replace(/\r\n/g, "\n");
+    assert.equal(block(gsSource), block(embedded));
+    const read = (src) => /dropdowns\.push\(\{[\s\S]*?\}\);/.exec(src)[0].replace(/\r\n/g, "\n");
+    assert.equal(read(gsSource), read(embedded));
+  });
 });
 
 // ---------------------------------------------------------------------------------------------

@@ -7,7 +7,7 @@ import androidx.room.PrimaryKey
 
 /**
  * A bank/UPI alert parsed by auto-capture but not yet turned into an [ExpenseRecord]. See the
- * "Captured transaction" entry in CONTEXT.md and ADR-0004: only [status] CONFIRMED comes from an
+ * "Captured transaction" entry in CONTEXT.md and ADR-0005: only [status] CONFIRMED comes from an
  * explicit user action, never written automatically.
  */
 @Entity(

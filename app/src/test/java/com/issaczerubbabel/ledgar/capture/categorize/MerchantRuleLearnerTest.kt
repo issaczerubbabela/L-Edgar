@@ -27,9 +27,9 @@ class MerchantRuleLearnerTest {
 
         rule = applied(confirm(rule), rule)
 
-        assertEquals(MerchantRuleOrigin.LEARNED, rule!!.origin)
-        assertEquals("Food", rule!!.category)
-        assertEquals(3, rule!!.hitCount)
+        assertEquals(MerchantRuleOrigin.LEARNED, rule?.origin)
+        assertEquals("Food", rule?.category)
+        assertEquals(3, rule?.hitCount)
     }
 
     @Test
@@ -38,11 +38,11 @@ class MerchantRuleLearnerTest {
         repeat(2) { rule = applied(confirm(rule), rule) }
 
         rule = applied(confirm(rule, category = "Groceries"), rule)
-        assertEquals("Groceries", rule!!.category)
-        assertEquals(1, rule!!.streak)
+        assertEquals("Groceries", rule?.category)
+        assertEquals(1, rule?.streak)
 
         rule = applied(confirm(rule, category = "Groceries"), rule)
-        assertEquals(MerchantRuleOrigin.CANDIDATE, rule!!.origin)
+        assertEquals(MerchantRuleOrigin.CANDIDATE, rule?.origin)
     }
 
     @Test

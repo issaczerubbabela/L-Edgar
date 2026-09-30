@@ -8,7 +8,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
-import com.issaczerubbabel.ledgar.data.local.entity.ExpenseVersionTrigger
+import com.issaczerubbabel.ledgar.data.local.entity.ExpenseTableTriggers
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -34,7 +34,7 @@ class ExpenseSyncQueriesTest {
     fun setUp() {
         db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), SheetSyncDatabase::class.java)
             .addCallback(object : RoomDatabase.Callback() {
-                override fun onCreate(db: SupportSQLiteDatabase) = ExpenseVersionTrigger.install(db)
+                override fun onCreate(db: SupportSQLiteDatabase) = ExpenseTableTriggers.install(db)
             })
             .allowMainThreadQueries()
             .build()
@@ -63,12 +63,13 @@ class ExpenseSyncQueriesTest {
         val sentVersion = dao.getById(id)!!.localVersion
 
         dao.update(dao.getById(id)!!.copy(amount = 75.0))
-        assertEquals(0, dao.markSyncedIfUnchanged(id, sentVersion))
+        assertEquals(0, dao.markSyncedIfUnchanged(id, sentVersion, FINGERPRINT))
         assertFalse(dao.getById(id)!!.isSynced)
 
-        assertEquals(1, dao.markSyncedIfUnchanged(id, dao.getById(id)!!.localVersion))
+        assertEquals(1, dao.markSyncedIfUnchanged(id, dao.getById(id)!!.localVersion, FINGERPRINT))
         assertTrue(dao.getById(id)!!.isSynced)
         assertEquals("NONE", dao.getById(id)!!.syncAction)
+        assertEquals(FINGERPRINT, dao.getById(id)!!.syncedRevision)
     }
 
     @Test
@@ -76,7 +77,7 @@ class ExpenseSyncQueriesTest {
         val id = dao.insert(transaction())
         dao.markTransactionDeletedById(id)
 
-        assertEquals(0, dao.markSyncedIfUnchanged(id, dao.getById(id)!!.localVersion))
+        assertEquals(0, dao.markSyncedIfUnchanged(id, dao.getById(id)!!.localVersion, FINGERPRINT))
         assertEquals("DELETE", dao.getById(id)!!.syncAction)
     }
 
@@ -93,26 +94,59 @@ class ExpenseSyncQueriesTest {
     }
 
     @Test
-    fun `an edit saved from an earlier read keeps the timestamp Sync assigned meanwhile`() = runBlocking {
-        val id = dao.insert(transaction())
+    fun `an edit saved from an earlier read keeps the ID Sync linked meanwhile`() = runBlocking {
+        val id = dao.insert(transaction(isSynced = true, syncAction = "NONE"))
         val readByTheEditScreen = dao.getById(id)!!
-        dao.assignRemoteTimestamp(id, "9/24/2026 10:00:00")
+        dao.setSyncIdIfUnchanged(id, readByTheEditScreen.localVersion, "sheet-id")
+        dao.setBaseIfUnchanged(id, readByTheEditScreen.localVersion, FINGERPRINT)
 
-        dao.updateKeepingSyncState(readByTheEditScreen.copy(amount = 80.0, syncAction = "UPDATE"))
+        dao.updateKeepingSyncState(readByTheEditScreen.copy(amount = 80.0, isSynced = false, syncAction = "UPDATE"))
 
         val saved = dao.getById(id)!!
         assertEquals(80.0, saved.amount, 0.0)
-        assertEquals("9/24/2026 10:00:00", saved.remoteTimestamp)
-        assertEquals("a Transaction that never synced stays an insert", "INSERT", saved.syncAction)
+        assertEquals("sheet-id", saved.syncId)
+        assertEquals(FINGERPRINT, saved.syncedRevision)
     }
 
     @Test
-    fun `a Remote timestamp is assigned once and never overwritten`() = runBlocking {
+    fun `an edit of a Transaction that never synced keeps it an insert`() = runBlocking {
         val id = dao.insert(transaction())
 
-        assertEquals(1, dao.assignRemoteTimestamp(id, "9/24/2026 10:00:00"))
-        assertEquals(0, dao.assignRemoteTimestamp(id, "9/24/2026 10:00:01"))
-        assertEquals("9/24/2026 10:00:00", dao.getById(id)!!.remoteTimestamp)
+        dao.updateKeepingSyncState(dao.getById(id)!!.copy(amount = 80.0, syncAction = "UPDATE"))
+
+        assertEquals("INSERT", dao.getById(id)!!.syncAction)
+    }
+
+    @Test
+    fun `a Transaction created on the phone gets an ID, while one inserted as already synced waits to be linked`() = runBlocking {
+        val created = dao.insert(transaction())
+        val imported = dao.insert(transaction(isSynced = true, syncAction = "NONE"))
+
+        assertTrue(dao.getById(created)!!.syncId!!.isNotBlank())
+        assertNull(dao.getById(imported)!!.syncId)
+        assertEquals(1, dao.countWithoutSyncId())
+    }
+
+    @Test
+    fun `sync bookkeeping never raises the version, so one Pull can apply several steps to a row`() = runBlocking {
+        val id = dao.insert(transaction(isSynced = true, syncAction = "NONE"))
+        val version = dao.getById(id)!!.localVersion
+
+        assertEquals(1, dao.setSyncIdIfUnchanged(id, version, "sheet-id"))
+        assertEquals(1, dao.setBaseIfUnchanged(id, version, FINGERPRINT))
+        assertEquals(1, dao.setConflictIfUnchanged(id, version, "{}"))
+        assertEquals(version, dao.getById(id)!!.localVersion)
+        assertEquals(0, dao.setSyncIdIfUnchanged(id, version, "another-id"))
+    }
+
+    @Test
+    fun `inserting a Sheet row twice keeps one copy`() = runBlocking {
+        val sheetRow = transaction(isSynced = true, syncAction = "NONE").copy(syncId = "sheet-id")
+
+        dao.insertIgnoringDuplicateSyncId(sheetRow)
+        dao.insertIgnoringDuplicateSyncId(sheetRow)
+
+        assertEquals(1, dao.getAllRecordsSnapshot().size)
     }
 
     @Test
@@ -139,6 +173,10 @@ class ExpenseSyncQueriesTest {
         assertEquals("DELETE", dao.getById(id)!!.syncAction)
         assertFalse(dao.getById(id)!!.isSynced)
         assertTrue(dao.getUnsyncedRecords().any { it.id == id })
+    }
+
+    private companion object {
+        const val FINGERPRINT = "agreed-content"
     }
 
     private fun transaction(

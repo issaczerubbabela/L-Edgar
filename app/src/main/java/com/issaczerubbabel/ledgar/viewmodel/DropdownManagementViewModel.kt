@@ -3,6 +3,7 @@ package com.issaczerubbabel.ledgar.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
+import com.issaczerubbabel.ledgar.data.local.entity.DropdownRole
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -17,10 +18,14 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class DropdownOptionType(val key: String, val label: String) {
-    ExpenseCategory("EXPENSE_CATEGORY", "Expense Categories"),
-    IncomeCategory("INCOME_CATEGORY", "Income Categories"),
-    AccountGroup("ACCOUNT_GROUP", "Account Groups"),
+/**
+ * [statsRole] is the one Stats role options of this type can take (ADR-0004), with how the UI
+ * names it, or null when the type has none.
+ */
+enum class DropdownOptionType(val key: String, val label: String, val statsRole: Pair<String, String>? = null) {
+    ExpenseCategory("EXPENSE_CATEGORY", "Expense Categories", DropdownRole.SAVING to "Saving"),
+    IncomeCategory("INCOME_CATEGORY", "Income Categories", DropdownRole.REFUND to "Refund"),
+    AccountGroup("ACCOUNT_GROUP", "Account Groups", DropdownRole.SAVINGS to "Savings"),
     PaymentMode("PAYMENT_MODE", "Payment Modes")
 }
 
@@ -66,6 +71,12 @@ class DropdownManagementViewModel @Inject constructor(
 
     fun selectType(type: DropdownOptionType) {
         selectedType.value = type
+    }
+
+    /** Sets or clears the option's Stats role (ADR-0004); an empty [role] means an ordinary option. */
+    fun setRole(option: DropdownOption, role: String) {
+        if (option.role == role) return
+        viewModelScope.launch { dropdownRepository.update(option.copy(role = role)) }
     }
 
     fun showAddDialog() {

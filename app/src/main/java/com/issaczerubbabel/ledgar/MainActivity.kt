@@ -8,13 +8,24 @@ import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.issaczerubbabel.ledgar.sync.SyncScheduler
 import com.issaczerubbabel.ledgar.ui.navigation.AppNavigation
 import com.issaczerubbabel.ledgar.ui.theme.SheetSyncTheme
 import com.issaczerubbabel.ledgar.viewmodel.SettingsViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
+
+    @Inject
+    lateinit var syncScheduler: SyncScheduler
+
+    /** Opening the app pulls edits made in the Sheet since the last Sync (ADR-0003). */
+    override fun onStart() {
+        super.onStart()
+        syncScheduler.requestFullSync()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

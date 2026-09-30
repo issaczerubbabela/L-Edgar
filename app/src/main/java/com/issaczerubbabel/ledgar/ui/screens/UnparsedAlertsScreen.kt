@@ -32,14 +32,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
+import android.content.ClipData
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
 import com.issaczerubbabel.ledgar.viewmodel.UnparsedAlertsViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -65,7 +68,7 @@ fun UnparsedAlertsScreen(
                     }
                 },
                 actions = { if (alerts.isNotEmpty()) TextButton(onClick = vm::clearAll) { Text("Clear all") } },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         },
         containerColor = MaterialTheme.colorScheme.background
@@ -111,7 +114,8 @@ fun UnparsedAlertsScreen(
 
 @Composable
 private fun UnparsedCard(alert: UnparsedAlert, onDelete: () -> Unit) {
-    val clipboard = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
     var copied by remember { mutableStateOf(false) }
     LaunchedEffect(copied) {
         if (copied) {
@@ -137,8 +141,10 @@ private fun UnparsedCard(alert: UnparsedAlert, onDelete: () -> Unit) {
                 Box(modifier = Modifier.weight(1f))
                 TextButton(onClick = onDelete) { Text("Delete") }
                 TextButton(onClick = {
-                    clipboard.setText(AnnotatedString(alert.rawText))
-                    copied = true
+                    scope.launch {
+                        clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Bank alert", alert.rawText)))
+                        copied = true
+                    }
                 }) { Text(if (copied) "Copied" else "Copy") }
             }
         }

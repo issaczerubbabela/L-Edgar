@@ -6,6 +6,7 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.issaczerubbabel.ledgar.data.preferences.SyncStateRepository
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -18,6 +19,8 @@ class SyncWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted workerParams: WorkerParameters,
     private val syncer: TransactionSyncer,
+    private val syncState: SyncStateRepository,
+    private val listsMerger: SheetListsMerger,
     private val preferenceRepository: ThemePreferenceRepository
 ) : CoroutineWorker(context, workerParams) {
 
@@ -25,14 +28,23 @@ class SyncWorker @AssistedInject constructor(
         val scriptUrl = preferenceRepository.scriptUrl.first()
             ?: return Result.failure(workDataOf(KEY_ERROR_MESSAGE to SyncUrlNotConfiguredException().message))
         return try {
-            when (val outcome = syncer.sync(scriptUrl)) {
+            val pull = inputData.getBoolean(KEY_PULL, false)
+            val allowMassDelete = inputData.getBoolean(KEY_ALLOW_MASS_DELETE, false)
+            // A fresh install takes in the Sheet's Accounts first, so pulled Transactions land on them.
+            if (pull) listsMerger.mergeOnce(scriptUrl)
+            when (val outcome = syncer.sync(scriptUrl, pull, allowMassDelete)) {
                 is TransactionSyncer.Outcome.Synced -> {
-                    Log.i(TAG, "Transaction sync successful. processed=${outcome.count}")
-                    Result.success(workDataOf(KEY_SYNCED_COUNT to outcome.count))
+                    outcome.heldDeletes?.let { syncState.setHeldSheetDeletions(it) }
+                    Log.i(TAG, "Transaction sync successful. pushed=${outcome.pushed} pulledChanges=${outcome.pulledChanges} held=${outcome.heldDeletes?.size}")
+                    Result.success(workDataOf(KEY_SYNCED_COUNT to outcome.pushed))
                 }
                 is TransactionSyncer.Outcome.Failed -> {
                     Log.w(TAG, outcome.message)
                     Result.retry()
+                }
+                TransactionSyncer.Outcome.ScriptOutdated -> {
+                    Log.w(TAG, "The deployed Apps Script predates Transaction IDs; sync paused until it is redeployed")
+                    Result.failure(workDataOf(KEY_SCRIPT_OUTDATED to true))
                 }
             }
         } catch (e: CancellationException) {
@@ -47,6 +59,9 @@ class SyncWorker @AssistedInject constructor(
         const val TAG = "SyncWorker"
         const val WORK_NAME = "SyncWorker"
         const val KEY_SYNCED_COUNT = "syncedCount"
+        const val KEY_PULL = "pull"
+        const val KEY_ALLOW_MASS_DELETE = "allowMassDelete"
+        const val KEY_SCRIPT_OUTDATED = "scriptOutdated"
         const val KEY_ERROR_MESSAGE = "errorMessage"
     }
 }

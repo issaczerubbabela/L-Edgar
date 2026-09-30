@@ -1,594 +1,1053 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.automirrored.filled.TrendingFlat
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import android.provider.Settings
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.TrendingDown
-import androidx.compose.material.icons.filled.TrendingFlat
-import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.issaczerubbabel.ledgar.data.preferences.CashFlowChartStyle
+import com.issaczerubbabel.ledgar.data.bucket.BucketSummary
+import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.ui.components.DateRangePickerDialog
 import com.issaczerubbabel.ledgar.ui.components.SingleDatePickerDialog
-import com.issaczerubbabel.ledgar.ui.theme.ExpenseRed
-import com.issaczerubbabel.ledgar.ui.theme.IncomeGreen
-import com.issaczerubbabel.ledgar.viewmodel.AccountsBreakdownUi
-import com.issaczerubbabel.ledgar.viewmodel.CashFlowGranularity
-import com.issaczerubbabel.ledgar.viewmodel.StatsBreakdownTab
-import com.issaczerubbabel.ledgar.viewmodel.StatsDateRange
+import com.issaczerubbabel.ledgar.ui.components.tabularNumbers
+import com.issaczerubbabel.ledgar.ui.theme.ChartColors
+import com.issaczerubbabel.ledgar.ui.theme.bucketColor
+import com.issaczerubbabel.ledgar.ui.theme.rememberChartColors
+import com.issaczerubbabel.ledgar.viewmodel.CategoryDetail
+import com.issaczerubbabel.ledgar.viewmodel.DayCell
+import com.issaczerubbabel.ledgar.viewmodel.DetailRequest
+import com.issaczerubbabel.ledgar.viewmodel.StatsPeriod
+import com.issaczerubbabel.ledgar.viewmodel.StatsReportUi
 import com.issaczerubbabel.ledgar.viewmodel.StatsScope
+import com.issaczerubbabel.ledgar.viewmodel.StatsUiState
 import com.issaczerubbabel.ledgar.viewmodel.StatsViewModel
-import java.time.Instant
 import java.time.LocalDate
-import java.time.YearMonth
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
+private val EmphasizedDecelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
+private val EmphasizedAccelerate = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)
+private val DAY_MONTH = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
+private val MONTH_YEAR = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
+private val WEEKDAY_DAY = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)
+
+/** True when Android's animation scale is 0, so count-ups, stagger and shimmer are skipped. */
 @Composable
-private fun responsiveTextSize(baseSp: Float, minSp: Float = 12f, maxSp: Float = 28f) =
-    (
-        baseSp * (LocalConfiguration.current.screenWidthDp / 411f).coerceIn(0.9f, 1.08f)
-    ).coerceIn(minSp, maxSp).sp
+private fun animationsOff(): Boolean {
+    val context = LocalContext.current
+    return remember {
+        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InsightsScreen(innerPadding: PaddingValues, vm: StatsViewModel = hiltViewModel()) {
-    val filterState by vm.filterState.collectAsStateWithLifecycle()
-    val resolvedDateRange by vm.resolvedDateRange.collectAsStateWithLifecycle()
-    val filteredTransactions by vm.filteredTransactions.collectAsStateWithLifecycle()
-    val breakdownTotals by vm.breakdownCategoryTotals.collectAsStateWithLifecycle()
-    val cashFlowCategoryOptions by vm.cashFlowCategoryOptions.collectAsStateWithLifecycle()
-    val cashFlowXAxisLabels by vm.cashFlowXAxisLabels.collectAsStateWithLifecycle()
-    val cashFlowChartStyle by vm.cashFlowChartStyle.collectAsStateWithLifecycle()
-    val useCompressedScale by vm.useCompressedScale.collectAsStateWithLifecycle()
-    val isLoading by vm.isLoading.collectAsStateWithLifecycle()
-    val accountsBreakdown by vm.accountsBreakdown.collectAsStateWithLifecycle()
+fun InsightsScreen(
+    innerPadding: PaddingValues,
+    onSetUpCycle: () -> Unit = {},
+    vm: StatsViewModel = hiltViewModel()
+) {
+    val state by vm.uiState.collectAsStateWithLifecycle()
+    val palette by vm.chartPalette.collectAsStateWithLifecycle()
+    val detail by vm.detail.collectAsStateWithLifecycle()
+    val colors = rememberChartColors(palette)
+    // Held here, not in the ViewModel, so the row and the sheet flip on the same frame.
+    var openLook by remember { mutableStateOf<RowLook?>(null) }
+    val openDetail: (DetailRequest, RowLook) -> Unit = { request, look -> vm.openDetail(request); openLook = look }
+    val closeDetail = { openLook = null; vm.closeDetail() }
+    val listState = rememberLazyListState()
+    val compact by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
+    val reduceMotion = animationsOff()
+    var firstVisitDone by rememberSaveable { mutableStateOf(false) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showRangePicker by remember { mutableStateOf(false) }
 
-    var showAnchorDatePicker by remember { mutableStateOf(false) }
-    var showCustomStartPicker by remember { mutableStateOf(false) }
-    var showCustomEndPicker by remember { mutableStateOf(false) }
-
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(innerPadding),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "Stats",
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontSize = responsiveTextSize(baseSp = 28f, minSp = 24f, maxSp = 30f)
-                    ),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    softWrap = false,
-                    modifier = Modifier.fillMaxWidth()
+    SharedTransitionLayout(Modifier.fillMaxSize().padding(innerPadding)) {
+    CompositionLocalProvider(LocalDetailMotion provides DetailMotion(this, openLook?.key)) {
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 88.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item(key = "header") {
+                StatsHeader(
+                    state = state,
+                    onScope = vm::selectScope,
+                    onPrevious = vm::previousPeriod,
+                    onNext = vm::nextPeriod,
+                    onPickDate = { showDatePicker = true },
+                    onPickRange = { showRangePicker = true }
                 )
+            }
 
+            if (state.loading) {
+                item(key = "loading") { LoadingCards(reduceMotion) }
+                return@LazyColumn
+            }
+
+            val cards = statsCards(state, colors, vm, onSetUpCycle, openDetail)
+            cards.forEachIndexed { index, (key, content) ->
+                item(key = key) {
+                    Entrance(index, enabled = !firstVisitDone && !reduceMotion) { content() }
+                }
+            }
+        }
+
+        // The header collapses into this bar so a scrolled-down card still says which period it shows.
+        AnimatedVisibility(
+            visible = compact,
+            enter = fadeIn(tween(150)) + slideInVertically(tween(200)) { -it / 2 },
+            exit = fadeOut(tween(100)) + slideOutVertically(tween(150)) { -it / 2 },
+            modifier = Modifier.align(Alignment.TopCenter)
+        ) {
+            Surface(tonalElevation = 3.dp, shadowElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    PeriodNavigator(
-                        label = filterState.scope.periodLabel(
-                            range = resolvedDateRange,
-                            anchorDate = filterState.anchorDate
-                        ),
-                        modifier = Modifier.weight(1.5f),
-                        onPrevious = vm::moveToPreviousPeriod,
-                        onNext = vm::moveToNextPeriod,
-                        onLabelClick = { showAnchorDatePicker = true }
-                    )
-
-                    TopRightFilterDropdown(
-                        selectedLabel = filterState.scope.label(),
-                        options = StatsScope.entries.map { it.label() },
+                    IconButton(onClick = vm::previousPeriod, enabled = state.canGoBack) {
+                        Icon(Icons.Filled.ChevronLeft, contentDescription = "Previous period")
+                    }
+                    Text(
+                        text = periodTitle(state.period) + " · " + scopeLabel(state.scope),
+                        style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.weight(1f),
-                        onSelect = { selected ->
-                            StatsScope.entries
-                                .firstOrNull { it.label() == selected }
-                                ?.let(vm::updateScope)
-                        }
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                }
-
-                if (filterState.scope == StatsScope.SELECT_PERIOD) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            modifier = Modifier.weight(1f),
-                            onClick = { showCustomStartPicker = true }
-                        ) {
-                            Text(
-                                text = "Start: ${formatIsoDate(filterState.customStartDate ?: resolvedDateRange.start)}",
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-
-                        OutlinedButton(
-                            modifier = Modifier.weight(1f),
-                            onClick = { showCustomEndPicker = true }
-                        ) {
-                            Text(
-                                text = "End: ${formatIsoDate(filterState.customEndDate ?: resolvedDateRange.end)}",
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
+                    IconButton(onClick = vm::nextPeriod, enabled = state.canGoForward) {
+                        Icon(Icons.Filled.ChevronRight, contentDescription = "Next period")
                     }
                 }
             }
         }
 
-        if (isLoading) {
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
+        DetailOverlay(
+            look = openLook,
+            data = detail?.second,
+            colors = colors,
+            period = state.period,
+            rupees = vm::formatRupee,
+            onDismiss = closeDetail
+        )
+    }
+    }
+    }
+
+    LaunchedEffect(state.loading) {
+        if (!state.loading) {
+            delay(600)
+            firstVisitDone = true
+        }
+    }
+
+    if (showDatePicker) {
+        SingleDatePickerDialog(
+            initialDate = state.period.start,
+            onDismiss = { showDatePicker = false },
+            onConfirm = { vm.jumpTo(it); showDatePicker = false }
+        )
+    }
+    if (showRangePicker) {
+        DateRangePickerDialog(
+            initialStart = state.period.start,
+            initialEnd = state.period.end,
+            onDismiss = { showRangePicker = false },
+            onConfirm = { a, b -> vm.selectCustomRange(a, b); showRangePicker = false }
+        )
+    }
+}
+
+/** The cards below the header, in order, each with a stable key for the list. */
+private fun statsCards(
+    state: StatsUiState,
+    colors: ChartColors,
+    vm: StatsViewModel,
+    onSetUpCycle: () -> Unit,
+    onOpen: (DetailRequest, RowLook) -> Unit
+): List<Pair<String, @Composable () -> Unit>> {
+    val report = state.report
+    val rupees = vm::formatRupee
+    val cards = mutableListOf<Pair<String, @Composable () -> Unit>>()
+    cards += "headline" to { HeadlineCard(state, colors, rupees) }
+    if (!report.hasTransactions && report.cycle == null) {
+        cards += "empty" to { EmptyPeriodCard(state, vm::previousPeriod) }
+        return cards
+    }
+    cards += "pace" to { PaceCard(state, colors, rupees, onSetUpCycle) }
+    val cycle = report.cycle
+    if (cycle != null) {
+        cards += "buckets" to {
+            BucketsCard(cycle.summary.buckets, cycle.summary.unbucketed.sumOf { it.amount }, cycle.summary.unbucketed.map { it.category }, colors, rupees, onOpen)
+        }
+    } else {
+        cards += "categories" to { CategoriesCard(report, colors, rupees, state.period, onOpen) }
+    }
+    if (report.days.isNotEmpty()) cards += "calendar" to { CalendarCard(report.days, colors, rupees) }
+    cards += "paid" to { PaidFromCard(report, rupees) }
+    if (report.trend.size > 1) cards += "trend" to { TrendCard(state, colors, rupees) }
+    if (report.biggest.isNotEmpty()) cards += "biggest" to { BiggestCard(report.biggest, rupees) }
+    return cards
+}
+
+// ---- header ------------------------------------------------------------------------------------
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StatsHeader(
+    state: StatsUiState,
+    onScope: (StatsScope) -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onPickDate: () -> Unit,
+    onPickRange: () -> Unit
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text("Stats", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f).semantics { heading() })
+            Text(
+                "as of ${state.today.format(DAY_MONTH)}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        val scopes = buildList {
+            if (state.hasCycles) add(StatsScope.CYCLE)
+            add(StatsScope.WEEKLY); add(StatsScope.MONTHLY); add(StatsScope.YEARLY)
+        }
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            scopes.forEachIndexed { i, scope ->
+                SegmentedButton(
+                    selected = state.scope == scope,
+                    onClick = { onScope(scope) },
+                    shape = SegmentedButtonDefaults.itemShape(i, scopes.size),
+                    icon = {},
+                    label = { Text(scopeLabel(scope), maxLines = 1) }
+                )
             }
-        } else if (filteredTransactions.isEmpty()) {
-            item {
-                Box(
+        }
+        // Swiping sideways on this strip only (never the whole page) changes period.
+        var drag by remember { mutableStateOf(0f) }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.pointerInput(state.canGoBack, state.canGoForward) {
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        if (drag > 80f && state.canGoBack) onPrevious()
+                        if (drag < -80f && state.canGoForward) onNext()
+                        drag = 0f
+                    },
+                    onDragCancel = { drag = 0f },
+                    onHorizontalDrag = { _, amount -> drag += amount }
+                )
+            }
+        ) {
+            IconButton(onClick = onPrevious, enabled = state.canGoBack) {
+                Icon(Icons.Filled.ChevronLeft, contentDescription = "Previous period")
+            }
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 24.dp),
-                    contentAlignment = Alignment.Center
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable(onClickLabel = "Choose a period") { menuOpen = true }
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
                 ) {
+                    Text(periodTitle(state.period), style = MaterialTheme.typography.titleMedium, maxLines = 1)
                     Text(
-                        text = "No Data for this period",
-                        style = MaterialTheme.typography.bodyLarge,
+                        periodSubtitle(state.period, state.today),
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            }
-            item { Spacer(Modifier.height(72.dp)) }
-        } else {
-            item {
-                Card(
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        TabRow(
-                            selectedTabIndex = filterState.breakdownTab.ordinal,
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ) {
-                            StatsBreakdownTab.entries.forEach { tab ->
-                                Tab(
-                                    selected = tab == filterState.breakdownTab,
-                                    onClick = { vm.updateBreakdownTab(tab) },
-                                    text = {
-                                        Text(
-                                            text = tab.label(),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                )
-                            }
-                        }
-
-                        ExpenseDonutChart(
-                            categoryTotals = breakdownTotals,
-                            centerLabel = if (filterState.breakdownTab == StatsBreakdownTab.EXPENSE) {
-                                "Total Spent"
-                            } else {
-                                "Total Income"
-                            },
-                            emptyLabel = if (filterState.breakdownTab == StatsBreakdownTab.EXPENSE) {
-                                "No expense data"
-                            } else {
-                                "No income data"
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(text = { Text("Go to a date") }, onClick = { menuOpen = false; onPickDate() })
+                    DropdownMenuItem(text = { Text("Custom range") }, onClick = { menuOpen = false; onPickRange() })
                 }
             }
-
-            item {
-                Card(
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            TopRightFilterDropdown(
-                                selectedLabel = filterState.cashFlowCategory
-                                    ?: StatsViewModel.ALL_CATEGORIES_OPTION,
-                                options = cashFlowCategoryOptions,
-                                modifier = Modifier.weight(1f),
-                                onSelect = { selected ->
-                                    vm.updateCashFlowCategory(
-                                        if (selected == StatsViewModel.ALL_CATEGORIES_OPTION) {
-                                            null
-                                        } else {
-                                            selected
-                                        }
-                                    )
-                                }
-                            )
-
-                            TopRightFilterDropdown(
-                                selectedLabel = filterState.cashFlowGranularity.label(),
-                                options = CashFlowGranularity.entries.map { it.label() },
-                                modifier = Modifier.weight(1f),
-                                onSelect = { selected ->
-                                    CashFlowGranularity.entries
-                                        .firstOrNull { it.label() == selected }
-                                        ?.let(vm::updateCashFlowGranularity)
-                                }
-                            )
-                        }
-
-                        Text(
-                            text = "Graph mode: ${cashFlowChartStyle.hintLabel()}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        CashFlowBarChart(
-                            modelProducer = vm.cashFlowChartModelProducer,
-                            xAxisLabels = cashFlowXAxisLabels,
-                            markerValueFormatter = vm.cashFlowMarkerValueFormatter,
-                            formatRupee = vm::formatRupee,
-                            chartValueToAmount = vm::chartValueToAmount,
-                            chartStyle = cashFlowChartStyle,
-                            useCompressedScale = useCompressedScale,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
+            IconButton(onClick = onNext, enabled = state.canGoForward) {
+                Icon(Icons.Filled.ChevronRight, contentDescription = "Next period")
             }
-
-            item {
-                AccountsBreakdownCard(
-                    breakdown = accountsBreakdown,
-                    formatRupee = vm::formatRupee
-                )
-            }
-
-            item { Spacer(Modifier.height(72.dp)) }
         }
-    }
-
-    if (showAnchorDatePicker) {
-        SingleDatePickerDialog(
-            initialDate = filterState.anchorDate,
-            onDismiss = { showAnchorDatePicker = false },
-            onConfirm = { selectedDate ->
-                vm.updateAnchorDate(selectedDate)
-                showAnchorDatePicker = false
-            }
-        )
-    }
-
-    if (showCustomStartPicker) {
-        SingleDatePickerDialog(
-            initialDate = filterState.customStartDate ?: resolvedDateRange.start,
-            onDismiss = { showCustomStartPicker = false },
-            onConfirm = { selectedDate ->
-                vm.updateCustomPeriodStart(selectedDate)
-                showCustomStartPicker = false
-            }
-        )
-    }
-
-    if (showCustomEndPicker) {
-        SingleDatePickerDialog(
-            initialDate = filterState.customEndDate ?: resolvedDateRange.end,
-            onDismiss = { showCustomEndPicker = false },
-            onConfirm = { selectedDate ->
-                vm.updateCustomPeriodEnd(selectedDate)
-                showCustomEndPicker = false
-            }
-        )
     }
 }
 
+private fun scopeLabel(scope: StatsScope) = when (scope) {
+    StatsScope.CYCLE -> "Cycle"
+    StatsScope.WEEKLY -> "Week"
+    StatsScope.MONTHLY -> "Month"
+    StatsScope.YEARLY -> "Year"
+    StatsScope.SELECT_PERIOD -> "Range"
+}
+
+private fun previousPeriodName(p: StatsPeriod): String = when (p) {
+    is StatsPeriod.Week -> "last week"
+    is StatsPeriod.Month -> "last month"
+    is StatsPeriod.Year -> "last year"
+    is StatsPeriod.Cycle -> "last cycle"
+    is StatsPeriod.Custom -> "the ${p.days} days before"
+}
+
+private fun periodTitle(p: StatsPeriod): String = when (p) {
+    is StatsPeriod.Month -> p.month.format(MONTH_YEAR)
+    is StatsPeriod.Year -> p.year.toString()
+    else -> "${p.start.format(DAY_MONTH)} – ${p.end.format(DAY_MONTH)}"
+}
+
+private fun periodSubtitle(p: StatsPeriod, today: LocalDate): String {
+    val running = !today.isBefore(p.start) && !today.isAfter(p.end)
+    return when {
+        p is StatsPeriod.Cycle && !p.span.isRunning -> "Closed · ${p.days} days"
+        running -> "Day ${ChronoUnit.DAYS.between(p.start, today) + 1} of ${p.days}"
+        today.isBefore(p.start) -> "Not started"
+        else -> "${p.days} days"
+    }
+}
+
+// ---- motion helpers ----------------------------------------------------------------------------
+
+/** Cards fade in and rise 12dp, 40ms apart, on the first visit in a session only. */
 @Composable
-private fun AccountsBreakdownCard(
-    breakdown: AccountsBreakdownUi,
-    formatRupee: (Double) -> String
-) {
+private fun Entrance(index: Int, enabled: Boolean, content: @Composable () -> Unit) {
+    val progress = remember { Animatable(if (enabled) 0f else 1f) }
+    LaunchedEffect(Unit) {
+        if (progress.value < 1f) {
+            delay(40L * index)
+            progress.animateTo(1f, tween(250, easing = EmphasizedDecelerate))
+        }
+    }
+    Box(Modifier.graphicsLayer { alpha = progress.value; translationY = (1f - progress.value) * 12.dp.toPx() }) { content() }
+}
+
+/**
+ * A new period slides in from the side you moved towards; a new scope fades through, because there
+ * is no direction between a week and a year.
+ */
+private fun periodTransition(from: Pair<StatsScope, LocalDate>, to: Pair<StatsScope, LocalDate>): ContentTransform =
+    if (from.first != to.first) {
+        fadeIn(tween(210, delayMillis = 90)) + scaleIn(tween(210, delayMillis = 90), initialScale = 0.92f) togetherWith fadeOut(tween(90))
+    } else {
+        val forward = to.second.isAfter(from.second)
+        (slideInHorizontally(tween(300, easing = EmphasizedDecelerate)) { w -> if (forward) w / 4 else -w / 4 } + fadeIn(tween(300))) togetherWith
+            (slideOutHorizontally(tween(200, easing = EmphasizedAccelerate)) { w -> if (forward) -w / 4 else w / 4 } + fadeOut(tween(200)))
+    }
+
+/** The headline number counts from its old value to its new one; the first value shows straight away. */
+@Composable
+private fun CountingAmount(value: Double, format: (Double) -> String, style: androidx.compose.ui.text.TextStyle, color: Color = Color.Unspecified) {
+    val off = animationsOff()
+    val shown = remember { Animatable(value.toFloat()) }
+    LaunchedEffect(value) {
+        if (off) shown.snapTo(value.toFloat()) else shown.animateTo(value.toFloat(), tween(400))
+    }
+    Text(format(shown.value.toDouble()), style = tabularNumbers(style), color = color, maxLines = 1)
+}
+
+// ---- cards -------------------------------------------------------------------------------------
+
+@Composable
+private fun StatsCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-        )
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = "Accounts",
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { content() }
+    }
+}
+
+@Composable
+private fun CardTitle(title: String, trailing: (@Composable () -> Unit)? = null) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f).semantics { heading() })
+        trailing?.invoke()
+    }
+}
+
+/** A change against the previous period, as an arrow and words, never colour alone. */
+@Composable
+private fun ChangeChip(text: String, up: Boolean?, goodWhenUp: Boolean) {
+    val good = up != null && up == goodWhenUp
+    val tint = when {
+        up == null -> MaterialTheme.colorScheme.onSurfaceVariant
+        good -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> MaterialTheme.colorScheme.error
+    }
+    Row(
+        Modifier.background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Icon(
+            when (up) { true -> Icons.AutoMirrored.Filled.TrendingUp; false -> Icons.AutoMirrored.Filled.TrendingDown; null -> Icons.AutoMirrored.Filled.TrendingFlat },
+            contentDescription = null, tint = tint, modifier = Modifier.size(16.dp)
+        )
+        Text(text, style = tabularNumbers(MaterialTheme.typography.labelMedium), color = tint, maxLines = 1)
+    }
+}
+
+@Composable
+private fun HeadlineCard(state: StatsUiState, colors: ChartColors, rupees: (Double) -> String) {
+    StatsCard {
+        AnimatedContent(
+            targetState = state,
+            contentKey = { it.scope to it.period.start },
+            transitionSpec = { periodTransition(initialState.scope to initialState.period.start, targetState.scope to targetState.period.start) },
+            label = "headline"
+        ) { s ->
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                val cycle = s.report.cycle
+                if (cycle != null) CycleHeadline(s, cycle, colors, rupees) else LeftOverHeadline(s.report, s.period, colors, rupees)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CycleHeadline(s: StatsUiState, cycle: com.issaczerubbabel.ledgar.viewmodel.CycleView, colors: ChartColors, rupees: (Double) -> String) {
+    val summary = cycle.summary
+    val left = summary.leftToSpend
+    CardTitle(if (cycle.isRunning) "Left to spend" else "Left unspent")
+    CountingAmount(left, rupees, MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold), if (left < 0) colors.over else Color.Unspecified)
+    val sub = if (cycle.isRunning && summary.daysLeft > 0) {
+        "of ${rupees(summary.cycle.spendableAmount)} · ${summary.daysLeft} days left · ${rupees(summary.dailyPace)} a day"
+    } else {
+        "of ${rupees(summary.cycle.spendableAmount)} · spent ${rupees(summary.totalSpent)}"
+    }
+    Text(sub, style = tabularNumbers(MaterialTheme.typography.bodyMedium), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (cycle.saved > 0) {
+        Text(
+            "${rupees(cycle.saved)} of that went to savings. Cycles count it against your budget, as the Budget tab does.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun LeftOverHeadline(report: StatsReportUi, period: StatsPeriod, colors: ChartColors, rupees: (Double) -> String) {
+    val t = report.totals
+    CardTitle("Left over") {
+        report.previousLeftOver?.let { prev ->
+            val diff = t.leftOver - prev
+            ChangeChip("${shortRupees(abs(diff))} vs ${previousPeriodName(period)}", if (abs(diff) < 1) null else diff > 0, goodWhenUp = true)
+        }
+    }
+    CountingAmount(t.leftOver, rupees, MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold), if (t.leftOver < 0) colors.over else Color.Unspecified)
+    if (t.earned > 0) {
+        Text(
+            "${(t.leftOver / t.earned * 100).roundToInt()}% of ${rupees(t.earned)} earned",
+            style = tabularNumbers(MaterialTheme.typography.bodyMedium), color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+    FlowBar(t.spent, t.saved, t.leftOver, colors)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            LegendAmount("Earned", t.earned, colors.moneyIn, colors, rupees, Modifier.weight(1f))
+            LegendAmount("Spent", t.spent, colors.moneyOut, colors, rupees, Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            LegendAmount("Saved", t.saved, colors.saved, colors, rupees, Modifier.weight(1f))
+            LegendAmount("Left over", t.leftOver, null, colors, rupees, Modifier.weight(1f))
+        }
+    }
+    if (t.refunds > 0) {
+        Text("Spent is after ${rupees(t.refunds)} of refunds.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun LegendAmount(label: String, value: Double, color: Color?, colors: ChartColors, rupees: (Double) -> String, modifier: Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        LegendDot(color, colors)
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+        Text(rupees(value), style = tabularNumbers(MaterialTheme.typography.bodySmall).copy(fontWeight = FontWeight.SemiBold))
+    }
+}
+
+@Composable
+private fun PaceCard(state: StatsUiState, colors: ChartColors, rupees: (Double) -> String, onSetUpCycle: () -> Unit) {
+    val report = state.report
+    val pace = report.pace
+    var selected by remember(state.period) { mutableStateOf<Int?>(null) }
+    val previousName = when (state.period) {
+        is StatsPeriod.Month -> state.period.previous().month.month.getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH)
+        is StatsPeriod.Year -> (state.period.year - 1).toString()
+        is StatsPeriod.Week, is StatsPeriod.Cycle -> "Last"
+        else -> "Before"
+    }
+    val chipName = if (state.period is StatsPeriod.Month || state.period is StatsPeriod.Year) previousName else previousPeriodName(state.period)
+    StatsCard {
+        CardTitle(if (report.cycle != null) "Pace against budget" else "Spending pace") {
+            val prev = pace.previousAtSamePoint
+            if (prev != null && prev > 0 && pace.current.isNotEmpty()) {
+                val pct = ((pace.spentSoFar - prev) / prev * 100).roundToInt()
+                ChangeChip("${abs(pct)}% vs $chipName", if (pct == 0) null else pct > 0, goodWhenUp = false)
+            }
+        }
+        val readout = selected?.let { i ->
+            buildString {
+                append(pace.labels[i])
+                append(" · ")
+                append(pace.current.getOrNull(i)?.let(rupees) ?: "—")
+                pace.previous.getOrNull(i)?.let { append(" · $previousName ").append(rupees(it)) }
+                pace.budget.getOrNull(i)?.let { append(" · budget ").append(rupees(it)) }
+            }
+        } ?: buildString {
+            append(rupees(pace.spentSoFar)).append(" so far")
+            pace.projection?.let { append(" · heading for ~").append(shortRupees(it)) }
+            pace.budget.lastOrNull()?.let { append(" · budget ").append(shortRupees(it)) }
+        }
+        Text(readout, style = tabularNumbers(MaterialTheme.typography.bodySmall), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+        PaceChart(
+            pace = pace,
+            previousLabel = previousName,
+            colors = colors,
+            selected = selected,
+            onSelect = { selected = it },
+            description = "Spent ${rupees(pace.spentSoFar)} so far" + (pace.previousAtSamePoint?.let { ", ${rupees(it)} at the same point last period" } ?: "")
+        )
+        if (!report.hasBudget && !state.hasCycles) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Set up a salary cycle to see budget pace", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                TextButton(onClick = onSetUpCycle) { Text("Set up") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BucketsCard(
+    buckets: List<BucketSummary>,
+    unbucketedSpent: Double,
+    unbucketedCategories: List<String>,
+    colors: ChartColors,
+    rupees: (Double) -> String,
+    onOpen: (DetailRequest, RowLook) -> Unit
+) {
+    StatsCard {
+        CardTitle("Buckets")
+        val track = MaterialTheme.colorScheme.surfaceContainerHighest
+        buckets.sortedBy { it.bucket.sortOrder }.forEach { b ->
+            val limit = b.bucket.allocatedAmount
+            val max = maxOf(b.spent, limit).coerceAtLeast(1.0)
+            val over = (b.spent - limit).coerceAtLeast(0.0)
+            val look = RowLook(
+                key = "bucket-${b.bucket.id}",
+                name = b.bucket.name,
+                amount = "${rupees(b.spent)} / ${shortRupees(limit)}",
+                fraction = (minOf(b.spent, limit) / max).toFloat(),
+                barColor = colors.muted.copy(alpha = 0.7f),
+                overFraction = (over / max).toFloat(),
+                bucketColorIndex = b.bucket.colorIndex
             )
+            SharedSlot(look.key) { shared ->
+            RankedRow(
+                name = look.name,
+                amount = look.amount,
+                fraction = look.fraction,
+                barColor = look.barColor,
+                track = track,
+                modifier = shared,
+                overFraction = look.overFraction,
+                overColor = colors.over,
+                note = if (over > 0) "Over by ${rupees(over)}" else "${rupees(limit - b.spent)} left",
+                noteColor = if (over > 0) colors.over else MaterialTheme.colorScheme.onSurfaceVariant,
+                leading = {
+                    if (over > 0) Icon(Icons.Filled.Warning, contentDescription = "Over its limit", tint = colors.over, modifier = Modifier.size(16.dp))
+                    else ColorDot(bucketColor(b.bucket.colorIndex))
+                },
+                onClick = { onOpen(DetailRequest(b.bucket.name, b.categories.map { it.category }.toSet(), b.bucket.colorIndex), look) }
+            )
+            }
+        }
+        if (unbucketedSpent > 0) {
+            val look = RowLook("bucket-none", "Not in a bucket", rupees(unbucketedSpent), 0f, colors.muted)
+            SharedSlot(look.key) { shared ->
+            RankedRow(
+                name = look.name,
+                amount = look.amount,
+                fraction = 0f,
+                barColor = colors.muted,
+                track = Color.Transparent,
+                modifier = shared,
+                note = unbucketedCategories.take(3).joinToString(", ") + if (unbucketedCategories.size > 3) " +${unbucketedCategories.size - 3}" else "",
+                onClick = { onOpen(DetailRequest("Not in a bucket", unbucketedCategories.toSet()), look) }
+            )
+            }
+        }
+    }
+}
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "Spending vs previous period",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
-                )
+@Composable
+private fun CategoriesCard(report: StatsReportUi, colors: ChartColors, rupees: (Double) -> String, period: StatsPeriod, onOpen: (DetailRequest, RowLook) -> Unit) {
+    var showAll by rememberSaveable(period.start, period.end) { mutableStateOf(false) }
+    val rows = if (showAll) report.categories else report.categories.take(6)
+    val max = report.categories.maxOfOrNull { maxOf(it.amount, it.usual ?: 0.0) }?.coerceAtLeast(1.0) ?: 1.0
+    val track = MaterialTheme.colorScheme.surfaceContainerHighest
+    // With no earlier periods at all (the first year of records, say) "new" would be true of everything.
+    val hasHistory = report.categories.any { it.usual != null }
+    StatsCard {
+        CardTitle("Where it went") {
+            if (report.categories.size > 6) {
+                TextButton(onClick = { showAll = !showAll }) { Text(if (showAll) "Top 6" else "All ${report.categories.size}") }
+            }
+        }
+        if (hasHistory) Text("Bar: this period · tick: your usual (average of the 3 before)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        rows.forEach { row ->
+            val usual = row.usual
+            val delta = usual?.takeIf { it > 0 }?.let { ((row.amount - it) / it * 100).roundToInt() }
+            val look = RowLook("cat-${row.category}", row.category, rupees(row.amount), (row.amount / max).toFloat(), colors.moneyOut)
+            SharedSlot(look.key) { shared ->
+            RankedRow(
+                name = look.name,
+                amount = look.amount,
+                fraction = look.fraction,
+                barColor = look.barColor,
+                track = track,
+                modifier = shared,
+                usualFraction = usual?.let { (it / max).toFloat() },
+                note = when {
+                    usual == null -> if (hasHistory) "New this period" else null
+                    delta == null || abs(delta) < 5 -> "About usual"
+                    delta > 0 -> "▲ $delta% above your usual ${rupees(usual)}"
+                    else -> "▼ ${-delta}% below your usual ${rupees(usual)}"
+                },
+                onClick = { onOpen(DetailRequest(row.category, setOf(row.category)), look) }
+            )
+            }
+        }
+        if (report.totals.refunds > 0) {
+            Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Refunds", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                Text("−" + rupees(report.totals.refunds), style = tabularNumbers(MaterialTheme.typography.bodyMedium), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
 
-                val change = breakdown.changePercent
-                if (change == null) {
-                    Text(
-                        text = "No earlier data",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                } else {
-                    val trendColor = when {
-                        change > 0 -> ExpenseRed
-                        change < 0 -> IncomeGreen
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = when {
-                                change > 0 -> Icons.Filled.TrendingUp
-                                change < 0 -> Icons.Filled.TrendingDown
-                                else -> Icons.Filled.TrendingFlat
-                            },
-                            contentDescription = null,
-                            tint = trendColor
-                        )
-                        Text(
-                            text = when {
-                                change > 0 -> "+$change%"
-                                else -> "$change%"
-                            },
-                            style = MaterialTheme.typography.titleMedium,
-                            color = trendColor,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
+@Composable
+private fun CalendarCard(days: List<DayCell>, colors: ChartColors, rupees: (Double) -> String) {
+    var selected by remember(days.first().date) { mutableStateOf<DayCell?>(null) }
+    val peak = days.maxByOrNull { it.spent }
+    StatsCard {
+        CardTitle("Daily spending")
+        Text(
+            text = selected?.let { "${it.date.format(WEEKDAY_DAY)} · ${if (it.spent > 0) rupees(it.spent) else "No spending"}" }
+                ?: peak?.takeIf { it.spent > 0 }?.let { "Busiest day: ${it.date.format(DAY_MONTH)}, ${rupees(it.spent)}. Tap a day." }
+                ?: "No spending yet",
+            style = tabularNumbers(MaterialTheme.typography.bodySmall),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        SpendCalendar(
+            days = days,
+            colors = colors,
+            selected = selected,
+            onSelect = { selected = if (selected == it) null else it },
+            describe = { "${it.date.format(WEEKDAY_DAY)}, ${if (it.spent > 0) rupees(it.spent) else "no spending"}" }
+        )
+        HeatLegend(colors)
+    }
+}
+
+@Composable
+private fun PaidFromCard(report: StatsReportUi, rupees: (Double) -> String) {
+    val p = report.paidFrom
+    val shades = listOf(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.outline)
+    StatsCard {
+        CardTitle("Paid from")
+        NeutralStack(listOf(p.cashAndAccounts, p.card), shades)
+        val total = (p.cashAndAccounts + p.card).coerceAtLeast(1.0)
+        listOf("Cash and bank" to p.cashAndAccounts, "Cards" to p.card).forEachIndexed { i, (label, v) ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.size(9.dp).background(shades[i], RoundedCornerShape(3.dp)))
+                Text("$label · ${(v / total * 100).roundToInt()}%", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                Text(rupees(v), style = tabularNumbers(MaterialTheme.typography.bodySmall).copy(fontWeight = FontWeight.SemiBold))
+            }
+        }
+        if (p.transfers > 0) {
+            Text("Transfers between accounts: ${rupees(p.transfers)} (not spending)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun TrendCard(state: StatsUiState, colors: ChartColors, rupees: (Double) -> String) {
+    val trend = state.report.trend
+    var selected by remember(state.period) { mutableStateOf<Int?>(null) }
+    val title = when (state.period) {
+        is StatsPeriod.Cycle -> "Cycle by cycle"
+        is StatsPeriod.Week -> "Week by week"
+        else -> "Month by month"
+    }
+    val avgLeft = trend.filter { it.earned > 0 || it.spent > 0 }.map { it.leftOver }.takeIf { it.isNotEmpty() }?.average()
+    StatsCard {
+        CardTitle(title)
+        Text(
+            selected?.let { i -> trend[i].let { "${it.label} · earned ${rupees(it.earned)} · spent ${rupees(it.spent)} · saved ${rupees(it.saved)}" } }
+                ?: avgLeft?.let { "On average ${rupees(it)} left over each time. Tap a bar." } ?: "",
+            style = tabularNumbers(MaterialTheme.typography.bodySmall),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        TrendChart(
+            trend = trend,
+            colors = colors,
+            selected = selected,
+            onSelect = { selected = it },
+            description = "$title: " + (avgLeft?.let { "on average ${rupees(it)} left over" } ?: "no data")
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            listOf("Spent" to colors.moneyOut, "Saved" to colors.saved, "Earned" to colors.moneyIn).forEach { (label, c) ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (label == "Earned") Box(Modifier.size(width = 12.dp, height = 3.dp).background(c, RoundedCornerShape(2.dp)))
+                    else LegendDot(c, colors)
+                    Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-            AccountsBreakdownLine("Expenses (Cash, Accounts)", formatRupee(breakdown.cashAndAccountsExpense))
-            AccountsBreakdownLine("Expenses (Card)", formatRupee(breakdown.cardExpense))
-            AccountsBreakdownLine("Transfers", formatRupee(breakdown.transferTotal))
         }
     }
 }
 
 @Composable
-private fun AccountsBreakdownLine(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f)
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyLarge,
-            maxLines = 1,
-            softWrap = false
-        )
+private fun BiggestCard(biggest: List<ExpenseRecord>, rupees: (Double) -> String) {
+    StatsCard {
+        CardTitle("Biggest expenses")
+        biggest.forEachIndexed { i, r ->
+            if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            TransactionLine(r, rupees)
+        }
     }
 }
 
 @Composable
-private fun PeriodNavigator(
-    label: String,
-    modifier: Modifier = Modifier,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
-    onLabelClick: () -> Unit
-) {
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp)
-    ) {
-        IconButton(onClick = onPrevious) {
-            Icon(Icons.Filled.ChevronLeft, contentDescription = "Previous")
+private fun TransactionLine(r: ExpenseRecord, rupees: (Double) -> String) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(r.description.ifBlank { r.category }, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val date = com.issaczerubbabel.ledgar.util.parseFlexibleDate(r.date)?.format(DAY_MONTH) ?: r.date
+            Text("${r.category} · $date", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         }
-        OutlinedButton(
-            onClick = onLabelClick,
-            modifier = Modifier.weight(1f)
-        ) {
-            Text(
-                text = label,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                softWrap = false,
-                style = MaterialTheme.typography.bodyMedium
+        Text(rupees(r.amount), style = tabularNumbers(MaterialTheme.typography.bodyMedium).copy(fontWeight = FontWeight.SemiBold))
+    }
+}
+
+@Composable
+private fun EmptyPeriodCard(state: StatsUiState, onPrevious: () -> Unit) {
+    StatsCard {
+        Text("Nothing in this ${scopeLabel(state.scope).lowercase()} yet", style = MaterialTheme.typography.titleSmall)
+        Text("Transactions you add for these dates will show up here.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (state.canGoBack) OutlinedButton(onClick = onPrevious) { Text("‹ Previous ${scopeLabel(state.scope).lowercase()}") }
+    }
+}
+
+/** Placeholders shaped like the cards, shown only if loading takes longer than 150ms. */
+@Composable
+private fun LoadingCards(reduceMotion: Boolean) {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { delay(150); visible = true }
+    if (!visible) return
+    val shimmer = remember { Animatable(0.35f) }
+    LaunchedEffect(reduceMotion) {
+        if (reduceMotion) return@LaunchedEffect
+        while (true) {
+            shimmer.animateTo(0.7f, tween(600))
+            shimmer.animateTo(0.35f, tween(600))
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        listOf(150.dp, 230.dp, 260.dp).forEach { h ->
+            Box(
+                Modifier.fillMaxWidth().height(h)
+                    .graphicsLayer { alpha = shimmer.value }
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(18.dp))
             )
         }
-        IconButton(onClick = onNext) {
-            Icon(Icons.Filled.ChevronRight, contentDescription = "Next")
-        }
     }
 }
 
+// ---- drill-down ----------------------------------------------------------------------------------
+
+/** What a breakdown row looks like, so the detail sheet's header can start out as that row. */
+private data class RowLook(
+    val key: String,
+    val name: String,
+    val amount: String,
+    val fraction: Float,
+    val barColor: Color,
+    val overFraction: Float = 0f,
+    val bucketColorIndex: Int? = null
+)
+
+/** The shared-element scope, and which row (if any) has flown into the sheet. */
+@OptIn(ExperimentalSharedTransitionApi::class)
+private class DetailMotion(val scope: SharedTransitionScope, val openKey: String?)
+
+private val LocalDetailMotion = compositionLocalOf<DetailMotion?> { null }
+
+/**
+ * Holds a breakdown row. While its sheet is open the row flies into the sheet header and back on
+ * close; the slot keeps the row's height so the list doesn't jump.
+ */
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-private fun TopRightFilterDropdown(
-    selectedLabel: String,
-    options: List<String>,
-    modifier: Modifier = Modifier,
-    onSelect: (String) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Box(modifier = modifier) {
-        OutlinedButton(
-            onClick = { expanded = true },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = selectedLabel,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                softWrap = false,
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = responsiveTextSize(baseSp = 14f, minSp = 14f, maxSp = 16f)
-                )
-            )
-            Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
-        }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = option,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            softWrap = false
-                        )
-                    },
-                    onClick = {
-                        onSelect(option)
-                        expanded = false
-                    }
+private fun SharedSlot(key: String, content: @Composable (Modifier) -> Unit) {
+    val motion = LocalDetailMotion.current
+    if (motion == null) {
+        content(Modifier)
+        return
+    }
+    val density = LocalDensity.current
+    var height by remember { mutableIntStateOf(0) }
+    Box(if (height > 0) Modifier.height(with(density) { height.toDp() }) else Modifier) {
+        AnimatedVisibility(visible = motion.openKey != key, enter = fadeIn(tween(200)), exit = fadeOut(tween(120))) {
+            with(motion.scope) {
+                content(
+                    Modifier
+                        .onSizeChanged { height = it.height }
+                        .sharedBounds(rememberSharedContentState(key), this@AnimatedVisibility)
                 )
             }
         }
     }
 }
 
-private fun StatsScope.label(): String {
-    return when (this) {
-        StatsScope.WEEKLY -> "Weekly"
-        StatsScope.MONTHLY -> "Monthly"
-        StatsScope.YEARLY -> "Yearly"
-        StatsScope.SELECT_PERIOD -> "Select Period"
+/**
+ * The drill-down sheet. It opens inside the screen (not a separate window like ModalBottomSheet)
+ * so the tapped row can travel into its header. Back, a tap on the scrim, or dragging the header
+ * down closes it.
+ */
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+private fun DetailOverlay(
+    look: RowLook?,
+    data: CategoryDetail?,
+    colors: ChartColors,
+    period: StatsPeriod,
+    rupees: (Double) -> String,
+    onDismiss: () -> Unit
+) {
+    val motion = LocalDetailMotion.current ?: return
+    val open = look != null
+    // Keep the last contents while the sheet animates away.
+    var shownLook by remember { mutableStateOf(look) }
+    var shownData by remember { mutableStateOf(data) }
+    if (look != null) shownLook = look
+    if (data != null && open) shownData = data
+    LaunchedEffect(look?.key) { if (look != null && data?.title != look.name) shownData = null }
+
+    BackHandler(enabled = open, onBack = onDismiss)
+
+    AnimatedVisibility(visible = open, enter = fadeIn(tween(250)), exit = fadeOut(tween(200))) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.45f))
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClickLabel = "Close", onClick = onDismiss)
+        )
+    }
+
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+        AnimatedVisibility(
+            visible = open,
+            enter = slideInVertically(tween(320, easing = EmphasizedDecelerate)) { it / 5 } + fadeIn(tween(200)),
+            exit = slideOutVertically(tween(220, easing = EmphasizedAccelerate)) { it / 5 } + fadeOut(tween(180))
+        ) {
+            val sheetLook = shownLook ?: return@AnimatedVisibility
+            var drag by remember { mutableFloatStateOf(0f) }
+            val dismissAt = with(LocalDensity.current) { 140.dp.toPx() }
+            Surface(
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                shadowElevation = 8.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.86f)
+                    .offset { IntOffset(0, drag.roundToInt()) }
+            ) {
+                Column {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .draggable(
+                                orientation = Orientation.Vertical,
+                                state = rememberDraggableState { delta -> drag = (drag + delta).coerceAtLeast(0f) },
+                                onDragStopped = { velocity ->
+                                    if (drag > dismissAt || velocity > 1800f) onDismiss()
+                                    else animate(drag, 0f, animationSpec = tween(200)) { value, _ -> drag = value }
+                                }
+                            )
+                            .padding(horizontal = 20.dp)
+                            .padding(top = 10.dp, bottom = 4.dp)
+                    ) {
+                        Box(
+                            Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .size(width = 36.dp, height = 4.dp)
+                                .background(MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(2.dp))
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        with(motion.scope) {
+                            RankedRow(
+                                name = sheetLook.name,
+                                amount = sheetLook.amount,
+                                fraction = sheetLook.fraction,
+                                barColor = sheetLook.barColor,
+                                track = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                overFraction = sheetLook.overFraction,
+                                overColor = colors.over,
+                                leading = sheetLook.bucketColorIndex?.let { { ColorDot(bucketColor(it)) } },
+                                modifier = Modifier
+                                    .sharedBounds(rememberSharedContentState(sheetLook.key), this@AnimatedVisibility)
+                                    .semantics { heading() }
+                            )
+                        }
+                        Text(periodTitle(period), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    DetailBody(shownData, sheetLook.name, colors, rupees)
+                }
+            }
+        }
     }
 }
 
-private fun StatsScope.periodLabel(range: StatsDateRange, anchorDate: LocalDate): String {
-    val weeklyFormatter = DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH)
-    val monthlyFormatter = DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)
-    return when (this) {
-        StatsScope.WEEKLY -> "${range.start.format(weeklyFormatter)} - ${range.end.format(weeklyFormatter)}"
-        StatsScope.MONTHLY -> YearMonth.from(anchorDate).format(monthlyFormatter)
-        StatsScope.YEARLY -> anchorDate.year.toString()
-        StatsScope.SELECT_PERIOD -> "${formatIsoDate(range.start)} - ${formatIsoDate(range.end)}"
+@Composable
+private fun DetailBody(data: CategoryDetail?, title: String, colors: ChartColors, rupees: (Double) -> String) {
+    if (data == null) {
+        Box(Modifier.fillMaxWidth().height(160.dp))
+        return
+    }
+    LazyColumn(
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Stat("This period", rupees(data.spent), Modifier.weight(1f))
+                Stat("Usual", data.usual?.let(rupees) ?: "—", Modifier.weight(1f))
+                Stat("Per day", rupees(data.perDay), Modifier.weight(1f))
+            }
+        }
+        if (data.trend.size > 1) {
+            item {
+                var selected by remember { mutableStateOf<Int?>(null) }
+                Text(
+                    selected?.let { "${data.trend[it].label} · ${rupees(data.trend[it].spent)}" } ?: "Tap a bar",
+                    style = tabularNumbers(MaterialTheme.typography.bodySmall),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TrendChart(data.trend, colors, selected, { selected = it }, "$title over time")
+            }
+        }
+        item { Text("Transactions", style = MaterialTheme.typography.titleSmall) }
+        if (data.transactions.isEmpty()) {
+            item { Text("None in this period", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        items(data.transactions.take(100), key = { it.id }) { TransactionLine(it, rupees) }
     }
 }
 
-private fun StatsBreakdownTab.label(): String {
-    return when (this) {
-        StatsBreakdownTab.EXPENSE -> "Expense"
-        StatsBreakdownTab.INCOME -> "Income"
+@Composable
+private fun Stat(label: String, value: String, modifier: Modifier) {
+    Column(modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(12.dp)).padding(10.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = tabularNumbers(MaterialTheme.typography.titleSmall), maxLines = 1)
     }
 }
-
-private fun CashFlowGranularity.label(): String {
-    return when (this) {
-        CashFlowGranularity.DAILY -> "Daily"
-        CashFlowGranularity.WEEKLY -> "Weekly"
-        CashFlowGranularity.MONTHLY -> "Monthly"
-        CashFlowGranularity.YEARLY -> "Yearly"
-    }
-}
-
-private fun CashFlowChartStyle.hintLabel(): String {
-    return when (this) {
-        CashFlowChartStyle.BAR -> "Bars"
-        CashFlowChartStyle.LINE -> "Lines"
-    }
-}
-
-private fun formatIsoDate(date: LocalDate): String = date.toString()

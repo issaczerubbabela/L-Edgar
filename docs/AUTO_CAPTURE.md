@@ -4,8 +4,8 @@ Auto-capture turns bank and UPI alerts into suggested Transactions, so they don'
 hand. Everything runs on the phone with plain code: no network calls, no paid services, no machine-learning
 model.
 
-Nothing becomes a Transaction until the user confirms it ([ADR-0004](adr/0004-auto-capture-never-confirms-itself.md)).
-Alerts are read from notifications, not from the SMS database ([ADR-0006](adr/0006-auto-capture-reads-notifications-not-sms.md)).
+Nothing becomes a Transaction until the user confirms it ([ADR-0005](adr/0005-auto-capture-never-confirms-itself.md)).
+Alerts are read from notifications, not from the SMS database ([ADR-0007](adr/0007-auto-capture-reads-notifications-not-sms.md)).
 
 Terms used here (Captured transaction, Confirm, Merchant rule, Account alias, Confidence band, Unparsed
 alert) are defined in [CONTEXT.md](../CONTEXT.md).
@@ -216,9 +216,8 @@ wording change; "Clear all" deals with those.
   signature of its anonymous subclass, R8 strips it, and the notification listener then crashed on start
   with "TypeToken must be created with a type argument". It happens only in release, so debug tests cannot
   see it. `app/proguard-rules.pro` now keeps `TypeToken` and its subclasses. Before releasing, run
-  `./gradlew assembleRelease --init-script scripts/release-check.init.gradle`. That builds the same release
-  code as a separate app (`.relcheck`, signed with the debug key) that can be installed beside the real one.
-  Open Auto-capture, switch capture on and confirm it doesn't crash. Never install a capture build over the
+  `./gradlew installStaging`, which installs the same shrunk build as a separate app (`.staging`, signed with
+  the debug key) beside the real one. Open Auto-capture, switch capture on and confirm it doesn't crash. Never install a capture build over the
   real app without meaning to: it upgrades the real database.
 
 ## 12. Known limits and not built
@@ -232,7 +231,7 @@ Deliberate omissions and gaps, so nobody assumes otherwise:
   classifier were planned and are not built, so a merchant seen before but with no rule still needs a
   Category.
 - **Transfers.** Two captures are never merged into a Transfer suggestion
-  ([ADR-0005](adr/0005-transfer-suggestions-require-an-own-account-signal.md) records how it should work).
+  ([ADR-0006](adr/0006-transfer-suggestions-require-an-own-account-signal.md) records how it should work).
 - **No 30-day purge of a capture's raw text** (only unparsed alerts are purged). The database is not
   excluded from Android's automatic backup, which is on for the app.
 - **Learned data is local.** Rules, aliases and the mapping aren't backed up to the Sheet, so a reinstall

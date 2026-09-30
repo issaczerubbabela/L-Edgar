@@ -21,7 +21,7 @@ interface ExpenseDao {
 
     /**
      * Saves an edit built from an earlier read without undoing what Sync did meanwhile: a Remote
-     * timestamp Sync assigned is kept, and a Transaction that never synced stays an `INSERT`.
+     * timestamp and Transaction ID Sync assigned are kept, and a Transaction that never synced stays an `INSERT`.
      */
     @Transaction
     suspend fun updateKeepingSyncState(record: ExpenseRecord) {
@@ -34,7 +34,10 @@ interface ExpenseDao {
         update(
             record.copy(
                 remoteTimestamp = current.remoteTimestamp?.takeIf { it.isNotBlank() } ?: record.remoteTimestamp,
-                syncAction = syncAction
+                syncAction = syncAction,
+                syncId = current.syncId ?: record.syncId,
+                syncedRevision = current.syncedRevision,
+                sheetConflictJson = current.sheetConflictJson
             )
         )
     }
@@ -50,9 +53,6 @@ interface ExpenseDao {
 
     @Query("SELECT * FROM expense_records")
     suspend fun getAllRecordsSnapshot(): List<ExpenseRecord>
-
-    @Query("SELECT remoteTimestamp FROM expense_records WHERE remoteTimestamp IS NOT NULL AND remoteTimestamp != ''")
-    suspend fun getAllRemoteTimestamps(): List<String>
 
     @Query("SELECT * FROM expense_records WHERE type = :type AND syncAction != 'DELETE' ORDER BY date DESC")
     fun getByType(type: String): Flow<List<ExpenseRecord>>
@@ -96,24 +96,51 @@ interface ExpenseDao {
     @Query("SELECT id, localVersion FROM expense_records WHERE isSynced = 0 ORDER BY id")
     fun observePendingVersions(): Flow<List<PendingVersion>>
 
+    /**
+     * Settles a Transaction whose content the Sheet now has, recording the Sheet row's [revision] as
+     * the base for the next merge, unless it changed after Sync read it.
+     */
     @Query(
         """
         UPDATE expense_records
-        SET remoteTimestamp = :timestamp
-        WHERE id = :id AND (remoteTimestamp IS NULL OR TRIM(remoteTimestamp) = '')
-        """
-    )
-    suspend fun assignRemoteTimestamp(id: Long, timestamp: String): Int
-
-    /** Settles a synced insert/update, unless the Transaction changed after Sync read it. */
-    @Query(
-        """
-        UPDATE expense_records
-        SET isSynced = 1, syncAction = 'NONE'
+        SET isSynced = 1, syncAction = 'NONE', syncedRevision = :revision, sheetConflictJson = NULL
         WHERE id = :id AND localVersion = :version AND syncAction != 'DELETE'
         """
     )
-    suspend fun markSyncedIfUnchanged(id: Long, version: Long): Int
+    suspend fun markSyncedIfUnchanged(id: Long, version: Long, revision: String?): Int
+
+    // The queries below touch only sync bookkeeping columns, which don't raise localVersion, so several
+    // steps of one Pull can apply to the same row against the version it was planned from.
+
+    @Query("UPDATE expense_records SET syncId = :syncId WHERE id = :id AND localVersion = :version AND syncId IS NULL")
+    suspend fun setSyncIdIfUnchanged(id: Long, version: Long, syncId: String): Int
+
+    @Query("UPDATE expense_records SET syncedRevision = :revision WHERE id = :id AND localVersion = :version")
+    suspend fun setBaseIfUnchanged(id: Long, version: Long, revision: String?): Int
+
+    @Query("UPDATE expense_records SET sheetConflictJson = :sheetJson WHERE id = :id AND localVersion = :version")
+    suspend fun setConflictIfUnchanged(id: Long, version: Long, sheetJson: String?): Int
+
+    @Query("DELETE FROM expense_records WHERE id = :id AND localVersion = :version")
+    suspend fun deleteIfUnchanged(id: Long, version: Long): Int
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIgnoringDuplicateSyncId(record: ExpenseRecord): Long
+
+    @Query("UPDATE expense_records SET syncedRevision = :sheetRevision, sheetConflictJson = NULL WHERE id = :id")
+    suspend fun resolveConflictKeepingPhone(id: Long, sheetRevision: String?)
+
+    @Query("UPDATE expense_records SET sheetConflictJson = NULL, isSynced = 0, syncAction = 'DELETE' WHERE id = :id")
+    suspend fun clearConflictAndMarkDeleted(id: Long)
+
+    @Query("UPDATE expense_records SET isSynced = 0, syncAction = 'UPDATE' WHERE id IN (:ids) AND syncAction != 'DELETE'")
+    suspend fun markForReupload(ids: List<Long>)
+
+    @Query("SELECT COUNT(*) FROM expense_records WHERE syncId IS NULL")
+    suspend fun countWithoutSyncId(): Int
+
+    @Query("SELECT * FROM expense_records WHERE sheetConflictJson IS NOT NULL AND syncAction != 'DELETE' ORDER BY date DESC, id DESC")
+    fun observeConflicts(): Flow<List<ExpenseRecord>>
 
     /** Removes a deleted Transaction for good once the Sheet no longer has it, unless it changed since Sync read it. */
     @Query("DELETE FROM expense_records WHERE id = :id AND localVersion = :version AND syncAction = 'DELETE'")

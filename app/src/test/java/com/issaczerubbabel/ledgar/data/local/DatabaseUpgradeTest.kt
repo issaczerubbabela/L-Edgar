@@ -10,6 +10,8 @@ import com.issaczerubbabel.ledgar.di.DatabaseModule
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -23,7 +25,7 @@ import org.robolectric.annotation.Config
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [34])
-class Migration16To17Test {
+class DatabaseUpgradeTest {
 
     private val context: Context = ApplicationProvider.getApplicationContext()
 
@@ -52,7 +54,7 @@ class Migration16To17Test {
     }
 
     @Test
-    fun `upgrading keeps every Transaction and starts versioning from zero`() = runBlocking {
+    fun `upgrading from version 16 keeps every Transaction, unlinked, and installs both triggers`() = runBlocking {
         val db = DatabaseModule.provideDatabase(context)
         val dao = db.expenseDao()
 
@@ -60,9 +62,13 @@ class Migration16To17Test {
         assertEquals("Unsynced lunch", kept.description)
         assertEquals("INSERT", kept.syncAction)
         assertEquals(0L, kept.localVersion)
+        assertNull("older rows wait for Sync to link them to their Sheet row", kept.syncId)
 
         dao.updateTransactionsDescriptionByIds(listOf(kept.id), "Edited after upgrade")
         assertTrue("the version trigger is installed", dao.getById(kept.id)!!.localVersion > 0)
+
+        val created = dao.insert(kept.copy(id = 0, syncId = null))
+        assertNotNull("new Transactions get a Transaction ID", dao.getById(created)!!.syncId)
         db.close()
     }
 

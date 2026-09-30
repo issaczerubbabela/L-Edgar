@@ -63,7 +63,9 @@ All writes are committed locally first (Room), then synchronized to Google Sheet
 - Offline-first local persistence via Room.
 - WorkManager + Hilt worker for background sync.
 - Sync supports insert/update/delete actions.
+- Two-way sync keyed by a permanent Transaction ID: edits typed into the Sheet come to the phone, and a change made on both sides becomes a conflict you resolve in Settings instead of an overwrite.
 - Sync is safe to retry: a lost reply or a restarted job never duplicates a row, and edits made during a Sync are never lost.
+- After updating the app, redeploy the Apps Script (copy it from Database Setup): sync stays paused until the script is version 2.
 - Idempotent delete handling for already-removed remote rows.
 - A separate background Backup copies accounts, dropdown options and budgets to the Sheet.
 

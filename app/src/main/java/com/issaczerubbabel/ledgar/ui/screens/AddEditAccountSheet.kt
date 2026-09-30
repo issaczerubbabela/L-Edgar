@@ -10,15 +10,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.Button
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,14 +29,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.issaczerubbabel.ledgar.ui.components.DropdownField
+import com.issaczerubbabel.ledgar.ui.components.SingleDatePickerDialog
 import com.issaczerubbabel.ledgar.util.formatAsOfDateTime
 import com.issaczerubbabel.ledgar.util.nowAsOfDateTime
+import com.issaczerubbabel.ledgar.util.parseAsOfDateTime
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import com.issaczerubbabel.ledgar.viewmodel.AddEditAccountUiState
-import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.ZoneId
+import java.time.LocalTime
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -178,49 +176,23 @@ fun AddEditAccountSheet(
         }
 
         if (showDatePicker) {
-            val initialMillis = remember(state.initialBalanceDate) {
-                runCatching {
-                    (parseFlexibleDate(state.initialBalanceDate) ?: LocalDate.now())
-                        .atStartOfDay(ZoneId.systemDefault())
-                        .toInstant()
-                        .toEpochMilli()
-                }.getOrDefault(System.currentTimeMillis())
-            }
-            val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
-
-            DatePickerDialog(
-                onDismissRequest = { showDatePicker = false },
-                confirmButton = {
+            SingleDatePickerDialog(
+                initialDate = parseFlexibleDate(state.initialBalanceDate) ?: LocalDate.now(),
+                onDismiss = { showDatePicker = false },
+                onConfirm = { pickedDate ->
+                    val existingTime = parseAsOfDateTime(state.initialBalanceDate)?.toLocalTime() ?: LocalTime.MIDNIGHT
+                    onInitialBalanceDateChange(formatAsOfDateTime(LocalDateTime.of(pickedDate, existingTime)))
+                    showDatePicker = false
+                },
+                dismissActions = {
                     TextButton(onClick = {
-                        val selectedMillis = datePickerState.selectedDateMillis
-                        if (selectedMillis != null) {
-                            val selectedDateTime = Instant.ofEpochMilli(selectedMillis)
-                                .atZone(ZoneId.systemDefault())
-                                .toLocalDate()
-                                .atStartOfDay()
-                            onInitialBalanceDateChange(formatAsOfDateTime(selectedDateTime))
-                        }
+                        onInitialBalanceDateChange(formatAsOfDateTime(LocalDateTime.now().toLocalDate().atStartOfDay()))
                         showDatePicker = false
                     }) {
-                        Text("OK")
-                    }
-                },
-                dismissButton = {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TextButton(onClick = {
-                            onInitialBalanceDateChange(formatAsOfDateTime(LocalDateTime.now().toLocalDate().atStartOfDay()))
-                            showDatePicker = false
-                        }) {
-                            Text("Today")
-                        }
-                        TextButton(onClick = { showDatePicker = false }) {
-                            Text("Cancel")
-                        }
+                        Text("Today")
                     }
                 }
-            ) {
-                DatePicker(state = datePickerState)
-            }
+            )
         }
     }
 }

@@ -7,7 +7,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * so Sync can tell whether a row changed while its request was in flight. Writes that carry a stale
  * or default version (a whole-row `@Update` built in the UI) are still pushed past the old value.
  */
-object ExpenseVersionTrigger {
+object ExpenseTableTriggers {
     private const val NAME = "expense_records_bump_local_version"
 
     private val WATCHED_COLUMNS = listOf(
@@ -25,5 +25,21 @@ object ExpenseVersionTrigger {
         END
     """.trimIndent()
 
-    fun install(db: SupportSQLiteDatabase) = db.execSQL(CREATE_SQL)
+    /**
+     * Gives a Transaction created on this phone its Transaction ID. Rows inserted as already synced
+     * without one (legacy imports) are left for Sync to link to their Sheet row instead.
+     */
+    val CREATE_SYNC_ID_SQL = """
+        CREATE TRIGGER IF NOT EXISTS expense_records_assign_sync_id
+        AFTER INSERT ON expense_records
+        FOR EACH ROW WHEN NEW.syncId IS NULL AND NEW.isSynced = 0
+        BEGIN
+            UPDATE expense_records SET syncId = lower(hex(randomblob(16))) WHERE id = NEW.id;
+        END
+    """.trimIndent()
+
+    fun install(db: SupportSQLiteDatabase) {
+        db.execSQL(CREATE_SQL)
+        db.execSQL(CREATE_SYNC_ID_SQL)
+    }
 }

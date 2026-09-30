@@ -37,7 +37,7 @@ sealed interface IngestResult {
 
 /**
  * Turns one raw alert into a pending Captured transaction: parse, drop repeats, resolve the
- * Account, categorize, store. It never creates a Transaction (ADR-0004); only Confirm does.
+ * Account, categorize, store. It never creates a Transaction (ADR-0005); only Confirm does.
  */
 class CaptureIngestor @Inject constructor(
     private val captureDao: CaptureDao,

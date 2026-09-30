@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.ui.components
 
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,7 +28,7 @@ fun categoryIcon(category: String) = when (category.lowercase()) {
     "utilities" -> Icons.Filled.Bolt
     "rent" -> Icons.Filled.Home
     "salary" -> Icons.Filled.Work
-    "investment" -> Icons.Filled.TrendingUp
+    "investment" -> Icons.AutoMirrored.Filled.TrendingUp
     "freelance", "business" -> Icons.Filled.Laptop
     else -> Icons.Filled.Category
 }

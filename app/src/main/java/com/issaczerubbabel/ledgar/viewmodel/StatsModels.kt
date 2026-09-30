@@ -1,25 +1,14 @@
 package com.issaczerubbabel.ledgar.viewmodel
 
-import androidx.compose.ui.graphics.Color
+import com.issaczerubbabel.ledgar.data.local.entity.BudgetCycle
 import java.time.LocalDate
 
 enum class StatsScope {
+    CYCLE,
     WEEKLY,
     MONTHLY,
     YEARLY,
     SELECT_PERIOD
-}
-
-enum class StatsBreakdownTab {
-    EXPENSE,
-    INCOME
-}
-
-enum class CashFlowGranularity {
-    DAILY,
-    WEEKLY,
-    MONTHLY,
-    YEARLY
 }
 
 data class StatsFilterState(
@@ -27,26 +16,19 @@ data class StatsFilterState(
     val anchorDate: LocalDate = LocalDate.now(),
     val customStartDate: LocalDate? = null,
     val customEndDate: LocalDate? = null,
-    val breakdownTab: StatsBreakdownTab = StatsBreakdownTab.EXPENSE,
-    val cashFlowCategory: String? = null,
-    val cashFlowGranularity: CashFlowGranularity = CashFlowGranularity.DAILY
-)
+    /** True once the user picked a scope, so the default (Cycle when one exists) no longer applies. */
+    val scopeChosen: Boolean = false
+) {
+    /** The period on screen. Cycle scope falls back to Month when there are no cycles. */
+    fun period(cycles: List<BudgetCycle>, today: LocalDate): StatsPeriod =
+        if (scope == StatsScope.CYCLE) {
+            StatsPeriod.cycleOn(anchorDate, cycles, today) ?: StatsPeriod.of(StatsScope.MONTHLY, anchorDate)
+        } else {
+            StatsPeriod.of(scope, anchorDate, customStartDate, customEndDate)
+        }
+}
 
 data class StatsDateRange(
     val start: LocalDate,
     val end: LocalDate
-)
-
-data class CategoryTotal(
-    val categoryName: String,
-    val totalAmount: Double,
-    val assignedColor: Color
-)
-
-data class AccountsBreakdownUi(
-    val cashAndAccountsExpense: Double = 0.0,
-    val cardExpense: Double = 0.0,
-    val transferTotal: Double = 0.0,
-    /** Null when the preceding period has no spending to compare against. */
-    val changePercent: Int? = null
 )

@@ -7,6 +7,7 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import androidx.work.workDataOf
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -20,7 +21,11 @@ class SyncScheduler @Inject constructor(private val workManager: WorkManager) {
 
     val transactionSyncStatus: Flow<SyncStatus> = workManager
         .getWorkInfosForUniqueWorkFlow(SyncWorker.WORK_NAME)
-        .map { infos -> syncStatusOf(infos.map { SyncJob(it.state, it.runAttemptCount, it.stopReason) }) }
+        .map { infos ->
+            syncStatusOf(infos.map {
+                SyncJob(it.state, it.runAttemptCount, it.stopReason, it.outputData.getBoolean(SyncWorker.KEY_SCRIPT_OUTDATED, false))
+            })
+        }
 
     val backupWorkInfos: Flow<List<WorkInfo>> =
         workManager.getWorkInfosForUniqueWorkFlow(BackupWorker.WORK_NAME)
@@ -29,16 +34,25 @@ class SyncScheduler @Inject constructor(private val workManager: WorkManager) {
      * A running Sync is never cancelled: the new job queues behind it, so changes made while it runs
      * still go out, and a request already on its way can't be cut off.
      */
-    fun requestSync() {
-        workManager.enqueueUniqueWork(SyncWorker.WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, transactionSyncRequest())
+    fun requestSync() = enqueueSync(pull = false)
+
+    /** Pulls the Sheet's changes as well: on app open and on "Sync now". */
+    fun requestFullSync(allowMassDelete: Boolean = false) = enqueueSync(pull = true, allowMassDelete = allowMassDelete)
+
+    private fun enqueueSync(pull: Boolean, allowMassDelete: Boolean = false) {
+        workManager.enqueueUniqueWork(
+            SyncWorker.WORK_NAME,
+            ExistingWorkPolicy.APPEND_OR_REPLACE,
+            transactionSyncRequest(pull, allowMassDelete)
+        )
     }
 
-    /** Skips the retry wait of a failed Sync, unless one is running right now. */
+    /** "Sync now": skips the retry wait of a failed Sync and pulls too, unless one is running right now. */
     suspend fun retrySync() {
         val running = workManager.getWorkInfosForUniqueWorkFlow(SyncWorker.WORK_NAME).first()
             .any { it.state == WorkInfo.State.RUNNING }
         if (running) return
-        workManager.enqueueUniqueWork(SyncWorker.WORK_NAME, ExistingWorkPolicy.REPLACE, transactionSyncRequest())
+        workManager.enqueueUniqueWork(SyncWorker.WORK_NAME, ExistingWorkPolicy.REPLACE, transactionSyncRequest(pull = true))
     }
 
     /**
@@ -58,8 +72,9 @@ class SyncScheduler @Inject constructor(private val workManager: WorkManager) {
         workManager.enqueueUniqueWork(BackupWorker.WORK_NAME, policy, request)
     }
 
-    private fun transactionSyncRequest() = OneTimeWorkRequestBuilder<SyncWorker>()
+    private fun transactionSyncRequest(pull: Boolean, allowMassDelete: Boolean = false) = OneTimeWorkRequestBuilder<SyncWorker>()
         .setConstraints(networkConstraint())
+        .setInputData(workDataOf(SyncWorker.KEY_PULL to pull, SyncWorker.KEY_ALLOW_MASS_DELETE to allowMassDelete))
         .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, RETRY_BACKOFF_SECONDS, TimeUnit.SECONDS)
         .addTag(SyncWorker.TAG)
         .build()

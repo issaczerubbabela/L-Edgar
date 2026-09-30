@@ -37,7 +37,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
         AccountAlias::class,
         UnparsedAlert::class
     ],
-    version = 20,
+    version = 21,
     exportSchema = false
 )
 abstract class SheetSyncDatabase : RoomDatabase() {
