@@ -10,7 +10,7 @@ class ParserRegistry(private val parsers: List<TransactionParser>) {
 
     companion object {
         fun default(): ParserRegistry = ParserRegistry(
-            listOf(CubParser(), HdfcParser(), UpiAppParser(), GenericBankParser())
+            listOf(CubParser(), HdfcParser(), AxisParser(), UpiAppParser(), GenericBankParser())
         )
     }
 }
