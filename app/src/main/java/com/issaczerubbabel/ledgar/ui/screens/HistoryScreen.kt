@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.ui.components.DropdownField
+import com.issaczerubbabel.ledgar.ui.components.SingleDatePickerDialog
 import com.issaczerubbabel.ledgar.ui.theme.*
 import com.issaczerubbabel.ledgar.viewmodel.CalendarCell
 import com.issaczerubbabel.ledgar.viewmodel.DayGroup
@@ -46,9 +47,7 @@ import com.issaczerubbabel.ledgar.viewmodel.HistoryViewModel
 import com.issaczerubbabel.ledgar.viewmodel.MonthlyViewModel
 import com.issaczerubbabel.ledgar.viewmodel.PeriodSummary
 import java.time.DayOfWeek
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 import kotlinx.coroutines.launch
 
 private val TABS = listOf("Daily", "Calendar", "Monthly")
@@ -479,36 +478,15 @@ fun HistoryScreen(
     }
 
     if (pendingBatchAction == BatchAction.EDIT_DATES) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = LocalDate.now()
-                .atStartOfDay(ZoneId.systemDefault())
-                .toInstant()
-                .toEpochMilli()
-        )
-        DatePickerDialog(
-            onDismissRequest = { pendingBatchAction = null },
-            confirmButton = {
-                TextButton(onClick = {
-                    val selectedMillis = datePickerState.selectedDateMillis
-                    if (selectedMillis != null) {
-                        val selectedDate = Instant.ofEpochMilli(selectedMillis)
-                            .atZone(ZoneId.systemDefault())
-                            .toLocalDate()
-                        vm.updateSelectedDates(selectedDate.toString())
-                    }
-                    pendingBatchAction = null
-                }) {
-                    Text("Update")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingBatchAction = null }) {
-                    Text("Cancel")
-                }
+        SingleDatePickerDialog(
+            initialDate = LocalDate.now(),
+            confirmText = "Update",
+            onDismiss = { pendingBatchAction = null },
+            onConfirm = {
+                vm.updateSelectedDates(it.toString())
+                pendingBatchAction = null
             }
-        ) {
-            DatePicker(state = datePickerState)
-        }
+        )
     }
 
     if (pendingBatchAction == BatchAction.EDIT_CATEGORIES) {
