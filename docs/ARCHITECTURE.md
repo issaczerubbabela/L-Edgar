@@ -41,6 +41,7 @@ graph TD
   - Budget (salary-cycle buckets; sub-screens: Start cycle, Plan buckets, Bucket detail)
   - Accounts
   - More (Settings)
+  - Review inbox and Auto-capture settings, reached from a banner on Trans, a badge on the Trans tab and More (see [AUTO_CAPTURE.md](AUTO_CAPTURE.md))
 - Form-heavy flows are managed in ViewModels with reactive state.
 
 ### Domain/Application Layer (Repository contracts)
@@ -232,6 +233,44 @@ erDiagram
         string name
         int displayOrder
     }
+
+    ACCOUNT_RECORDS ||--o{ CAPTURED_TRANSACTIONS : accountId
+    ACCOUNT_RECORDS ||--o{ ACCOUNT_ALIASES : accountId
+
+    CAPTURED_TRANSACTIONS {
+        long id PK
+        string rawHash UK
+        double amount
+        string direction
+        string merchantNorm
+        string accountHint
+        long accountId FK
+        string suggestedCategory
+        double confidence
+        string status
+        long confirmedExpenseId
+    }
+
+    MERCHANT_RULES {
+        string merchantNorm PK
+        string category
+        string type
+        string origin
+        int streak
+    }
+
+    ACCOUNT_ALIASES {
+        string alias PK
+        long accountId FK
+    }
+
+    UNPARSED_ALERTS {
+        long id PK
+        string sender
+        string rawText
+        string rawHash UK
+        long capturedAt
+    }
 ```
 
 ## 7. Table-Level Details
@@ -311,6 +350,15 @@ erDiagram
   - INCOME_CATEGORY
   - ACCOUNT_GROUP
   - PAYMENT_MODE
+
+### captured_transactions / merchant_rules / account_aliases / unparsed_alerts
+
+- Purpose: auto-capture (see [AUTO_CAPTURE.md](AUTO_CAPTURE.md)). Added in database v19 (the first three) and v20.
+- `captured_transactions` holds a parsed alert until the user confirms or dismisses it (`status`: PENDING,
+  CONFIRMED, DISMISSED, DUPLICATE, POSSIBLE_DUPLICATE). `rawHash` is unique, which is the same-alert dedupe.
+  Only a Confirm creates an `expense_records` row (`confirmedExpenseId`), in one Room transaction.
+- `merchant_rules.origin` is USER, LEARNED or CANDIDATE (a candidate is a run of confirmations, never matched).
+- None of these tables is sent to the Sheet or covered by `BackupWorker`.
 
 ## 8. Dependency Injection Graph (Conceptual)
 

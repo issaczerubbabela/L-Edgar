@@ -64,6 +64,10 @@ _Avoid_: category rule
 A saved mapping from a bank account's last four digits or a UPI VPA to one of the user's Accounts, used to work out which Account a Captured transaction belongs to.
 _Avoid_: account mapping
 
+**Unparsed alert**:
+A bank or UPI alert that showed an amount but that no parser could read. It is kept for 30 days so a change in a bank's wording can be noticed and supported.
+_Avoid_: failed alert
+
 **Confidence band**:
 High, Check or Low: how sure auto-capture is about a Captured transaction's suggested Category. Only High, with its Account already resolved, notifies the user; everything else waits in the inbox.
 _Avoid_: confidence score

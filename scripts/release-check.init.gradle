@@ -1,0 +1,24 @@
+// Release check: builds the release variant as a separate app (package suffix .relcheck, signed with the
+// debug key) so it can be installed beside the real one and tried on a phone.
+//
+//   ./gradlew assembleRelease --init-script scripts/release-check.init.gradle
+//   adb install -r app/build/outputs/apk/release/app-release.apk
+//
+// Why: the release build is shrunk with R8, which can break reflection-based code (Gson's TypeToken did)
+// in ways that debug builds and unit tests cannot show. It changes no file in the repo. The real release
+// is signed separately, so never install this over it, and never install a capture build over the real
+// app by accident: it would upgrade the real database.
+allprojects {
+    afterEvaluate { project ->
+        if (project.plugins.hasPlugin('com.android.application')) {
+            project.android {
+                buildTypes {
+                    release {
+                        applicationIdSuffix ".relcheck"
+                        signingConfig signingConfigs.debug
+                    }
+                }
+            }
+        }
+    }
+}

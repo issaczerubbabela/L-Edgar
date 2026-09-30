@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Auto-capture never confirms itself

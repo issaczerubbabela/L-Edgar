@@ -35,6 +35,7 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Add Transaction and Quick Add now show which bucket the chosen category falls in, with what is left of it after the amount you are typing, as a pace bar under the date. It turns red and striped if the amount would overspend the bucket, and hides for income, transfers, categories with no bucket and dates before the running cycle"
         ),
         fixes = listOf(
+            "Fixed a crash on launch in release builds once auto-capture was added: the shrinker (R8) stripped the type information Gson needs, so the notification listener failed as soon as Android started it. Debug builds were never affected; it was caught by trying a release build on a phone",
             "Cash Flow chart now refreshes plotted series correctly when switching top period months, preventing stale bars/lines and stale Y-axis scale carryover",
             "Cash Flow income visibility improved by switching bar mode to grouped columns and hardening transaction type matching for imported data with extra whitespace",
             "Cash Flow marker tooltip now prioritizes spent amount first, followed by income and guide-line values for clearer per-bucket amount reading",
