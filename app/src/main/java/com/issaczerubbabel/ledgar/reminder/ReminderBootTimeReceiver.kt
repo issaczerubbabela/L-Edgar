@@ -21,7 +21,7 @@ class ReminderBootTimeReceiver : BroadcastReceiver() {
     @EntryPoint
     @InstallIn(SingletonComponent::class)
     interface Dependencies {
-        fun scheduler(): DailyReminderScheduler
+        fun reminderScheduler(): DailyReminderScheduler
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -29,7 +29,7 @@ class ReminderBootTimeReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
-                deps.scheduler().reschedule()
+                deps.reminderScheduler().reschedule()
             } finally {
                 pending.finish()
             }

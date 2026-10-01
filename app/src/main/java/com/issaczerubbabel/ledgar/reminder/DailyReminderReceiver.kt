@@ -22,12 +22,16 @@ import java.time.LocalDate
  */
 class DailyReminderReceiver : BroadcastReceiver() {
 
+    // Method names are prefixed to avoid colliding with another @EntryPoint interface's method of
+    // the same name but a different return type: Hilt aggregates all of them onto one generated
+    // component, and two same-named, differently-typed getters there fail to compile (as
+    // notifier() once did here, clashing with CaptureActionReceiver.Dependencies.notifier()).
     @EntryPoint
     @InstallIn(SingletonComponent::class)
     interface Dependencies {
-        fun preferences(): ReminderPreferences
-        fun notifier(): ReminderNotifier
-        fun scheduler(): DailyReminderScheduler
+        fun reminderPreferences(): ReminderPreferences
+        fun reminderNotifier(): ReminderNotifier
+        fun reminderScheduler(): DailyReminderScheduler
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -47,16 +51,16 @@ class DailyReminderReceiver : BroadcastReceiver() {
 
     private suspend fun onFire(deps: Dependencies) {
         val today = LocalDate.now().toEpochDay()
-        val lastLogged = deps.preferences().lastLoggedEpochDay.first()
+        val lastLogged = deps.reminderPreferences().lastLoggedEpochDay.first()
         if (ReminderRules.shouldRemind(today, lastLogged)) {
-            deps.notifier().notify(ReminderNotifier.messageFor(today))
+            deps.reminderNotifier().notify(ReminderNotifier.messageFor(today))
         }
         // This is a one-shot alarm: line up tomorrow's firing now that this one has run.
-        deps.scheduler().reschedule()
+        deps.reminderScheduler().reschedule()
     }
 
     private suspend fun onDismissToday(deps: Dependencies) {
-        deps.preferences().markLoggedToday(LocalDate.now().toEpochDay())
-        deps.notifier().cancel()
+        deps.reminderPreferences().markLoggedToday(LocalDate.now().toEpochDay())
+        deps.reminderNotifier().cancel()
     }
 }
