@@ -10,6 +10,7 @@ import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
 import com.issaczerubbabel.ledgar.data.local.dao.DropdownOptionDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
 import com.issaczerubbabel.ledgar.data.local.dao.MerchantRuleDao
+import com.issaczerubbabel.ledgar.data.local.dao.TripDao
 import com.issaczerubbabel.ledgar.data.local.dao.UnparsedAlertDao
 import com.issaczerubbabel.ledgar.data.local.entity.AccountAlias
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
@@ -21,6 +22,11 @@ import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRule
+import com.issaczerubbabel.ledgar.data.local.entity.TripExpenseRecord
+import com.issaczerubbabel.ledgar.data.local.entity.TripExpenseShareRecord
+import com.issaczerubbabel.ledgar.data.local.entity.TripMemberRecord
+import com.issaczerubbabel.ledgar.data.local.entity.TripRecord
+import com.issaczerubbabel.ledgar.data.local.entity.TripSettlementRecord
 import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
 
 @Database(
@@ -35,9 +41,14 @@ import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
         CapturedTransaction::class,
         MerchantRule::class,
         AccountAlias::class,
-        UnparsedAlert::class
+        UnparsedAlert::class,
+        TripRecord::class,
+        TripMemberRecord::class,
+        TripExpenseRecord::class,
+        TripExpenseShareRecord::class,
+        TripSettlementRecord::class
     ],
-    version = 21,
+    version = 22,
     exportSchema = false
 )
 abstract class SheetSyncDatabase : RoomDatabase() {
@@ -50,4 +61,5 @@ abstract class SheetSyncDatabase : RoomDatabase() {
     abstract fun merchantRuleDao(): MerchantRuleDao
     abstract fun accountAliasDao(): AccountAliasDao
     abstract fun unparsedAlertDao(): UnparsedAlertDao
+    abstract fun tripDao(): TripDao
 }

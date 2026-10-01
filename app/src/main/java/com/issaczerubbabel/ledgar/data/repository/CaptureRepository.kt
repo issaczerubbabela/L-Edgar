@@ -18,6 +18,8 @@ interface CaptureRepository {
     fun observePending(): Flow<List<CapturedTransaction>>
     fun observePendingCount(): Flow<Int>
 
+    suspend fun getById(captureId: Long): CapturedTransaction?
+
     /**
      * Turns a pending capture into a real Transaction and returns its id, or null if the capture
      * is gone or already resolved. The Transaction, the capture's new status and what the app

@@ -14,6 +14,10 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Auto-capture: supports Axis, Google Pay and bank parsers, with configurable merchant rules and merchant aliases for better categorization
 - Auto-capture: lock-screen Confirm notification for ready captures, and "Always use this" to skip review for familiar merchants
 - Auto-capture: captured transactions are dated from their alert timestamp instead of today
+- Trips (More > Trips): log shared trip payments with who paid and who was in, split them equally, with an extra for one person, or by exact amounts
+- Trips: see each person's balance and the fewest payments to settle up, mark payments as paid, and pay what you owe through your UPI app
+- Trips: share a summary text or a CSV with friends, then review and post only your share of each expense to your transactions; un-archive to undo
+- Trips: a banner on the Trans tab while a trip is active, and "Add to trip" on payment alerts in the review inbox
 
 ### Fixed
 
@@ -27,6 +31,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Added the remaining cursor/plugins pstack skills to .claude/skills (tdd and teach kept as the existing mattpocock versions)
 - Trip split terms (Trip, Member, Trip expense, Share, Balance, Settlement, Settle-up plan, Post) added to the CONTEXT.md glossary
 - ADR-0008: posting a Trip records only your Share, not what you paid
+- Trip split: local-only Room tables (migration 21 -> 22), a pure TripMath module with tests, TripRepository with Post / Un-archive / Add-to-trip tests
 
 ## [1.1.0] - 2026-09-26
 

@@ -15,10 +15,12 @@ import com.issaczerubbabel.ledgar.data.local.dao.BudgetDao
 import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
 import com.issaczerubbabel.ledgar.data.local.migration.BucketBudgetMigration
 import com.issaczerubbabel.ledgar.data.local.migration.CaptureMigration
+import com.issaczerubbabel.ledgar.data.local.migration.TripMigration
 import com.issaczerubbabel.ledgar.data.local.dao.DropdownOptionDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
 import com.issaczerubbabel.ledgar.data.local.dao.MerchantRuleDao
 import com.issaczerubbabel.ledgar.data.local.dao.UnparsedAlertDao
+import com.issaczerubbabel.ledgar.data.local.dao.TripDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -123,6 +125,13 @@ object DatabaseModule {
                 MIGRATION_19_20.migrate(db)
             }
             CaptureMigration.createTables(db)
+        }
+    }
+
+    /** Adds the local-only Trip tables (see "Trips" in CONTEXT.md). Additive and idempotent. */
+    internal val MIGRATION_21_22 = object : Migration(21, 22) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            TripMigration.createTables(db)
         }
     }
 
@@ -269,6 +278,7 @@ object DatabaseModule {
             .addMigrations(MIGRATION_18_19)
             .addMigrations(MIGRATION_19_20)
             .addMigrations(MIGRATION_20_21)
+            .addMigrations(MIGRATION_21_22)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .addCallback(callback)
             .build()
@@ -300,4 +310,7 @@ object DatabaseModule {
 
     @Provides
     fun provideUnparsedAlertDao(db: SheetSyncDatabase): UnparsedAlertDao = db.unparsedAlertDao()
+
+    @Provides
+    fun provideTripDao(db: SheetSyncDatabase): TripDao = db.tripDao()
 }

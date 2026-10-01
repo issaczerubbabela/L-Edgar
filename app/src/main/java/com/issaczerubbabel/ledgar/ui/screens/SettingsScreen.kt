@@ -66,6 +66,7 @@ fun SettingsScreen(
     onNavigateToAppsScriptSetup: () -> Unit,
     onNavigateToChangelog: () -> Unit,
     onNavigateToCaptureSettings: () -> Unit,
+    onNavigateToTrips: () -> Unit = {},
     vm: SettingsViewModel = hiltViewModel(),
     exportVm: ExportViewModel = hiltViewModel()
 ) {
@@ -686,6 +687,19 @@ fun SettingsScreen(
                 title = "Auto-capture",
                 icon = Icons.Filled.Sync,
                 onClick = onNavigateToCaptureSettings
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            SettingsListItem(
+                title = "Trips",
+                icon = Icons.Filled.Luggage,
+                onClick = onNavigateToTrips
             ) {
                 Icon(
                     imageVector = Icons.Filled.ChevronRight,

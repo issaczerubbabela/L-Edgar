@@ -32,6 +32,8 @@ class CaptureRepositoryImpl @Inject constructor(
 
     override fun observePendingCount(): Flow<Int> = captureDao.observePendingCount()
 
+    override suspend fun getById(captureId: Long): CapturedTransaction? = captureDao.getById(captureId)
+
     override suspend fun confirm(captureId: Long, edits: CaptureEdits): Long? = database.withTransaction {
         val capture = captureDao.getById(captureId) ?: return@withTransaction null
         if (capture.status != "PENDING" && capture.status != "POSSIBLE_DUPLICATE") return@withTransaction null
