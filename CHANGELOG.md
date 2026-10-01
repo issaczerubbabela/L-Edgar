@@ -6,6 +6,23 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `app/src/main/java/com/issaczerubbabel/ledgar/ui/screens/ChangelogData.kt`,
 which is also what the app shows under More > Changelog. Developer notes appear here only.
 
+## [1.3.0] - 2026-10-01
+
+### Added
+
+- Trips (More > Trips): log shared trip payments with who paid and who was in, split them equally, with an extra for one person, or by exact amounts
+- Trips: see each person's balance and the fewest payments to settle up, mark payments as paid, and pay what you owe through your UPI app
+- Trips: share a summary text or a CSV with friends, then review and post only your share of each expense to your transactions; un-archive to undo
+- Trips: a banner on the Trans tab while a trip is active, and "Add to trip" on payment alerts in the review inbox
+
+### Developer
+
+- Added the poteto-mode agent skill (cursor/plugins pstack) to .claude/skills
+- Added the remaining cursor/plugins pstack skills to .claude/skills (tdd and teach kept as the existing mattpocock versions)
+- Trip split terms (Trip, Member, Trip expense, Share, Balance, Settlement, Settle-up plan, Post) added to the CONTEXT.md glossary
+- ADR-0008: posting a Trip records only your Share, not what you paid
+- Trip split: local-only Room tables (migration 21 -> 22), a pure TripMath module with tests, TripRepository with Post / Un-archive / Add-to-trip tests
+
 ## [1.2.0] - 2026-10-01
 
 ### Added
@@ -23,8 +40,6 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 ### Developer
 
 - Auto-capture domain terms and ADRs documented in docs/
-- Added the poteto-mode agent skill (cursor/plugins pstack) to .claude/skills
-- Added the remaining cursor/plugins pstack skills to .claude/skills (tdd and teach kept as the existing mattpocock versions)
 
 ## [1.1.0] - 2026-09-26
 
@@ -260,6 +275,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - Material 3 design with light and dark themes
 
+[1.3.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.3.0
 [1.2.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.2.0
 [1.1.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.1.0
 [1.0.2]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.0.2

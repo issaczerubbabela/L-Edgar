@@ -156,6 +156,39 @@ A Transaction changed differently on the phone and in the Sheet since they last 
 **Held deletion**:
 A Transaction a Pull found missing from the Sheet but didn't delete from the phone, because too many went missing at once. The user decides whether to delete it or put it back in the Sheet.
 
+## Trips
+
+**Trip**:
+A named, time-bound outing whose shared costs are recorded and split between its Members. It is Active while being recorded and Archived once Posted.
+_Avoid_: group, event, split (as a noun)
+
+**Member**:
+A named person on a Trip. The user is always one of them; the others don't use the app.
+_Avoid_: participant, friend, person
+
+**Trip expense**:
+One payment made during a Trip: an amount, date, purpose, the one Member who paid, and how it is split between Members. It is not a Transaction.
+_Avoid_: trip transaction, bill
+
+**Share**:
+The part of a Trip expense that one Member owes.
+_Avoid_: portion, cut
+
+**Balance**:
+What a Member paid on a Trip minus their Shares and adjusted by Settlements. Positive means they are owed money.
+
+**Settlement**:
+A repayment between two Members that moves their Balances towards zero. It never counts as spending.
+_Avoid_: reimbursement, payback
+
+**Settle-up plan**:
+The fewest payments between Members that bring every Balance to zero.
+_Avoid_: simplified debts
+
+**Post**:
+Turning the user's Shares of a Trip into Transactions, after the user reviews and edits them. Posting archives the Trip.
+_Avoid_: push (that word means sending Transactions to the Sheet), export, sync
+
 ## Entry points
 
 **Quick log**:

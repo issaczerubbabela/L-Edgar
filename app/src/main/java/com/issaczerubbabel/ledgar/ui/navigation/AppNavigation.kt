@@ -46,6 +46,10 @@ import androidx.compose.material.icons.filled.Tune
 import com.issaczerubbabel.ledgar.ui.screens.BucketDetailScreen
 import com.issaczerubbabel.ledgar.ui.screens.BudgetHomeScreen
 import com.issaczerubbabel.ledgar.ui.screens.HistoryScreen
+import com.issaczerubbabel.ledgar.ui.screens.TripExpenseScreen
+import com.issaczerubbabel.ledgar.ui.screens.TripReviewScreen
+import com.issaczerubbabel.ledgar.ui.screens.TripScreen
+import com.issaczerubbabel.ledgar.ui.screens.TripsScreen
 import com.issaczerubbabel.ledgar.ui.screens.PlanBucketsScreen
 import com.issaczerubbabel.ledgar.ui.screens.StartCycleScreen
 import com.issaczerubbabel.ledgar.ui.screens.InsightsScreen
@@ -102,7 +106,17 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object CaptureInbox : Screen("capture_inbox", "CaptureInbox", Icons.Filled.Settings)
     object CaptureSettings : Screen("capture_settings", "CaptureSettings", Icons.Filled.Settings)
     object CaptureUnparsed : Screen("capture_unparsed", "CaptureUnparsed", Icons.Filled.Settings)
+    object Trips : Screen("trips", "Trips", Icons.Filled.Settings)
+    object Trip : Screen("trip/{tripId}", "Trip", Icons.Filled.Settings)
+    object TripExpense : Screen("trip_expense/{tripId}?expenseId={expenseId}&captureId={captureId}", "TripExpense", Icons.Filled.Settings)
+    object TripReview : Screen("trip_review/{tripId}", "TripReview", Icons.Filled.Settings)
 }
+
+private fun tripExpenseRoute(tripId: Long, expenseId: Long = 0L, captureId: Long = 0L) =
+    "trip_expense/$tripId?expenseId=$expenseId&captureId=$captureId"
+
+/** Trip screens are reached from More; the tab stays highlighted while you are on them. */
+private val TRIP_SUB_ROUTES = setOf(Screen.Trips.route, Screen.Trip.route, Screen.TripExpense.route, Screen.TripReview.route)
 
 private const val LOG_BASE_ROUTE = "log"
 
@@ -455,7 +469,8 @@ fun AppNavigation() {
                     bottomNavItems.forEach { screen ->
                         val selected = currentDest?.hierarchy?.any { it.route == screen.route } == true ||
                             (screen == Screen.Budget && currentDest?.route in BUDGET_SUB_ROUTES) ||
-                            (screen == Screen.Trans && currentDest?.route == Screen.CaptureInbox.route)
+                            (screen == Screen.Trans && currentDest?.route == Screen.CaptureInbox.route) ||
+                            (screen == Screen.More && currentDest?.route in TRIP_SUB_ROUTES)
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
@@ -598,7 +613,9 @@ fun AppNavigation() {
                         navController.navigate(Screen.CaptureInbox.route) {
                             launchSingleTop = true
                         }
-                    }
+                    },
+                    onOpenTrip = { tripId -> navController.navigate("trip/$tripId") { launchSingleTop = true } },
+                    onAddTripExpense = { tripId -> navController.navigate(tripExpenseRoute(tripId)) { launchSingleTop = true } }
                 )
             }
             composable(Screen.Stats.route) {
@@ -691,13 +708,64 @@ fun AppNavigation() {
                         navController.navigate(Screen.CaptureSettings.route) {
                             launchSingleTop = true
                         }
+                    },
+                    onNavigateToTrips = {
+                        navController.navigate(Screen.Trips.route) {
+                            launchSingleTop = true
+                        }
                     }
                 )
             }
             composable(Screen.CaptureInbox.route) {
                 CaptureInboxScreen(
                     innerPadding = innerPadding,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onAddToTrip = { tripId, captureId ->
+                        navController.navigate(tripExpenseRoute(tripId, captureId = captureId)) { launchSingleTop = true }
+                    }
+                )
+            }
+            composable(Screen.Trips.route) {
+                TripsScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
+                    onOpenTrip = { tripId -> navController.navigate("trip/$tripId") { launchSingleTop = true } }
+                )
+            }
+            composable(
+                route = Screen.Trip.route,
+                arguments = listOf(navArgument("tripId") { type = NavType.LongType })
+            ) { entry ->
+                val tripId = entry.arguments?.getLong("tripId") ?: 0L
+                TripScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
+                    onAddExpense = { navController.navigate(tripExpenseRoute(tripId)) { launchSingleTop = true } },
+                    onEditExpense = { expenseId -> navController.navigate(tripExpenseRoute(tripId, expenseId)) { launchSingleTop = true } },
+                    onReview = { navController.navigate("trip_review/$tripId") { launchSingleTop = true } }
+                )
+            }
+            composable(
+                route = Screen.TripExpense.route,
+                arguments = listOf(
+                    navArgument("tripId") { type = NavType.LongType },
+                    navArgument("expenseId") { type = NavType.LongType; defaultValue = 0L },
+                    navArgument("captureId") { type = NavType.LongType; defaultValue = 0L }
+                )
+            ) {
+                TripExpenseScreen(
+                    innerPadding = innerPadding,
+                    onDone = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = Screen.TripReview.route,
+                arguments = listOf(navArgument("tripId") { type = NavType.LongType })
+            ) {
+                TripReviewScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
+                    onPosted = { navController.popBackStack() }
                 )
             }
             composable(Screen.CaptureSettings.route) {

@@ -120,6 +120,8 @@ fun HistoryScreen(
     onNavigateToSearch: () -> Unit,
     onNavigateToFilterSelection: () -> Unit,
     onNavigateToCaptureInbox: () -> Unit,
+    onOpenTrip: (Long) -> Unit = {},
+    onAddTripExpense: (Long) -> Unit = {},
     vm: HistoryViewModel = hiltViewModel(),
     monthlyVm: MonthlyViewModel = hiltViewModel(),
     captureBadgeVm: com.issaczerubbabel.ledgar.viewmodel.CaptureBadgeViewModel = hiltViewModel(),
@@ -234,6 +236,7 @@ fun HistoryScreen(
             if (pendingCaptures > 0) {
                 CaptureBanner(count = pendingCaptures, onClick = onNavigateToCaptureInbox)
             }
+            ActiveTripBanner(onOpenTrip = onOpenTrip, onAddExpense = onAddTripExpense)
 
             // Single pinned summary row below tabs
             val pinnedSummary = when (selectedTab) {

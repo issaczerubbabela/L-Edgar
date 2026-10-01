@@ -16,6 +16,23 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
+        version = "v1.3.0",
+        date = "2026-10-01",
+        added = listOf(
+            "Trips (More > Trips): log shared trip payments with who paid and who was in, split them equally, with an extra for one person, or by exact amounts",
+            "Trips: see each person's balance and the fewest payments to settle up, mark payments as paid, and pay what you owe through your UPI app",
+            "Trips: share a summary text or a CSV with friends, then review and post only your share of each expense to your transactions; un-archive to undo",
+            "Trips: a banner on the Trans tab while a trip is active, and \"Add to trip\" on payment alerts in the review inbox"
+        ),
+        developer = listOf(
+            "Added the poteto-mode agent skill (cursor/plugins pstack) to .claude/skills",
+            "Added the remaining cursor/plugins pstack skills to .claude/skills (tdd and teach kept as the existing mattpocock versions)",
+            "Trip split terms (Trip, Member, Trip expense, Share, Balance, Settlement, Settle-up plan, Post) added to the CONTEXT.md glossary",
+            "ADR-0008: posting a Trip records only your Share, not what you paid",
+            "Trip split: local-only Room tables (migration 21 -> 22), a pure TripMath module with tests, TripRepository with Post / Un-archive / Add-to-trip tests"
+        )
+    ),
+    ChangelogRelease(
         version = "v1.2.0",
         date = "2026-10-01",
         added = listOf(
@@ -29,9 +46,7 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Auto-capture release build no longer crashes due to Gson reflection in ProGuard"
         ),
         developer = listOf(
-            "Auto-capture domain terms and ADRs documented in docs/",
-            "Added the poteto-mode agent skill (cursor/plugins pstack) to .claude/skills",
-            "Added the remaining cursor/plugins pstack skills to .claude/skills (tdd and teach kept as the existing mattpocock versions)"
+            "Auto-capture domain terms and ADRs documented in docs/"
         )
     ),
     ChangelogRelease(

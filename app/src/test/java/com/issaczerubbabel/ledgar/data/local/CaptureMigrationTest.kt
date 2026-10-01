@@ -122,7 +122,7 @@ class CaptureMigrationTest {
         db.close()
     }
 
-    private companion object {
+    internal companion object {
         const val DB_NAME = "sheetsync.db"
 
         val VERSION_16_SCHEMA = listOf(
