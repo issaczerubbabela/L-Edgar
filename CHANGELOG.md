@@ -23,6 +23,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 ### Developer
 
 - Auto-capture domain terms and ADRs documented in docs/
+- Added the poteto-mode agent skill (cursor/plugins pstack) to .claude/skills
 
 ## [1.1.0] - 2026-09-26
 
