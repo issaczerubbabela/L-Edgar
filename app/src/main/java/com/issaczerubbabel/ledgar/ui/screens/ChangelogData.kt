@@ -22,7 +22,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Auto-capture: the app listens for bank and UPI payment alerts, extracts transaction details, and presents a review inbox for you to confirm",
             "Auto-capture: supports Axis, Google Pay and bank parsers, with configurable merchant rules and merchant aliases for better categorization",
             "Auto-capture: lock-screen Confirm notification for ready captures, and \"Always use this\" to skip review for familiar merchants",
-            "Auto-capture: captured transactions are dated from their alert timestamp instead of today"
+            "Auto-capture: captured transactions are dated from their alert timestamp instead of today",
+            "Daily reminder: a nudge in the evening if you haven't logged anything today, with a Log now button"
         ),
         fixed = listOf(
             "Date picker timezone shift: picking a date no longer moves it to the day before in some time zones, and the picked date is kept after saving",

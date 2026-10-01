@@ -10,6 +10,7 @@ import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewCalculator
 import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewContext
 import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewSource
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.data.preferences.ReminderPreferences
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
 import com.issaczerubbabel.ledgar.util.TransactionType
@@ -29,6 +30,7 @@ import javax.inject.Inject
 class QuickLogViewModel @Inject constructor(
     private val expenseRepository: ExpenseRepository,
     private val dropdownOptionRepository: DropdownOptionRepository,
+    private val reminderPreferences: ReminderPreferences,
     bucketPreviewSource: BucketPreviewSource
 ) : ViewModel() {
 
@@ -74,6 +76,7 @@ class QuickLogViewModel @Inject constructor(
                     )
                 )
             }.onSuccess {
+                reminderPreferences.markLoggedToday(LocalDate.now().toEpochDay())
                 _saveSuccess.emit(Unit)
             }.onFailure {
                 errorMessage = it.message ?: "Failed to save transaction"

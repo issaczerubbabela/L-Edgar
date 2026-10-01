@@ -12,6 +12,7 @@ import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewContext
 import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewSource
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.data.preferences.ReminderPreferences
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
@@ -36,6 +37,7 @@ class LogViewModel @Inject constructor(
     accountRepository: AccountRepository,
     private val dropdownOptionRepository: DropdownOptionRepository,
     private val syncScheduler: SyncScheduler,
+    private val reminderPreferences: ReminderPreferences,
     bucketPreviewSource: BucketPreviewSource,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -207,6 +209,8 @@ class LogViewModel @Inject constructor(
                 repository.update(record)
             } else {
                 repository.save(record)
+                // A backdated entry logged tonight still counts as logged today.
+                reminderPreferences.markLoggedToday(LocalDate.now().toEpochDay())
             }
 
             if (!isEditMode) {

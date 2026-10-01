@@ -14,6 +14,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Auto-capture: supports Axis, Google Pay and bank parsers, with configurable merchant rules and merchant aliases for better categorization
 - Auto-capture: lock-screen Confirm notification for ready captures, and "Always use this" to skip review for familiar merchants
 - Auto-capture: captured transactions are dated from their alert timestamp instead of today
+- Daily reminder: a nudge in the evening if you haven't logged anything today, with a Log now button
 
 ### Fixed
 
