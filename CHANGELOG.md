@@ -30,6 +30,11 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - A transaction changed both on the phone and in the Sheet becomes a conflict for you to resolve in Settings, instead of one side silently winning
 - Settings: Sync now, Resolve sync conflicts, and Find duplicate transactions
 - Deleting many rows in the Sheet at once asks before removing them from the phone, and lets you put them back
+- Auto-capture: bank and UPI alerts (HDFC, City Union Bank, Axis Bank, Google Pay, Paytm, and bank SMS through Messages) become suggestions in a review inbox, shown by a banner on Trans. and a badge on its tab. Nothing is saved until you confirm. Turn it on in More > Auto-capture
+- Auto-capture: match the kinds of merchant it recognises to your own categories. It learns from what you confirm, and Always use this saves a rule after one confirmation
+- Auto-capture: a ready suggestion from an account you've mapped can be confirmed from a notification. The lock screen hides the amount, and Confirm needs your phone unlocked
+- Auto-capture: suggestions use the date printed in the alert and keep their paise
+- Auto-capture: alerts it couldn't read are listed in More > Auto-capture with Copy and Delete, so a bank changing its wording gets noticed. Messages from people and OTPs are never kept
 
 ### Changed
 
@@ -86,6 +91,10 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Debug builds install next to the release app as L.Edgar (Debug) and can use a test Apps Script from APPS_SCRIPT_URL_DEBUG
 - Android CI also builds claude/** branches, with an Oracle JDK to match the pinned toolchain
 - /daily-idea and /daily-ship Claude Code commands: research and file one improvement issue a day, and ship one issue as a pull request a day
+- Auto-capture (docs/AUTO_CAPTURE.md, ADRs 0005-0007): a notification listener with a fixed app allowlist, per-bank parsers tested against real alerts, rule and keyword categorization, and four local-only tables
+- Room migration 20 -> 21 adds the auto-capture tables idempotently, and first repairs installs from auto-capture development builds that numbered them 18 -> 19 and 19 -> 20
+- R8 keep rules for Gson's TypeToken: the shrunk build crashed the notification listener as soon as Android started it
+- Splash-screen theme attributes moved to values-v31; two lint false positives (the Quick Settings tile's Android 14 guard and the widget's tint) are marked as reviewed
 
 ## [1.0.2] - 2026-04-10
 

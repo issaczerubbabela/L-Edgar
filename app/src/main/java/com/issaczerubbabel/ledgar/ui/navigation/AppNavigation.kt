@@ -62,6 +62,10 @@ import com.issaczerubbabel.ledgar.ui.screens.SearchScreen
 import com.issaczerubbabel.ledgar.ui.screens.SettingsScreen
 import com.issaczerubbabel.ledgar.ui.screens.AppsScriptSetupScreen
 import com.issaczerubbabel.ledgar.ui.screens.ChangelogScreen
+import com.issaczerubbabel.ledgar.ui.screens.CaptureInboxScreen
+import com.issaczerubbabel.ledgar.ui.screens.CaptureSettingsScreen
+import com.issaczerubbabel.ledgar.ui.screens.UnparsedAlertsScreen
+import com.issaczerubbabel.ledgar.viewmodel.CaptureBadgeViewModel
 import com.issaczerubbabel.ledgar.data.preferences.AppLockAuthMode
 import com.issaczerubbabel.ledgar.viewmodel.AppLockViewModel
 import com.issaczerubbabel.ledgar.viewmodel.ACCOUNT_ROUTE_ADD
@@ -95,6 +99,9 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object DropdownManagement : Screen("dropdown_management", "DropdownManagement", Icons.Filled.Settings)
     object AppsScriptSetup : Screen("apps_script_setup", "AppsScriptSetup", Icons.Filled.Settings)
     object Changelog : Screen("changelog", "Changelog", Icons.Filled.Settings)
+    object CaptureInbox : Screen("capture_inbox", "CaptureInbox", Icons.Filled.Settings)
+    object CaptureSettings : Screen("capture_settings", "CaptureSettings", Icons.Filled.Settings)
+    object CaptureUnparsed : Screen("capture_unparsed", "CaptureUnparsed", Icons.Filled.Settings)
 }
 
 private const val LOG_BASE_ROUTE = "log"
@@ -195,6 +202,8 @@ fun AppNavigation() {
     val scope = rememberCoroutineScope()
     val appLockViewModel: AppLockViewModel = androidx.hilt.navigation.compose.hiltViewModel()
     val lockConfig by appLockViewModel.config.collectAsStateWithLifecycle()
+    val captureBadgeViewModel: CaptureBadgeViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+    val pendingCaptures by captureBadgeViewModel.pendingCount.collectAsStateWithLifecycle()
     if (!lockConfig.isLoaded) return
 
     val startDestination = if (lockConfig.enabled) LOG_BASE_ROUTE else Screen.Trans.route
@@ -445,7 +454,8 @@ fun AppNavigation() {
                 ) {
                     bottomNavItems.forEach { screen ->
                         val selected = currentDest?.hierarchy?.any { it.route == screen.route } == true ||
-                            (screen == Screen.Budget && currentDest?.route in BUDGET_SUB_ROUTES)
+                            (screen == Screen.Budget && currentDest?.route in BUDGET_SUB_ROUTES) ||
+                            (screen == Screen.Trans && currentDest?.route == Screen.CaptureInbox.route)
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
@@ -454,7 +464,15 @@ fun AppNavigation() {
                                     launchSingleTop = true
                                 }
                             },
-                            icon = { Icon(screen.icon, contentDescription = screen.label) },
+                            icon = {
+                                if (screen == Screen.Trans && pendingCaptures > 0) {
+                                    BadgedBox(badge = { Badge { Text(pendingCaptures.toString()) } }) {
+                                        Icon(screen.icon, contentDescription = "${screen.label}, $pendingCaptures to review")
+                                    }
+                                } else {
+                                    Icon(screen.icon, contentDescription = screen.label)
+                                }
+                            },
                             label = { Text(screen.label) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -575,6 +593,11 @@ fun AppNavigation() {
                         navController.navigate(Screen.FilterSelection.route) {
                             launchSingleTop = true
                         }
+                    },
+                    onNavigateToCaptureInbox = {
+                        navController.navigate(Screen.CaptureInbox.route) {
+                            launchSingleTop = true
+                        }
                     }
                 )
             }
@@ -663,7 +686,35 @@ fun AppNavigation() {
                         navController.navigate(Screen.Changelog.route) {
                             launchSingleTop = true
                         }
+                    },
+                    onNavigateToCaptureSettings = {
+                        navController.navigate(Screen.CaptureSettings.route) {
+                            launchSingleTop = true
+                        }
                     }
+                )
+            }
+            composable(Screen.CaptureInbox.route) {
+                CaptureInboxScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(Screen.CaptureSettings.route) {
+                CaptureSettingsScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
+                    onNavigateToUnparsed = {
+                        navController.navigate(Screen.CaptureUnparsed.route) {
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
+            composable(Screen.CaptureUnparsed.route) {
+                UnparsedAlertsScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() }
                 )
             }
             composable(Screen.Changelog.route) {

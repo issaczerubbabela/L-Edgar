@@ -30,6 +30,7 @@ Source root: `app/src/main/java/com/issaczerubbabel/ledgar/`
 - `data/remote` — Retrofit `ApiService` / DTOs for the Apps Script endpoint.
 - `data/repository` — Repository interfaces + impls; ViewModels talk only to repositories, never DAOs or Retrofit directly.
 - `data/preferences` — DataStore-backed preferences (theme, etc).
+- `capture` — auto-capture: a notification listener, per-bank parsers, categorization, and the inbox's repository. Full description in `docs/AUTO_CAPTURE.md`; read it before changing anything here.
 - `sync` — `SyncTriggers` (started in `SheetSyncApp`; watches Room and decides when to sync/back up), `SyncScheduler` (the only place work is queued), `SyncWorker` + `TransactionSyncer` (Transactions), `BackupWorker` (accounts, dropdowns, budgets).
 - `di` — Hilt modules.
 - `ui/screens`, `ui/components`, `ui/navigation`, `ui/theme` — Compose screens and navigation graph.
@@ -42,7 +43,11 @@ UI (Compose) → ViewModel (StateFlow) → Repository → Room (instant local wr
 
 ### Room model
 
-Core tables: `expense_records` (transaction ledger + sync state: `isSynced`, `syncAction`, `remoteTimestamp`), `account_records` (accounts/groups, referenced by `accountId`/`fromAccountId`/`toAccountId` for transfers), `budgets` (unique on `monthYear`+`category`; legacy per-category model, superseded by the bucket tables but kept for backup/rollback), `budget_cycles` / `budget_buckets` / `bucket_categories` (salary-cycle bucket budgeting; unique on `cycleId`+`category` so a category lives in exactly one bucket), `dropdown_options` (configurable dictionaries: `EXPENSE_CATEGORY`, `INCOME_CATEGORY`, `ACCOUNT_GROUP`, `PAYMENT_MODE`).
+Core tables: `expense_records` (transaction ledger + sync state: `isSynced`, `syncAction`, `remoteTimestamp`), `account_records` (accounts/groups, referenced by `accountId`/`fromAccountId`/`toAccountId` for transfers), `budgets` (unique on `monthYear`+`category`; legacy per-category model, superseded by the bucket tables but kept for backup/rollback), `budget_cycles` / `budget_buckets` / `bucket_categories` (salary-cycle bucket budgeting; unique on `cycleId`+`category` so a category lives in exactly one bucket), `dropdown_options` (configurable dictionaries: `EXPENSE_CATEGORY`, `INCOME_CATEGORY`, `ACCOUNT_GROUP`, `PAYMENT_MODE`), and the local-only auto-capture tables `captured_transactions`, `merchant_rules`, `account_aliases` and `unparsed_alerts` (never synced; only a user's Confirm turns a capture into an `expense_records` row, see ADR-0005).
+
+### Release builds
+
+The release build is shrunk with R8, which can break reflection-based code in ways debug builds and unit tests never show (it once crashed auto-capture at launch through Gson's `TypeToken`; the keep rules are in `app/proguard-rules.pro`). Before releasing, run `./gradlew installStaging` (the shrunk build, installed next to the real app) and open More > Auto-capture on a phone.
 
 ### Extending the app (typical flow)
 
@@ -73,6 +78,10 @@ This is enforced by a `PreToolUse` hook (`.github/hooks/changelog-enforcer.json`
 ### Issue tracker
 
 Issues live in GitHub Issues (`issaczerubbabela/L-Edgar`), managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 

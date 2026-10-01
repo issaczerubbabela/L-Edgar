@@ -14,6 +14,19 @@ fun formatRupees(amount: Double): String {
     return if (rounded < 0) "-₹$digits" else "₹$digits"
 }
 
+/**
+ * Like [formatRupees], but keeps the paise when there are any (₹212.40), so an amount someone is
+ * about to confirm is never shown rounded. Whole amounts stay as ₹450.
+ */
+fun formatRupeesExact(amount: Double): String {
+    val paise = abs(amount * 100).roundToLong()
+    val whole = paise / 100
+    val fraction = paise % 100
+    val sign = if (amount < 0 && paise != 0L) "-" else ""
+    val base = "₹" + groupIndian(whole.toString())
+    return if (fraction == 0L) sign + base else sign + base + "." + fraction.toString().padStart(2, '0')
+}
+
 private fun groupIndian(digits: String): String {
     if (digits.length <= 3) return digits
     val lastThree = digits.takeLast(3)

@@ -119,9 +119,12 @@ fun HistoryScreen(
     onNavigateToBookmarks: () -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToFilterSelection: () -> Unit,
+    onNavigateToCaptureInbox: () -> Unit,
     vm: HistoryViewModel = hiltViewModel(),
     monthlyVm: MonthlyViewModel = hiltViewModel(),
+    captureBadgeVm: com.issaczerubbabel.ledgar.viewmodel.CaptureBadgeViewModel = hiltViewModel(),
 ) {
+    val pendingCaptures by captureBadgeVm.pendingCount.collectAsStateWithLifecycle()
     val state by vm.uiState.collectAsStateWithLifecycle()
     val accounts by vm.accounts.collectAsStateWithLifecycle()
     val categories by vm.categories.collectAsStateWithLifecycle()
@@ -226,6 +229,10 @@ fun HistoryScreen(
         ) {
             PeriodTabRow(selectedTab, headerBg, headerText) { tabIndex ->
                 selectedTab = tabIndex
+            }
+
+            if (pendingCaptures > 0) {
+                CaptureBanner(count = pendingCaptures, onClick = onNavigateToCaptureInbox)
             }
 
             // Single pinned summary row below tabs
@@ -1191,5 +1198,29 @@ private fun TransactionRow(
                 softWrap = false
             )
         }
+    }
+}
+
+@Composable
+private fun CaptureBanner(count: Int, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = if (count == 1) "1 captured transaction to review" else "$count captured transactions to review",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = "Review",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onPrimaryContainer
+        )
     }
 }
