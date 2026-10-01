@@ -25,6 +25,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Auto-capture domain terms and ADRs documented in docs/
 - Added the poteto-mode agent skill (cursor/plugins pstack) to .claude/skills
 - Added the remaining cursor/plugins pstack skills to .claude/skills (tdd and teach kept as the existing mattpocock versions)
+- Trip split terms (Trip, Member, Trip expense, Share, Balance, Settlement, Settle-up plan, Post) added to the CONTEXT.md glossary
 
 ## [1.1.0] - 2026-09-26
 
