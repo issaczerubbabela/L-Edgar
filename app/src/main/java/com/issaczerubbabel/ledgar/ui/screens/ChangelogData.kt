@@ -29,7 +29,9 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Auto-capture release build no longer crashes due to Gson reflection in ProGuard"
         ),
         developer = listOf(
-            "Auto-capture domain terms and ADRs documented in docs/"
+            "Auto-capture domain terms and ADRs documented in docs/",
+            "Added the poteto-mode agent skill (cursor/plugins pstack) to .claude/skills",
+            "Added the remaining cursor/plugins pstack skills to .claude/skills (tdd and teach kept as the existing mattpocock versions)"
         )
     ),
     ChangelogRelease(
