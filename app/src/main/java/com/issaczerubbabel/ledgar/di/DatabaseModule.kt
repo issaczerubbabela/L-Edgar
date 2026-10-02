@@ -8,13 +8,20 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
+import com.issaczerubbabel.ledgar.data.local.dao.AccountAliasDao
 import com.issaczerubbabel.ledgar.data.local.dao.AccountDao
 import com.issaczerubbabel.ledgar.data.local.dao.BucketBudgetDao
 import com.issaczerubbabel.ledgar.data.local.dao.BudgetDao
+import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
 import com.issaczerubbabel.ledgar.data.local.migration.BucketBudgetMigration
+import com.issaczerubbabel.ledgar.data.local.migration.CaptureMigration
+import com.issaczerubbabel.ledgar.data.local.migration.TripMigration
 import com.issaczerubbabel.ledgar.data.local.dao.DropdownOptionDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
+import com.issaczerubbabel.ledgar.data.local.dao.MerchantRuleDao
 import com.issaczerubbabel.ledgar.data.local.dao.RecurringRuleDao
+import com.issaczerubbabel.ledgar.data.local.dao.UnparsedAlertDao
+import com.issaczerubbabel.ledgar.data.local.dao.TripDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -107,8 +114,30 @@ object DatabaseModule {
         }
     }
 
-    /** Adds the `recurring_rules` table and the column linking a Transaction back to the rule that created it. */
+    /**
+     * Adds the auto-capture tables. Development builds of auto-capture numbered them 18 -> 19 and
+     * 19 -> 20 before sync phase 2 and Stats roles took those numbers, so an install from one can sit
+     * at "20" with the capture tables but without the sync columns or roles. Repair that first, the
+     * same way 19 -> 20 repairs its own development builds; both steps are idempotent.
+     */
     internal val MIGRATION_20_21 = object : Migration(20, 21) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            if ("syncId" !in columnsOf(db, "expense_records") || "role" !in columnsOf(db, "dropdown_options")) {
+                MIGRATION_19_20.migrate(db)
+            }
+            CaptureMigration.createTables(db)
+        }
+    }
+
+    /** Adds the local-only Trip tables (see "Trips" in CONTEXT.md). Additive and idempotent. */
+    internal val MIGRATION_21_22 = object : Migration(21, 22) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            TripMigration.createTables(db)
+        }
+    }
+
+    /** Adds the `recurring_rules` table and the column linking a Transaction back to the rule that created it. */
+    internal val MIGRATION_22_23 = object : Migration(22, 23) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL(
                 "CREATE TABLE IF NOT EXISTS `recurring_rules` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
@@ -277,6 +306,8 @@ object DatabaseModule {
             .addMigrations(MIGRATION_18_19)
             .addMigrations(MIGRATION_19_20)
             .addMigrations(MIGRATION_20_21)
+            .addMigrations(MIGRATION_21_22)
+            .addMigrations(MIGRATION_22_23)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .addCallback(callback)
             .build()
@@ -296,6 +327,21 @@ object DatabaseModule {
 
     @Provides
     fun provideDropdownOptionDao(db: SheetSyncDatabase): DropdownOptionDao = db.dropdownOptionDao()
+
+    @Provides
+    fun provideCaptureDao(db: SheetSyncDatabase): CaptureDao = db.captureDao()
+
+    @Provides
+    fun provideMerchantRuleDao(db: SheetSyncDatabase): MerchantRuleDao = db.merchantRuleDao()
+
+    @Provides
+    fun provideAccountAliasDao(db: SheetSyncDatabase): AccountAliasDao = db.accountAliasDao()
+
+    @Provides
+    fun provideUnparsedAlertDao(db: SheetSyncDatabase): UnparsedAlertDao = db.unparsedAlertDao()
+
+    @Provides
+    fun provideTripDao(db: SheetSyncDatabase): TripDao = db.tripDao()
 
     @Provides
     fun provideRecurringRuleDao(db: SheetSyncDatabase): RecurringRuleDao = db.recurringRuleDao()

@@ -12,6 +12,8 @@ import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepositoryImpl
 import com.issaczerubbabel.ledgar.data.repository.RecurringRepository
 import com.issaczerubbabel.ledgar.data.repository.RecurringRepositoryImpl
+import com.issaczerubbabel.ledgar.data.repository.TripRepository
+import com.issaczerubbabel.ledgar.data.repository.TripRepositoryImpl
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -45,4 +47,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindRecurringRepository(impl: RecurringRepositoryImpl): RecurringRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindTripRepository(impl: TripRepositoryImpl): TripRepository
 }

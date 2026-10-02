@@ -5,6 +5,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeFormatterBuilder
 import java.time.temporal.ChronoField
@@ -85,6 +86,16 @@ private fun parseShortDate(input: String): LocalDate? {
 
     return runCatching { LocalDate.of(year, month, day) }.getOrNull()
 }
+
+/**
+ * Converts to UTC-midnight millis, matching how Compose's `DatePickerState` stores and returns a
+ * selection. Converting in the device zone instead shifts the picked day by one wherever the zone
+ * doesn't fall on a UTC day boundary at local midnight.
+ */
+fun LocalDate.toPickerMillis(): Long = atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+
+/** The inverse of [toPickerMillis]. */
+fun Long.pickerMillisToLocalDate(): LocalDate = Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
 
 fun formatAsOfDateTime(value: LocalDateTime): String = value.format(asOfDateTimeFormatter)
 

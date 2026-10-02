@@ -42,7 +42,7 @@ class LogViewModel @Inject constructor(
     private val recurringRepository: RecurringRepository,
     private val syncScheduler: SyncScheduler,
     bucketPreviewSource: BucketPreviewSource,
-    savedStateHandle: SavedStateHandle
+    private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
     val accounts: StateFlow<List<AccountRecord>> = accountRepository
@@ -62,7 +62,30 @@ class LogViewModel @Inject constructor(
     val bucketContext: StateFlow<BucketPreviewContext?> = bucketPreviewSource.context
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    var selectedDate by mutableStateOf(LocalDate.now())
+    private val selectedDateState = mutableStateOf(
+        savedStateHandle.get<String>(KEY_SELECTED_DATE)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+            ?: LocalDate.now()
+    )
+
+    /** The date shown on the date pill. Set through [pickDate], not assigned directly, so a picked date can be pinned. */
+    var selectedDate: LocalDate
+        get() = selectedDateState.value
+        private set(value) {
+            selectedDateState.value = value
+            savedStateHandle[KEY_SELECTED_DATE] = value.toString()
+        }
+
+    /** True once the user has explicitly picked a date other than today on this screen; kept across a save. */
+    private var datePinned: Boolean = savedStateHandle.get<Boolean>(KEY_DATE_PINNED) ?: false
+        set(value) {
+            field = value
+            savedStateHandle[KEY_DATE_PINNED] = value
+        }
+
+    /** The date the last successful save landed on, for the "Saved to <date>" snackbar. */
+    var lastSavedDate by mutableStateOf<LocalDate?>(null)
+        private set
+
     var selectedType by mutableStateOf(TransactionType.EXPENSE)
     var selectedCategory by mutableStateOf("")
     var selectedAccountId by mutableStateOf<Long?>(null)
@@ -229,8 +252,11 @@ class LogViewModel @Inject constructor(
                 repository.save(record)
             }
 
+            if (!isEditMode) {
+                lastSavedDate = selectedDate
+                resetForm()
+            }
             saveSuccess = true
-            if (!isEditMode) resetForm()
         }
     }
 
@@ -246,6 +272,12 @@ class LogViewModel @Inject constructor(
             recurringRepository.deleteRule(rule)
             editingRule = null
         }
+    }
+
+    /** Called when the user picks a date from the date pill's picker. */
+    fun pickDate(date: LocalDate) {
+        selectedDate = date
+        datePinned = date != LocalDate.now()
     }
 
     fun deleteCurrent() {
@@ -310,7 +342,7 @@ class LogViewModel @Inject constructor(
     }
 
     private fun resetForm() {
-        selectedDate = LocalDate.now()
+        if (!datePinned) selectedDate = LocalDate.now()
         selectedType = TransactionType.EXPENSE
         selectedCategory = ""
         selectedAccountId = null
@@ -327,5 +359,10 @@ class LogViewModel @Inject constructor(
         viewModelScope.launch {
             syncScheduler.transactionSyncStatus.collect { syncStatus = it }
         }
+    }
+
+    private companion object {
+        const val KEY_SELECTED_DATE = "logSelectedDate"
+        const val KEY_DATE_PINNED = "logDatePinned"
     }
 }

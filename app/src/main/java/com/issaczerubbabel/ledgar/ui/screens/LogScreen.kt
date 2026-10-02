@@ -22,6 +22,7 @@ import com.issaczerubbabel.ledgar.ui.components.ChipSpec
 import com.issaczerubbabel.ledgar.ui.components.NumericKeypad
 import com.issaczerubbabel.ledgar.ui.components.OptionPickerSheet
 import com.issaczerubbabel.ledgar.ui.components.PickerOption
+import com.issaczerubbabel.ledgar.ui.components.SingleDatePickerDialog
 import com.issaczerubbabel.ledgar.util.RecurrenceCalculator
 import com.issaczerubbabel.ledgar.util.RecurrenceFrequency
 import com.issaczerubbabel.ledgar.util.TransactionType
@@ -29,9 +30,7 @@ import com.issaczerubbabel.ledgar.util.applyKeypadAction
 import com.issaczerubbabel.ledgar.viewmodel.AccountTarget
 import com.issaczerubbabel.ledgar.viewmodel.LogViewModel
 import com.issaczerubbabel.ledgar.sync.SyncStatus
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 private sealed interface LogSheet {
@@ -95,7 +94,13 @@ fun LogScreen(
             if (vm.isEditMode) {
                 onSaved()
             } else {
-                snackbarHostState.showSnackbar("Transaction saved")
+                val savedDate = vm.lastSavedDate
+                val message = if (savedDate != null && savedDate != LocalDate.now()) {
+                    "Saved to ${savedDate.format(DateTimeFormatter.ofPattern("EEE, dd MMM"))}"
+                } else {
+                    "Transaction saved"
+                }
+                snackbarHostState.showSnackbar(message)
             }
             vm.resetSaveSuccess()
         }
@@ -135,6 +140,7 @@ fun LogScreen(
 
             DatePillRow(
                 date = vm.selectedDate,
+                isToday = vm.selectedDate == LocalDate.now(),
                 contextText = transferContext,
                 onClick = { showDatePicker = true }
             )
@@ -318,23 +324,11 @@ fun LogScreen(
     }
 
     if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = vm.selectedDate
-                .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        SingleDatePickerDialog(
+            initialDate = vm.selectedDate,
+            onDismiss = { showDatePicker = false },
+            onConfirm = { vm.pickDate(it); showDatePicker = false }
         )
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { millis ->
-                        vm.selectedDate = Instant.ofEpochMilli(millis)
-                            .atZone(ZoneId.systemDefault()).toLocalDate()
-                    }
-                    showDatePicker = false
-                }) { Text("OK") }
-            },
-            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } }
-        ) { DatePicker(state = datePickerState) }
     }
 }
 
@@ -377,11 +371,13 @@ private fun LogTopBar(
 }
 
 @Composable
-private fun DatePillRow(date: LocalDate, contextText: String?, onClick: () -> Unit) {
+private fun DatePillRow(date: LocalDate, isToday: Boolean, contextText: String?, onClick: () -> Unit) {
+    val containerColor = if (isToday) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.tertiaryContainer
+    val contentColor = if (isToday) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onTertiaryContainer
     Surface(
         onClick = onClick,
         shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        color = containerColor,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
@@ -396,15 +392,16 @@ private fun DatePillRow(date: LocalDate, contextText: String?, onClick: () -> Un
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     Icons.Filled.CalendarMonth,
-                    contentDescription = "Change date",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    contentDescription = if (isToday) "Change date" else "Change date, currently kept on ${date.format(DateTimeFormatter.ofPattern("d MMMM yyyy"))}",
+                    tint = contentColor,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = date.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),
+                    text = if (isToday) "Today" else date.format(DateTimeFormatter.ofPattern("EEE, dd MMM yyyy")),
                     style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    color = contentColor
                 )
             }
             if (contextText != null) {

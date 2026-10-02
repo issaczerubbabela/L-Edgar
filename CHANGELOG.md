@@ -6,6 +6,43 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `app/src/main/java/com/issaczerubbabel/ledgar/ui/screens/ChangelogData.kt`,
 which is also what the app shows under More > Changelog. Developer notes appear here only.
 
+## [1.3.0] - 2026-10-01
+
+### Added
+
+- Trips (More > Trips): log shared trip payments with who paid and who was in, split them equally, with an extra for one person, or by exact amounts
+- Trips: see each person's balance and the fewest payments to settle up, mark payments as paid, and pay what you owe through your UPI app
+- Trips: share a summary text or a CSV with friends, then review and post only your share of each expense to your transactions; un-archive to undo
+- Trips: a banner on the Trans tab while a trip is active, and "Add to trip" on payment alerts in the review inbox
+- Add Transaction: a Repeat chip for rent, SIPs and salary. Weekly, biweekly, monthly, quarterly or yearly rules add themselves automatically when they're due, catching up on any missed while the app was closed. Recurring rules aren't backed up to your Sheet yet, so a reinstall loses the rule (not the transactions it already made)
+
+### Developer
+
+- Added the poteto-mode agent skill (cursor/plugins pstack) to .claude/skills
+- Added the remaining cursor/plugins pstack skills to .claude/skills (tdd and teach kept as the existing mattpocock versions)
+- Trip split terms (Trip, Member, Trip expense, Share, Balance, Settlement, Settle-up plan, Post) added to the CONTEXT.md glossary
+- ADR-0008: posting a Trip records only your Share, not what you paid
+- Trip split: local-only Room tables (migration 21 -> 22), a pure TripMath module with tests, TripRepository with Post / Un-archive / Add-to-trip tests
+- Recurring transactions: local-only Room table (migration 22 -> 23), a pure RecurrenceCalculator with tests, RecurringRepository catch-up materialization with tests
+
+## [1.2.0] - 2026-10-01
+
+### Added
+
+- Auto-capture: the app listens for bank and UPI payment alerts, extracts transaction details, and presents a review inbox for you to confirm
+- Auto-capture: supports Axis, Google Pay and bank parsers, with configurable merchant rules and merchant aliases for better categorization
+- Auto-capture: lock-screen Confirm notification for ready captures, and "Always use this" to skip review for familiar merchants
+- Auto-capture: captured transactions are dated from their alert timestamp instead of today
+
+### Fixed
+
+- Date picker timezone shift: picking a date no longer moves it to the day before in some time zones, and the picked date is kept after saving
+- Auto-capture release build no longer crashes due to Gson reflection in ProGuard
+
+### Developer
+
+- Auto-capture domain terms and ADRs documented in docs/
+
 ## [1.1.0] - 2026-09-26
 
 ### Added
@@ -30,7 +67,11 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - A transaction changed both on the phone and in the Sheet becomes a conflict for you to resolve in Settings, instead of one side silently winning
 - Settings: Sync now, Resolve sync conflicts, and Find duplicate transactions
 - Deleting many rows in the Sheet at once asks before removing them from the phone, and lets you put them back
-- Add Transaction: a Repeat chip for rent, SIPs and salary. Weekly, biweekly, monthly, quarterly or yearly rules add themselves automatically when they're due, catching up on any missed while the app was closed. Recurring rules aren't backed up to your Sheet yet, so a reinstall loses the rule (not the transactions it already made)
+- Auto-capture: bank and UPI alerts (HDFC, City Union Bank, Axis Bank, Google Pay, Paytm, and bank SMS through Messages) become suggestions in a review inbox, shown by a banner on Trans. and a badge on its tab. Nothing is saved until you confirm. Turn it on in More > Auto-capture
+- Auto-capture: match the kinds of merchant it recognises to your own categories. It learns from what you confirm, and Always use this saves a rule after one confirmation
+- Auto-capture: a ready suggestion from an account you've mapped can be confirmed from a notification. The lock screen hides the amount, and Confirm needs your phone unlocked
+- Auto-capture: suggestions use the date printed in the alert and keep their paise
+- Auto-capture: alerts it couldn't read are listed in More > Auto-capture with Copy and Delete, so a bank changing its wording gets noticed. Messages from people and OTPs are never kept
 
 ### Changed
 
@@ -47,6 +88,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - On a fresh install, transactions pulled from the Sheet land on your restored accounts instead of a placeholder Cash account
 - Sync pauses with an Update script notice when your Apps Script is too old, instead of writing to it unsafely
 - Update your Apps Script from Database Setup after installing: two-way sync needs it, and it backs up buckets and category roles
+- Add Transaction keeps the date you picked for the next transaction instead of going back to today after every save
 
 ### Fixed
 
@@ -69,6 +111,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Long bucket names wrap, and bucket amounts line up
 - Export no longer shows its date hint in red before you type anything
 - The Apps Script shown in Database Setup includes description support again
+- Picking a date on Add Transaction, the Trans. tab's bulk Change dates, or an account's As-of date no longer moves it to the day before in time zones ahead of UTC, and the As-of date now keeps its time of day
 
 ### Developer
 
@@ -84,6 +127,11 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - versionCode is derived from versionName (major*10000 + minor*100 + patch)
 - Debug builds install next to the release app as L.Edgar (Debug) and can use a test Apps Script from APPS_SCRIPT_URL_DEBUG
 - Android CI also builds claude/** branches, with an Oracle JDK to match the pinned toolchain
+- /daily-idea and /daily-ship Claude Code commands: research and file one improvement issue a day, and ship one issue as a pull request a day
+- Auto-capture (docs/AUTO_CAPTURE.md, ADRs 0005-0007): a notification listener with a fixed app allowlist, per-bank parsers tested against real alerts, rule and keyword categorization, and four local-only tables
+- Room migration 20 -> 21 adds the auto-capture tables idempotently, and first repairs installs from auto-capture development builds that numbered them 18 -> 19 and 19 -> 20
+- R8 keep rules for Gson's TypeToken: the shrunk build crashed the notification listener as soon as Android started it
+- Splash-screen theme attributes moved to values-v31; two lint false positives (the Quick Settings tile's Android 14 guard and the widget's tint) are marked as reviewed
 
 ## [1.0.2] - 2026-04-10
 
@@ -229,6 +277,8 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - Material 3 design with light and dark themes
 
+[1.3.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.3.0
+[1.2.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.2.0
 [1.1.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.1.0
 [1.0.2]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.0.2
 [1.0.1]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.0.1

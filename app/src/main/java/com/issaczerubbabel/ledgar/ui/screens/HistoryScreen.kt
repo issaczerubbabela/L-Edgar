@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.ui.components.DropdownField
+import com.issaczerubbabel.ledgar.ui.components.SingleDatePickerDialog
 import com.issaczerubbabel.ledgar.ui.theme.*
 import com.issaczerubbabel.ledgar.viewmodel.CalendarCell
 import com.issaczerubbabel.ledgar.viewmodel.DayGroup
@@ -46,9 +47,7 @@ import com.issaczerubbabel.ledgar.viewmodel.HistoryViewModel
 import com.issaczerubbabel.ledgar.viewmodel.MonthlyViewModel
 import com.issaczerubbabel.ledgar.viewmodel.PeriodSummary
 import java.time.DayOfWeek
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 import kotlinx.coroutines.launch
 
 private val TABS = listOf("Daily", "Calendar", "Monthly")
@@ -120,9 +119,14 @@ fun HistoryScreen(
     onNavigateToBookmarks: () -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToFilterSelection: () -> Unit,
+    onNavigateToCaptureInbox: () -> Unit,
+    onOpenTrip: (Long) -> Unit = {},
+    onAddTripExpense: (Long) -> Unit = {},
     vm: HistoryViewModel = hiltViewModel(),
     monthlyVm: MonthlyViewModel = hiltViewModel(),
+    captureBadgeVm: com.issaczerubbabel.ledgar.viewmodel.CaptureBadgeViewModel = hiltViewModel(),
 ) {
+    val pendingCaptures by captureBadgeVm.pendingCount.collectAsStateWithLifecycle()
     val state by vm.uiState.collectAsStateWithLifecycle()
     val accounts by vm.accounts.collectAsStateWithLifecycle()
     val categories by vm.categories.collectAsStateWithLifecycle()
@@ -228,6 +232,11 @@ fun HistoryScreen(
             PeriodTabRow(selectedTab, headerBg, headerText) { tabIndex ->
                 selectedTab = tabIndex
             }
+
+            if (pendingCaptures > 0) {
+                CaptureBanner(count = pendingCaptures, onClick = onNavigateToCaptureInbox)
+            }
+            ActiveTripBanner(onOpenTrip = onOpenTrip, onAddExpense = onAddTripExpense)
 
             // Single pinned summary row below tabs
             val pinnedSummary = when (selectedTab) {
@@ -479,36 +488,15 @@ fun HistoryScreen(
     }
 
     if (pendingBatchAction == BatchAction.EDIT_DATES) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = LocalDate.now()
-                .atStartOfDay(ZoneId.systemDefault())
-                .toInstant()
-                .toEpochMilli()
-        )
-        DatePickerDialog(
-            onDismissRequest = { pendingBatchAction = null },
-            confirmButton = {
-                TextButton(onClick = {
-                    val selectedMillis = datePickerState.selectedDateMillis
-                    if (selectedMillis != null) {
-                        val selectedDate = Instant.ofEpochMilli(selectedMillis)
-                            .atZone(ZoneId.systemDefault())
-                            .toLocalDate()
-                        vm.updateSelectedDates(selectedDate.toString())
-                    }
-                    pendingBatchAction = null
-                }) {
-                    Text("Update")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingBatchAction = null }) {
-                    Text("Cancel")
-                }
+        SingleDatePickerDialog(
+            initialDate = LocalDate.now(),
+            confirmText = "Update",
+            onDismiss = { pendingBatchAction = null },
+            onConfirm = {
+                vm.updateSelectedDates(it.toString())
+                pendingBatchAction = null
             }
-        ) {
-            DatePicker(state = datePickerState)
-        }
+        )
     }
 
     if (pendingBatchAction == BatchAction.EDIT_CATEGORIES) {
@@ -1213,5 +1201,29 @@ private fun TransactionRow(
                 softWrap = false
             )
         }
+    }
+}
+
+@Composable
+private fun CaptureBanner(count: Int, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = if (count == 1) "1 captured transaction to review" else "$count captured transactions to review",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = "Review",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onPrimaryContainer
+        )
     }
 }

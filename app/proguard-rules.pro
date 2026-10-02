@@ -21,6 +21,13 @@
     @com.google.gson.annotations.SerializedName <fields>;
 }
 
+# Gson's TypeToken reads its type argument from the generic signature of the anonymous subclass
+# (object : TypeToken<Map<String, String>>() {}). R8 strips that signature unless the subclass is
+# kept, and Gson then throws "TypeToken must be created with a type argument" at runtime. Auto-capture
+# uses this for the keyword list, the category mapping and the notification trace.
+-keep class com.google.gson.reflect.TypeToken { *; }
+-keep class * extends com.google.gson.reflect.TypeToken
+
 # Moshi generated adapters and annotated models (safe even if Moshi is introduced).
 -keep @com.squareup.moshi.JsonClass class * { *; }
 

@@ -80,6 +80,32 @@ A user-editable choice for Categories and Account groups. `PAYMENT_MODE` options
 **Bookmark**:
 A flag the user puts on a Transaction to find it again in the Bookmarks list.
 
+## Auto-capture
+
+**Captured transaction**:
+A bank or UPI alert the app has parsed but not yet turned into a Transaction. It waits in the review inbox until the user acts on it.
+_Avoid_: pending transaction, alert, capture (as a standalone noun)
+
+**Confirm**:
+Turning a Captured transaction into a real Transaction. Only the user confirms; nothing about auto-capture does this on its own.
+_Avoid_: auto-log, auto-add
+
+**Merchant rule**:
+A saved mapping from a normalized merchant name to a Category, used to categorize future Captured transactions from the same merchant. Either set by the user or learned from repeated confirmations.
+_Avoid_: category rule
+
+**Account alias**:
+A saved mapping from a bank account's last four digits or a UPI VPA to one of the user's Accounts, used to work out which Account a Captured transaction belongs to.
+_Avoid_: account mapping
+
+**Unparsed alert**:
+A bank or UPI alert that showed an amount but that no parser could read. It is kept for 30 days so a change in a bank's wording can be noticed and supported.
+_Avoid_: failed alert
+
+**Confidence band**:
+High, Check or Low: how sure auto-capture is about a Captured transaction's suggested Category. Only High, with its Account already resolved, notifies the user; everything else waits in the inbox.
+_Avoid_: confidence score
+
 ## Google Sheets
 
 **Sheet**:
@@ -129,6 +155,39 @@ A Transaction changed differently on the phone and in the Sheet since they last 
 
 **Held deletion**:
 A Transaction a Pull found missing from the Sheet but didn't delete from the phone, because too many went missing at once. The user decides whether to delete it or put it back in the Sheet.
+
+## Trips
+
+**Trip**:
+A named, time-bound outing whose shared costs are recorded and split between its Members. It is Active while being recorded and Archived once Posted.
+_Avoid_: group, event, split (as a noun)
+
+**Member**:
+A named person on a Trip. The user is always one of them; the others don't use the app.
+_Avoid_: participant, friend, person
+
+**Trip expense**:
+One payment made during a Trip: an amount, date, purpose, the one Member who paid, and how it is split between Members. It is not a Transaction.
+_Avoid_: trip transaction, bill
+
+**Share**:
+The part of a Trip expense that one Member owes.
+_Avoid_: portion, cut
+
+**Balance**:
+What a Member paid on a Trip minus their Shares and adjusted by Settlements. Positive means they are owed money.
+
+**Settlement**:
+A repayment between two Members that moves their Balances towards zero. It never counts as spending.
+_Avoid_: reimbursement, payback
+
+**Settle-up plan**:
+The fewest payments between Members that bring every Balance to zero.
+_Avoid_: simplified debts
+
+**Post**:
+Turning the user's Shares of a Trip into Transactions, after the user reviews and edits them. Posting archives the Trip.
+_Avoid_: push (that word means sending Transactions to the Sheet), export, sync
 
 ## Entry points
 
