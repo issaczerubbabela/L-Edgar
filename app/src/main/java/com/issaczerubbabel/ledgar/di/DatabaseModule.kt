@@ -19,6 +19,7 @@ import com.issaczerubbabel.ledgar.data.local.migration.TripMigration
 import com.issaczerubbabel.ledgar.data.local.dao.DropdownOptionDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
 import com.issaczerubbabel.ledgar.data.local.dao.MerchantRuleDao
+import com.issaczerubbabel.ledgar.data.local.dao.RecurringRuleDao
 import com.issaczerubbabel.ledgar.data.local.dao.UnparsedAlertDao
 import com.issaczerubbabel.ledgar.data.local.dao.TripDao
 import dagger.Module
@@ -132,6 +133,33 @@ object DatabaseModule {
     internal val MIGRATION_21_22 = object : Migration(21, 22) {
         override fun migrate(db: SupportSQLiteDatabase) {
             TripMigration.createTables(db)
+        }
+    }
+
+    /** Adds the `recurring_rules` table and the column linking a Transaction back to the rule that created it. */
+    internal val MIGRATION_22_23 = object : Migration(22, 23) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `recurring_rules` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`type` TEXT NOT NULL, `category` TEXT NOT NULL, `description` TEXT NOT NULL, `amount` REAL NOT NULL, " +
+                    "`accountId` INTEGER, `remarks` TEXT NOT NULL, `fromAccountId` INTEGER, `toAccountId` INTEGER, " +
+                    "`frequency` TEXT NOT NULL, `interval` INTEGER NOT NULL, `anchorDay` INTEGER NOT NULL, " +
+                    "`startDate` TEXT NOT NULL, `nextDate` TEXT NOT NULL, `endDate` TEXT, `remainingCount` INTEGER, " +
+                    "`autoAdd` INTEGER NOT NULL, `isPaused` INTEGER NOT NULL, `createdAt` TEXT NOT NULL, " +
+                    "FOREIGN KEY(`accountId`) REFERENCES `account_records`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL , " +
+                    "FOREIGN KEY(`fromAccountId`) REFERENCES `account_records`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL , " +
+                    "FOREIGN KEY(`toAccountId`) REFERENCES `account_records`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )"
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_recurring_rules_accountId` ON `recurring_rules` (`accountId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_recurring_rules_fromAccountId` ON `recurring_rules` (`fromAccountId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_recurring_rules_toAccountId` ON `recurring_rules` (`toAccountId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_recurring_rules_nextDate` ON `recurring_rules` (`nextDate`)")
+
+            // Not a foreign key: SQLite can't add one to an existing table. Deleting a rule leaves
+            // this column pointing at nothing on the Transactions it already created, which is fine:
+            // nothing reads it back through a join, only to look a rule up by id.
+            db.execSQL("ALTER TABLE expense_records ADD COLUMN recurringRuleId INTEGER")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_expense_records_recurringRuleId` ON `expense_records` (`recurringRuleId`)")
         }
     }
 
@@ -279,6 +307,7 @@ object DatabaseModule {
             .addMigrations(MIGRATION_19_20)
             .addMigrations(MIGRATION_20_21)
             .addMigrations(MIGRATION_21_22)
+            .addMigrations(MIGRATION_22_23)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .addCallback(callback)
             .build()
@@ -313,4 +342,7 @@ object DatabaseModule {
 
     @Provides
     fun provideTripDao(db: SheetSyncDatabase): TripDao = db.tripDao()
+
+    @Provides
+    fun provideRecurringRuleDao(db: SheetSyncDatabase): RecurringRuleDao = db.recurringRuleDao()
 }

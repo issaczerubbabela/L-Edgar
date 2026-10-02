@@ -99,14 +99,14 @@ private fun responsiveTextSize(baseSp: Float, minSp: Float = 12f, maxSp: Float =
 
 /**
  * The chip row under the amount. [primaryChips] animate as a group when [swapKey] changes (for
- * example the category/account pair swapping for From/To on a transfer); [trailingChip] stays put.
+ * example the category/account pair swapping for From/To on a transfer); [trailingChips] stay put.
  */
 @Composable
 fun ChipRow(
     primaryChips: List<ChipSpec>,
     swapKey: Any,
     modifier: Modifier = Modifier,
-    trailingChip: ChipSpec? = null
+    trailingChips: List<ChipSpec> = emptyList()
 ) {
     Row(
         modifier = modifier
@@ -127,7 +127,7 @@ fun ChipRow(
                 chips.forEach { TransactionChip(it) }
             }
         }
-        trailingChip?.let { TransactionChip(it) }
+        trailingChips.forEach { TransactionChip(it) }
     }
 }
 

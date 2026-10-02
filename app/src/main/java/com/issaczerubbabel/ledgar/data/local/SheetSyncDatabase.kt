@@ -10,6 +10,7 @@ import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
 import com.issaczerubbabel.ledgar.data.local.dao.DropdownOptionDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
 import com.issaczerubbabel.ledgar.data.local.dao.MerchantRuleDao
+import com.issaczerubbabel.ledgar.data.local.dao.RecurringRuleDao
 import com.issaczerubbabel.ledgar.data.local.dao.TripDao
 import com.issaczerubbabel.ledgar.data.local.dao.UnparsedAlertDao
 import com.issaczerubbabel.ledgar.data.local.entity.AccountAlias
@@ -22,6 +23,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRule
+import com.issaczerubbabel.ledgar.data.local.entity.RecurringRule
 import com.issaczerubbabel.ledgar.data.local.entity.TripExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.TripExpenseShareRecord
 import com.issaczerubbabel.ledgar.data.local.entity.TripMemberRecord
@@ -46,9 +48,10 @@ import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
         TripMemberRecord::class,
         TripExpenseRecord::class,
         TripExpenseShareRecord::class,
-        TripSettlementRecord::class
+        TripSettlementRecord::class,
+        RecurringRule::class
     ],
-    version = 22,
+    version = 23,
     exportSchema = false
 )
 abstract class SheetSyncDatabase : RoomDatabase() {
@@ -62,4 +65,5 @@ abstract class SheetSyncDatabase : RoomDatabase() {
     abstract fun accountAliasDao(): AccountAliasDao
     abstract fun unparsedAlertDao(): UnparsedAlertDao
     abstract fun tripDao(): TripDao
+    abstract fun recurringRuleDao(): RecurringRuleDao
 }
