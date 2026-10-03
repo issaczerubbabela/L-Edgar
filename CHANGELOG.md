@@ -22,7 +22,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Trip split terms (Trip, Member, Trip expense, Share, Balance, Settlement, Settle-up plan, Post) added to the CONTEXT.md glossary
 - ADR-0008: posting a Trip records only your Share, not what you paid
 - Trip split: local-only Room tables (migration 21 -> 22), a pure TripMath module with tests, TripRepository with Post / Un-archive / Add-to-trip tests
-- Sinking funds plan (docs/SINKING_FUNDS_PLAN.md): research on other budgeting apps, the cycle maths, screens, data model and phased delivery
+- Sinking funds plan (docs/SINKING_FUNDS_PLAN.md): research on other budgeting apps, how it fits the current Budget screens, the cycle maths, data model and phased delivery
 
 ## [1.2.0] - 2026-10-01
 

@@ -61,18 +61,27 @@ Transactions and the Sheet's `_responses` tab don't change. Stats' Spent and Sav
 
 ## Screens
 
-1. **Budget tab**: "Set aside" in the cycle header, and a funds strip above Buckets with the
-   most urgent first, capped at 3, plus "See all".
-2. **Fund detail**: one bar showing saved (solid) and this cycle's set-aside (striped), balance
-   by cycle against a dashed target line, the Categories it pays for, repeat and last paid,
-   "Skip this cycle" and "Log payment".
-3. **New / edit fund sheet**: templates, name + emoji, target, due date, repeat, the Categories
-   it pays for, already saved, and the live suggestion. Warns when a Category leaves a Bucket.
-4. **Plan this cycle**: a "Set aside" group before Buckets, with inline amounts and "Use
-   suggestions". Fund-owned Categories are shown locked in the picker.
-5. **Start a cycle**: a "Set aside for funds" toggle next to "Carry over buckets", calling out
-   any fund due in the new cycle.
-6. **Add transaction** (Phase 4): picking a fund Category shows "Paid from X" and any spill.
+These fit into the Budget screens as they ship today (`BudgetHomeScreen`, `PlanBucketsScreen`,
+`StartCycleScreen`, `BucketDetailScreen`), reusing `BucketRow`, `PaceBar`, `SectionLabel`,
+`AllocationStepper` and the tinted note boxes. The app is dark-only.
+
+1. **Budget**: the hero line becomes "of ₹68,000 · ₹6,500 set aside · ₹11,240 spent", so Left
+   to spend and Daily pace drop. A SINKING FUNDS section goes **under** Buckets and the
+   Unbucketed nudge. Its rows look like `BucketRow`, but with a status pill on the right and a
+   bar with no pace tick (solid part saved, striped part this cycle's set-aside). Most urgent
+   first, 3 shown, "See all".
+2. **Plan this cycle** (renamed from "Plan your buckets"): a SET ASIDE group above BUCKETS with
+   the same stepper, "Suggested ₹X" lines and "Use suggested". Unallocated takes set-asides into
+   account. A Bucket row notes a Category that moved to a fund. "+ New fund" sits next to
+   "+ New bucket".
+3. **Start new cycle**: a "Set aside for sinking funds" switch under "Carry over my buckets",
+   plus a note for any fund due in the new cycle.
+4. **Fund detail** (new): copies Bucket detail. SAVED is shown big, with the bar, the
+   Categories it pays for, and what was paid from it. Its note says "This rolls over".
+5. **New / edit fund sheet** (new): copies Edit bucket, replacing Allocated with Target, Due,
+   Repeats and Already saved, and showing the live suggestion.
+6. **Bucket detail**: the existing "Nothing rolls over" note gets a link to move a Category to a
+   sinking fund. Add transaction (Phase 4) shows "Paid from X" and any spill.
 
 ## Data
 
