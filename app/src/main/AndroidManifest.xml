@@ -79,6 +79,20 @@
                 android:resource="@xml/quick_log_widget_info" />
         </receiver>
 
+        <receiver
+            android:name=".reminder.DailyReminderReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".reminder.ReminderBootTimeReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
             <provider
                 android:name="androidx.core.content.FileProvider"
                 android:authorities="${applicationId}.fileprovider"

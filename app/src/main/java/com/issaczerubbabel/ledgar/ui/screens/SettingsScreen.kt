@@ -2,8 +2,11 @@ package com.issaczerubbabel.ledgar.ui.screens
 
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material.icons.automirrored.filled.ShowChart
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.provider.Settings as AndroidSettings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -29,8 +32,12 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.preferences.ChartPalette
 import com.issaczerubbabel.ledgar.ui.theme.swatches
@@ -50,6 +57,7 @@ import com.issaczerubbabel.ledgar.viewmodel.ExportViewModel
 import com.issaczerubbabel.ledgar.viewmodel.ImportState
 import com.issaczerubbabel.ledgar.viewmodel.SettingsUiEvent
 import com.issaczerubbabel.ledgar.viewmodel.SettingsViewModel
+import kotlinx.coroutines.launch
 import java.io.File
 
 @Composable
@@ -90,15 +98,61 @@ fun SettingsScreen(
     val appLockTimeoutMinutes by vm.appLockTimeoutMinutes.collectAsStateWithLifecycle()
     val hasAppPinConfigured by vm.hasAppPinConfigured.collectAsStateWithLifecycle()
     val chartPalette by vm.chartPalette.collectAsStateWithLifecycle()
+    val reminderEnabled by vm.reminderEnabled.collectAsStateWithLifecycle()
+    val reminderMinuteOfDay by vm.reminderMinuteOfDay.collectAsStateWithLifecycle()
     var themeDropdownExpanded by remember { mutableStateOf(false) }
     var chartStyleDropdownExpanded by remember { mutableStateOf(false) }
     var authModeDropdownExpanded by remember { mutableStateOf(false) }
     var timeoutDropdownExpanded by remember { mutableStateOf(false) }
     var showPinDialog by remember { mutableStateOf(false) }
     var showRemovePinDialog by remember { mutableStateOf(false) }
+    var showReminderTimePicker by remember { mutableStateOf(false) }
     var pinInput by remember { mutableStateOf("") }
     var confirmPinInput by remember { mutableStateOf("") }
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+
+    var notificationsAllowed by remember { mutableStateOf(NotificationManagerCompat.from(context).areNotificationsEnabled()) }
+    val reminderPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        notificationsAllowed = granted || NotificationManagerCompat.from(context).areNotificationsEnabled()
+        if (granted) {
+            vm.setReminderEnabled(true)
+        } else {
+            coroutineScope.launch {
+                val result = snackbarHostState.showSnackbar(
+                    message = "Notifications are off for L.Edgar",
+                    actionLabel = "Open settings"
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    runCatching {
+                        context.startActivity(
+                            Intent(AndroidSettings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(AndroidSettings.EXTRA_APP_PACKAGE, context.packageName)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
+                }
+            }
+        }
+    }
+    fun onReminderSwitchToggled(enabled: Boolean) {
+        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationsAllowed) {
+            reminderPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            vm.setReminderEnabled(enabled)
+        }
+    }
+    // The user can revoke notification access from system settings, so check again on return.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                notificationsAllowed = NotificationManagerCompat.from(context).areNotificationsEnabled()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(vm.resetDone) {
         if (vm.resetDone) { snackbarHostState.showSnackbar("All data deleted."); vm.clearResetDone() }
@@ -268,6 +322,17 @@ fun SettingsScreen(
         )
     }
 
+    if (showReminderTimePicker) {
+        ReminderTimePickerDialog(
+            initialMinuteOfDay = reminderMinuteOfDay,
+            onDismiss = { showReminderTimePicker = false },
+            onConfirm = { minuteOfDay ->
+                vm.setReminderMinuteOfDay(minuteOfDay)
+                showReminderTimePicker = false
+            }
+        )
+    }
+
     if (showRemovePinDialog) {
         AlertDialog(
             onDismissRequest = { showRemovePinDialog = false },
@@ -426,6 +491,47 @@ fun SettingsScreen(
                             )
                         }
                     }
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            Text(
+                text = "Reminders",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false
+            )
+
+            SettingsListItem(
+                title = "Daily reminder",
+                icon = Icons.Filled.Notifications
+            ) {
+                Switch(
+                    checked = reminderEnabled,
+                    onCheckedChange = ::onReminderSwitchToggled
+                )
+            }
+
+            if (reminderEnabled) {
+                SettingsListItem(
+                    title = "Remind at",
+                    icon = Icons.Filled.Schedule,
+                    onClick = { showReminderTimePicker = true }
+                ) {
+                    Text(
+                        text = formatReminderTime(context, reminderMinuteOfDay),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                if (!notificationsAllowed) {
+                    Text(
+                        text = "Notifications are blocked for L.Edgar",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ExpenseRed
+                    )
                 }
             }
 
@@ -824,6 +930,45 @@ private fun SettingsListItem(
         )
         trailing()
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReminderTimePickerDialog(
+    initialMinuteOfDay: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit
+) {
+    val is24Hour = android.text.format.DateFormat.is24HourFormat(LocalContext.current)
+    val state = rememberTimePickerState(
+        initialHour = initialMinuteOfDay / 60,
+        initialMinute = initialMinuteOfDay % 60,
+        is24Hour = is24Hour
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Remind at") },
+        text = {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                TimePicker(state = state)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(state.hour * 60 + state.minute) }) { Text("OK") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+/** Formats [minuteOfDay] using the device's 12/24h setting, same as a system clock would. */
+private fun formatReminderTime(context: Context, minuteOfDay: Int): String {
+    val calendar = java.util.Calendar.getInstance().apply {
+        set(java.util.Calendar.HOUR_OF_DAY, minuteOfDay / 60)
+        set(java.util.Calendar.MINUTE, minuteOfDay % 60)
+    }
+    return android.text.format.DateFormat.getTimeFormat(context).format(calendar.time)
 }
 
 @Composable
