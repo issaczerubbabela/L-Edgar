@@ -135,6 +135,13 @@ object DatabaseModule {
         }
     }
 
+    /** Trip Member colours, and Adjust / Exact splits become Custom with every Share unchanged. */
+    internal val MIGRATION_22_23 = object : Migration(22, 23) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            TripMigration.upgradeTo23(db)
+        }
+    }
+
     private fun columnsOf(db: SupportSQLiteDatabase, table: String): Set<String> =
         db.query("PRAGMA table_info($table)").use { cursor ->
             val nameColumn = cursor.getColumnIndexOrThrow("name")
@@ -279,6 +286,7 @@ object DatabaseModule {
             .addMigrations(MIGRATION_19_20)
             .addMigrations(MIGRATION_20_21)
             .addMigrations(MIGRATION_21_22)
+            .addMigrations(MIGRATION_22_23)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .addCallback(callback)
             .build()

@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.data.local.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -38,7 +39,9 @@ data class TripMemberRecord(
     val name: String,
     val isSelf: Boolean = false,
     val upiId: String? = null,
-    val displayOrder: Int = 0
+    val displayOrder: Int = 0,
+    /** Index into the Member palette; stored so removing someone never shifts the others' colours. */
+    @ColumnInfo(defaultValue = "0") val colorIndex: Int = 0
 )
 
 @Entity(
@@ -53,7 +56,7 @@ data class TripExpenseRecord(
     val purpose: String,
     val amountPaise: Long,
     val payerMemberId: Long,
-    val splitMode: String, // EQUAL | ADJUST | EXACT
+    val splitMode: String, // EQUAL | CUSTOM (ADJUST and EXACT before version 23)
     val category: String = "",
     /** The [ExpenseRecord] this expense's Share became when the Trip was Posted. */
     val postedExpenseId: Long? = null
@@ -68,9 +71,11 @@ data class TripExpenseRecord(
 data class TripExpenseShareRecord(
     val expenseId: Long,
     val memberId: Long,
-    /** ADJUST: the Member's fixed extra. EXACT: their whole Share. EQUAL: 0. */
+    /** The Member's Locked amount when [locked]; 0 otherwise. */
     val inputPaise: Long,
-    val sharePaise: Long
+    val sharePaise: Long,
+    /** True when the user typed this Member's amount in a Custom split. */
+    @ColumnInfo(defaultValue = "0") val locked: Boolean = false
 )
 
 @Entity(

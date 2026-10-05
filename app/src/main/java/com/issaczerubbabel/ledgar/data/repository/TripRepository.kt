@@ -18,6 +18,14 @@ data class TripDetail(
     val self: TripMember? get() = members.firstOrNull { it.isSelf }
 }
 
+/** One row of the Trips list. */
+data class TripListItem(
+    val trip: TripRecord,
+    val members: List<TripMember>,
+    val totalPaise: Long,
+    val expenseCount: Int
+)
+
 /** One Transaction a Post will write: the user's Share of one Trip expense, as reviewed. */
 data class PostRow(
     val tripExpenseId: Long,
@@ -33,19 +41,21 @@ class TripArchivedException : IllegalStateException("This trip is archived")
 
 interface TripRepository {
     fun observeTrips(): Flow<List<TripRecord>>
+    fun observeTripItems(): Flow<List<TripListItem>>
     fun observeActiveTrip(): Flow<TripRecord?>
     fun observeDetail(tripId: Long): Flow<TripDetail?>
 
-    /** Creates a Trip whose first Member is the user ("You"), followed by [otherMembers]. */
+    /** Creates a Trip whose first Member is the user ("You"), followed by [otherMembers], each with their own colour. */
     suspend fun createTrip(name: String, startDate: String, endDate: String?, otherMembers: List<String>): Long
 
+    /** Adds a Member with the first colour no one on the Trip has. */
     suspend fun addMember(tripId: Long, name: String): Long
-    suspend fun updateMember(memberId: Long, name: String, upiId: String?)
+    suspend fun updateMember(memberId: Long, name: String, upiId: String?, colorIndex: Int)
 
     /** False when the Member still pays, shares in or settles anything on the Trip. */
     suspend fun removeMember(memberId: Long): Boolean
 
-    /** Inserts when [expense] has id 0, else replaces it; stores each Member's Share. */
+    /** Inserts when [expense] has id 0, else replaces it; stores each Member's Share and Locked amount. */
     suspend fun saveExpense(tripId: Long, expense: TripExpenseInput): Long
     suspend fun deleteExpense(expenseId: Long)
 
