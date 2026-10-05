@@ -67,6 +67,20 @@ Any prompt that changes a repository file (code, UI, sync, schema, or instructio
 - Only create a new `ChangelogRelease` entry when explicitly asked to bump the version, and bump `appVersionName` in `app/build.gradle.kts` to match (versionCode is derived from it).
 - Skip this only when the change is genuinely read-only (no repository files modified).
 
+### Changelog style
+
+`ChangelogMarkdownTest` fails the build when an entry breaks the first four rules; the rest are for you to follow.
+
+- **Short.** At most 110 characters for `added`/`changed`/`fixed`, 140 for `developer`, at most two sentences, no full stop at the end. Start user-facing entries with a capital letter.
+- **One change per entry, at most 16 entries per section.** Merge related changes ("Stats: a spending calendar, Paid from and period bars") instead of adding more.
+- **Never repeat an entry** across releases. If a later change reworks something, describe what's new, not the whole feature again.
+- **Releases stay newest first**, dated `yyyy-MM-dd`.
+- **Lead with the area** when it helps scanning: `Trips: …`, `Stats: …`, `Auto-capture: …`, using the name the user sees in the app.
+- **Write for the user**, in plain words and present tense: what they can now do, see or stop worrying about. Name screens and buttons as the app shows them. No class names, ticket numbers or "now" / "new" filler outside `developer`.
+- **Pick the section by what the user notices:** `added` for something they couldn't do before, `changed` for something that works differently, `fixed` for something that was wrong. Internal work (tests, refactors, docs, CI, skills) goes in `developer`.
+- **A tagged release is frozen.** Once `vX.Y.Z` is pushed, never edit or add to its section: new work goes in the top, unreleased `ChangelogRelease`. Check with `git tag` before editing.
+- **Update the entry as a feature grows.** When a later commit on the same unreleased feature changes what an earlier bullet says, rewrite that bullet instead of appending a correction.
+
 ## Releasing
 
 Pushing a `vX.Y.Z` tag that matches `appVersionName` runs `.github/workflows/release.yml`: tests, a signed release APK, and a GitHub Release whose notes are that version's section of `CHANGELOG.md`. Signing needs the repository secrets `RELEASE_KEYSTORE_BASE64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS` and `RELEASE_KEY_PASSWORD`; locally the same names in `local.properties` (with `RELEASE_STORE_FILE`) sign `assembleRelease`. Try a shrunk build on a phone with `./gradlew installStaging`, which installs next to the release app.

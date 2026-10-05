@@ -14,7 +14,8 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 ### Developer
 
-- Changelog rebuilt from the release tags: 0.1.0 to 0.3.0 fold into 1.0.0, 1.0.1 and 1.0.2 into 1.1.0, and auto-capture moves from 1.1.0 to 1.2.0
+- ChangelogMarkdownTest enforces the changelog style: length, sentence count, capitals, no repeats, ordered dates
+- Changelog rebuilt from the release tags (0.x into 1.0.0, 1.0.1-1.0.2 into 1.1.0, auto-capture into 1.2.0)
 
 ## [1.3.0] - 2026-10-01
 
@@ -72,7 +73,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Categories and account groups can count as saving, refund or savings
 - Budget: salary cycles with buckets, a daily pace and past cycles
 - Budget: cycles and buckets back up to your Sheet
-- Add Transaction: a new keypad layout and a searchable category picker
+- Add Transaction: a keypad-first layout and a searchable category picker
 - Add Transaction and Quick Add show the category's bucket and what's left in it
 - Two-way sync: edits made in the Sheet come to the phone
 - Sync conflicts wait for you to resolve them instead of one side winning
@@ -97,7 +98,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Stats: period comparisons, chart scales, the budget line and the card/cash split
 - Sync: no more duplicate rows, lost edits or stuck deletes
 - A fresh install no longer overwrites your Sheet's accounts, categories and budgets
-- Importing from Sheets reads old and new rows without crashing or duplicating
+- Importing from Sheets reads both row layouts without crashing or duplicating
 - Account balances respect the exact time a starting balance applies from
 - Editing an account no longer blanks its details
 - App Lock unlocks reliably and no longer crashes when you toggle it
