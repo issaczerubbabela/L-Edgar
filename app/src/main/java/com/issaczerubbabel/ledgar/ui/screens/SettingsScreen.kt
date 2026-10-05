@@ -38,6 +38,7 @@ import com.issaczerubbabel.ledgar.data.remote.ImportRecordDto
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.SyncConflict
 import com.issaczerubbabel.ledgar.sync.SyncStatus
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
@@ -62,27 +63,15 @@ private fun responsiveTextSize(baseSp: Float, minSp: Float = 12f, maxSp: Float =
 @Composable
 fun SettingsScreen(
     innerPadding: PaddingValues,
-    onNavigateToDropdownManagement: () -> Unit,
+    onBack: () -> Unit,
     onNavigateToAppsScriptSetup: () -> Unit,
     onNavigateToChangelog: () -> Unit,
-    onNavigateToCaptureSettings: () -> Unit,
-    onNavigateToTrips: () -> Unit = {},
-    vm: SettingsViewModel = hiltViewModel(),
-    exportVm: ExportViewModel = hiltViewModel()
+    vm: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
-    val exportState by exportVm.uiState.collectAsStateWithLifecycle()
     val sheetsState by vm.sheetsImportState.collectAsStateWithLifecycle()
-    val csvState by vm.csvImportState.collectAsStateWithLifecycle()
     val backupState by vm.backupState.collectAsStateWithLifecycle()
-    val syncConflicts by vm.syncConflicts.collectAsStateWithLifecycle()
-    val conflictResolutionState by vm.conflictResolutionState.collectAsStateWithLifecycle()
-    val showConflictSheet by vm.showConflictSheet.collectAsStateWithLifecycle()
-    val heldSheetDeletions by vm.heldSheetDeletions.collectAsStateWithLifecycle()
-    val possibleDuplicates by vm.possibleDuplicates.collectAsStateWithLifecycle()
-    val showDuplicatesSheet by vm.showDuplicatesSheet.collectAsStateWithLifecycle()
     val syncStatus by vm.syncStatus.collectAsStateWithLifecycle()
-    var heldDeletionsDismissed by remember { mutableStateOf(false) }
     val currentTheme by vm.themeState.collectAsStateWithLifecycle()
     val scriptUrl by vm.scriptUrl.collectAsStateWithLifecycle()
     val appLockEnabled by vm.appLockEnabled.collectAsStateWithLifecycle()
@@ -100,6 +89,7 @@ fun SettingsScreen(
     var confirmPinInput by remember { mutableStateOf("") }
     val snackbarHostState = remember { SnackbarHostState() }
 
+
     LaunchedEffect(vm.resetDone) {
         if (vm.resetDone) { snackbarHostState.showSnackbar("All data deleted."); vm.clearResetDone() }
     }
@@ -113,102 +103,35 @@ fun SettingsScreen(
         }
     }
 
-    val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { vm.importFromCsv(it) }
-    }
-
-    val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("text/csv")
-    ) { uri ->
-        uri?.let { exportVm.exportDataToUri(it) }
-    }
-
-    LaunchedEffect(exportState.pendingFileName) {
-        val fileName = exportState.pendingFileName ?: return@LaunchedEffect
-        exportLauncher.launch(fileName)
-        exportVm.consumeExportRequest()
-    }
-
-    LaunchedEffect(exportState.statusMessage) {
-        val message = exportState.statusMessage ?: return@LaunchedEffect
-        snackbarHostState.showSnackbar(message)
-        exportVm.clearStatusMessage()
-    }
-
-    if (exportState.showDialog) {
-        ExportDialog(
-            selected = exportState.selectedInterval,
-            anchorMonth = exportState.anchorMonth,
-            canPickLaterMonth = exportState.canPickLaterMonth,
-            customStart = exportState.customStartDateInput,
-            customEnd = exportState.customEndDateInput,
-            onSelect = exportVm::selectInterval,
-            onPreviousMonth = exportVm::previousMonth,
-            onNextMonth = exportVm::nextMonth,
-            onStartChanged = exportVm::updateCustomStart,
-            onEndChanged = exportVm::updateCustomEnd,
-            onDismiss = exportVm::closeDialog,
-            onConfirm = exportVm::requestExportDocument
-        )
-    }
-
-    // Reset confirmation dialog
+    // Erase confirmation: typing the word keeps a stray tap from wiping the phone.
     if (vm.showResetConfirm) {
+        var typedWord by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { vm.showResetConfirm = false },
             icon = { Icon(Icons.Filled.DeleteForever, null, tint = ExpenseRed) },
-            title = { Text("Reset All Data?") },
-            text = { Text("This will permanently delete every local transaction record. This cannot be undone.") },
+            title = { Text("Erase all local data?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("This permanently deletes every local transaction record on this phone. This cannot be undone.")
+                    OutlinedTextField(
+                        value = typedWord,
+                        onValueChange = { typedWord = it },
+                        label = { Text("Type ERASE to confirm") },
+                        singleLine = true
+                    )
+                }
+            },
             confirmButton = {
                 Button(
                     onClick = { vm.resetAllData() },
+                    enabled = typedWord.trim() == "ERASE",
                     colors = ButtonDefaults.buttonColors(containerColor = ExpenseRed)
-                ) { Text("Delete Everything") }
+                ) { Text("Erase everything") }
             },
             dismissButton = { TextButton(onClick = { vm.showResetConfirm = false }) { Text("Cancel") } }
         )
     }
 
-    if (heldSheetDeletions.isNotEmpty() && !heldDeletionsDismissed) {
-        val count = heldSheetDeletions.size
-        AlertDialog(
-            onDismissRequest = { heldDeletionsDismissed = true },
-            icon = { Icon(Icons.Filled.Warning, null) },
-            title = { Text("$count transactions were deleted from the Sheet") },
-            text = {
-                Text(
-                    "They're still on this phone. Delete them here too, or keep them and put them back in the Sheet? " +
-                        "Nothing changes until you choose."
-                )
-            },
-            confirmButton = {
-                Button(onClick = { heldDeletionsDismissed = true; vm.deleteHeldFromPhone() }) { Text("Delete from phone") }
-            },
-            dismissButton = {
-                TextButton(onClick = { heldDeletionsDismissed = true; vm.keepHeldAndReupload() }) { Text("Keep and re-upload") }
-            }
-        )
-    }
-
-    if (showDuplicatesSheet) {
-        DuplicatesSheet(
-            groups = possibleDuplicates,
-            onDelete = vm::deleteDuplicate,
-            onDismiss = vm::dismissDuplicatesSheet
-        )
-    }
-
-    if (showConflictSheet && syncConflicts.isNotEmpty()) {
-        SyncResolutionSheet(
-            conflicts = syncConflicts,
-            resolutionState = conflictResolutionState,
-            onKeepLocal = vm::keepLocalConflict,
-            onUpdateDevice = vm::updateDeviceConflict,
-            onKeepBoth = vm::keepBothConflict,
-            onDeleteFromCloud = vm::deleteFromCloudConflict,
-            onDismiss = vm::dismissSyncConflictSheet
-        )
-    }
 
     if (showPinDialog) {
         AlertDialog(
@@ -306,24 +229,26 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = "Settings",
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontSize = responsiveTextSize(baseSp = 28f, minSp = 24f, maxSp = 30f)
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                softWrap = false
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+                Text(
+                    text = "Settings",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontSize = responsiveTextSize(baseSp = 28f, minSp = 24f, maxSp = 30f)
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    softWrap = false
+                )
+            }
 
-            Text(
-                text = "Appearance",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                softWrap = false
-            )
+
+            SettingsSectionHeader("Appearance")
 
             SettingsListItem(title = "Theme", icon = Icons.Filled.Palette) {
                 ExposedDropdownMenuBox(
@@ -348,7 +273,7 @@ fun SettingsScreen(
                         onDismissRequest = { themeDropdownExpanded = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("System MUI") },
+                            text = { Text("System default") },
                             onClick = {
                                 vm.updateTheme(AppThemeOption.SYSTEM)
                                 themeDropdownExpanded = false
@@ -431,14 +356,7 @@ fun SettingsScreen(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            Text(
-                text = "Security",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                softWrap = false
-            )
+            SettingsSectionHeader("Security")
 
             SettingsListItem(
                 title = "Enable App Lock",
@@ -558,16 +476,10 @@ fun SettingsScreen(
                 }
             }
 
+
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            Text(
-                text = "Database Setup",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                softWrap = false
-            )
+            SettingsSectionHeader("Sync & backup")
 
             SettingsListItem(
                 title = "Database Setup (Sheets)",
@@ -617,56 +529,19 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsListItem(title = "Sync now", icon = Icons.Filled.Sync, onClick = vm::syncNow) {
-                Text(
-                    text = when (syncStatus) {
-                        SyncStatus.Syncing -> "Syncing..."
-                        SyncStatus.Synced -> "Synced"
-                        SyncStatus.Failed -> "Failed, will retry"
-                        SyncStatus.NeedsScriptUpdate -> "Paused"
-                        SyncStatus.Idle -> ""
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            if (syncConflicts.isNotEmpty()) {
-                SettingsListItem(
-                    title = "Resolve sync conflicts",
-                    icon = Icons.Filled.Warning,
-                    iconTint = ExpenseRed,
-                    onClick = vm::openConflictSheet
-                ) {
-                    Text("${syncConflicts.size}", style = MaterialTheme.typography.titleMedium, color = ExpenseRed)
-                }
-            }
-
-            SettingsListItem(
-                title = "Find duplicate transactions",
-                icon = Icons.Filled.ContentCopy,
-                onClick = vm::openDuplicatesSheet
-            ) {
-                Text(
-                    text = if (possibleDuplicates.isEmpty()) "None" else "${possibleDuplicates.size} groups",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            SettingsListItem(title = "Backup to Google Sheets") {
+            SettingsListItem(title = "Back up to Google Sheets", icon = Icons.Filled.CloudUpload) {
                 ImportActionControl(
                     state = backupState,
-                    idleIcon = Icons.Filled.CloudUpload,
+                    idleIcon = Icons.Filled.PlayArrow,
                     onRun = vm::backupToGoogleSheets,
                     onDismiss = vm::resetBackupState
                 )
             }
 
-            SettingsListItem(title = "Import from Google Sheets") {
+            SettingsListItem(title = "Restore from Google Sheets", icon = Icons.Filled.CloudDownload) {
                 ImportActionControl(
                     state = sheetsState,
-                    idleIcon = Icons.Filled.CloudDownload,
+                    idleIcon = Icons.Filled.PlayArrow,
                     onRun = vm::importFromSheets,
                     onDismiss = vm::resetSheetsState
                 )
@@ -674,125 +549,58 @@ fun SettingsScreen(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            Text(
-                text = "Data",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                softWrap = false
-            )
+            SettingsSectionHeader("About")
 
             SettingsListItem(
-                title = "Auto-capture",
-                icon = Icons.Filled.Sync,
-                onClick = onNavigateToCaptureSettings
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.ChevronRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
+                title = "What's new",
+                icon = Icons.Filled.Info,
+                onClick = onNavigateToChangelog
+            ) { NavChevron() }
 
             SettingsListItem(
-                title = "Trips",
-                icon = Icons.Filled.Luggage,
-                onClick = onNavigateToTrips
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.ChevronRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            SettingsListItem(
-                title = "Manage Categories & Dropdowns",
-                icon = Icons.Filled.Tune,
-                onClick = onNavigateToDropdownManagement
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.ChevronRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            SettingsListItem(title = "Import from CSV") {
-                ImportActionControl(
-                    state = csvState,
-                    idleIcon = Icons.Filled.FileOpen,
-                    onRun = { csvLauncher.launch("text/*") },
-                    onDismiss = vm::resetCsvState
-                )
-            }
-
-            SettingsListItem(
-                title = "Export to CSV",
-                onClick = exportVm::openDialog
-            ) {
-                IconButton(onClick = exportVm::openDialog) {
-                    Icon(
-                        imageVector = Icons.Filled.TableChart,
-                        contentDescription = "Export transactions to CSV",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-
-            SettingsListItem(
-                title = "Reset All Data",
-                iconTint = ExpenseRed
-            ) {
-                IconButton(onClick = { vm.showResetConfirm = true }) {
-                    Icon(Icons.Filled.DeleteForever, contentDescription = "Reset data", tint = ExpenseRed)
-                }
-            }
+                title = "Share app",
+                icon = Icons.Filled.Share,
+                onClick = { shareAppApk(context) }
+            ) { NavChevron() }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            Text(
-                text = "About",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                softWrap = false
-            )
+            SettingsSectionHeader("Danger zone", danger = true)
 
             SettingsListItem(
-                title = "Changelog",
-                onClick = onNavigateToChangelog
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.ChevronRight,
-                    contentDescription = "Open changelog",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            SettingsListItem(
-                title = "Share App",
-                onClick = { shareAppApk(context) }
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Share,
-                    contentDescription = "Share app",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
+                title = "Erase all local data",
+                icon = Icons.Filled.DeleteForever,
+                iconTint = ExpenseRed,
+                onClick = { vm.showResetConfirm = true }
+            ) { NavChevron() }
         }
     }
 }
 
 @Composable
-private fun SettingsListItem(
+internal fun SettingsSectionHeader(text: String, danger: Boolean = false) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        color = if (danger) ExpenseRed else MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        softWrap = false
+    )
+}
+
+@Composable
+internal fun NavChevron() {
+    Icon(
+        imageVector = Icons.Filled.ChevronRight,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.size(24.dp)
+    )
+}
+
+@Composable
+internal fun SettingsListItem(
     title: String,
     icon: ImageVector? = null,
     modifier: Modifier = Modifier,
@@ -827,7 +635,7 @@ private fun SettingsListItem(
 }
 
 @Composable
-private fun ImportActionControl(
+internal fun ImportActionControl(
     state: ImportState,
     idleIcon: ImageVector,
     onRun: () -> Unit,
@@ -853,7 +661,7 @@ private fun ImportActionControl(
 }
 
 private fun themeLabel(option: AppThemeOption): String = when (option) {
-    AppThemeOption.SYSTEM -> "System MUI"
+    AppThemeOption.SYSTEM -> "System default"
     AppThemeOption.LAVENDER -> "Lavender"
     AppThemeOption.TEAL -> "Teal"
     AppThemeOption.RED -> "Red"
@@ -898,7 +706,7 @@ private fun shareAppApk(context: Context) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SyncResolutionSheet(
+internal fun SyncResolutionSheet(
     conflicts: List<SyncConflict>,
     resolutionState: ImportState,
     onKeepLocal: (SyncConflict) -> Unit,
@@ -1056,7 +864,7 @@ private fun SyncResolutionSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DuplicatesSheet(
+internal fun DuplicatesSheet(
     groups: List<List<ExpenseRecord>>,
     onDelete: (ExpenseRecord) -> Unit,
     onDismiss: () -> Unit

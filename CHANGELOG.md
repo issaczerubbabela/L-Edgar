@@ -6,6 +6,19 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `app/src/main/java/com/issaczerubbabel/ledgar/ui/screens/ChangelogData.kt`,
 which is also what the app shows under More > Changelog. Developer notes appear here only.
 
+## [1.3.2] - 2026-10-05
+
+### Changed
+
+- More: sync status, Trips, Auto-capture and your data tools on one screen, with settings behind the gear
+- Settings: grouped into Appearance, Security, Sync & backup, About and a Danger zone
+- Erase all local data (was Reset All Data): sits in the Danger zone and needs you to type ERASE
+- Theme option "System MUI" is now "System default"
+
+### Developer
+
+- More tab: MoreScreen and SettingsScreen split, with new features added in one place (MoreFeatures)
+
 ## [1.3.1] - 2026-10-05
 
 ### Added
@@ -150,6 +163,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - Room database, Vico charts and date-parsing tests
 
+[1.3.2]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.3.2
 [1.3.1]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.3.1
 [1.3.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.3.0
 [1.2.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.2.0

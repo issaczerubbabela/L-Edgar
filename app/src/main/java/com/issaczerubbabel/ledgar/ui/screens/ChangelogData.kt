@@ -16,6 +16,19 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
+        version = "v1.3.2",
+        date = "2026-10-05",
+        changed = listOf(
+            "More: sync status, Trips, Auto-capture and your data tools on one screen, with settings behind the gear",
+            "Settings: grouped into Appearance, Security, Sync & backup, About and a Danger zone",
+            "Erase all local data (was Reset All Data): sits in the Danger zone and needs you to type ERASE",
+            "Theme option \"System MUI\" is now \"System default\""
+        ),
+        developer = listOf(
+            "More tab: MoreScreen and SettingsScreen split, with new features added in one place (MoreFeatures)"
+        )
+    ),
+    ChangelogRelease(
         version = "v1.3.1",
         date = "2026-10-05",
         added = listOf(

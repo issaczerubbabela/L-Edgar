@@ -57,6 +57,7 @@ The release build is shrunk with R8, which can break reflection-based code in wa
 4. Build/update Compose screens, wire navigation.
 5. If remote-facing, update `scripts/AppsScript.gs` contract and the Retrofit DTO/API methods together — the two must stay in sync since there's no shared schema. The script also exists as a copy in `ui/screens/AppsScriptSetupScreen.kt` (what users paste into Apps Script): change both, and run `node --test scripts/tests/transaction-sync.test.js` and `node --test scripts/tests/bucket-budgets.test.js`, which fail if they drift. Never send new data in `records`: a script older than your change files `records` as transactions. Bump `SCRIPT_VERSION` in the script and `TransactionSyncer.REQUIRED_SCRIPT_VERSION` together when the app starts depending on a new script behaviour.
 6. Validate sync behavior for insert/update/delete and import paths.
+7. A new user-facing feature gets one entry in `ui/navigation/MoreFeatures.kt` (id, title, icon, route); the More tab renders its tiles from that list. Settings holds only app-wide configuration; a feature keeps its own settings inside itself.
 
 ## Mandatory changelog policy
 
