@@ -16,6 +16,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - ChangelogMarkdownTest enforces the changelog style: length, sentence count, capitals, no repeats, ordered dates
 - Changelog rebuilt from the release tags (0.x into 1.0.0, 1.0.1-1.0.2 into 1.1.0, auto-capture into 1.2.0)
+- ui-ux-pro-max design skill (nextlevelbuilder/ui-ux-pro-max-skill) in .claude/skills
 
 ## [1.3.0] - 2026-10-01
 

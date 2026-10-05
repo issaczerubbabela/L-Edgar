@@ -23,7 +23,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
         ),
         developer = listOf(
             "ChangelogMarkdownTest enforces the changelog style: length, sentence count, capitals, no repeats, ordered dates",
-            "Changelog rebuilt from the release tags (0.x into 1.0.0, 1.0.1-1.0.2 into 1.1.0, auto-capture into 1.2.0)"
+            "Changelog rebuilt from the release tags (0.x into 1.0.0, 1.0.1-1.0.2 into 1.1.0, auto-capture into 1.2.0)",
+            "ui-ux-pro-max design skill (nextlevelbuilder/ui-ux-pro-max-skill) in .claude/skills"
         )
     ),
     ChangelogRelease(
