@@ -40,7 +40,7 @@ graph TD
   - Stats (Insights)
   - Budget (salary-cycle buckets; sub-screens: Start cycle, Plan buckets, Bucket detail)
   - Accounts
-  - More (Settings)
+  - More (sync status, features, data tools) and Settings, opened from the gear on More
   - Review inbox and Auto-capture settings, reached from a banner on Trans, a badge on the Trans tab and More (see [AUTO_CAPTURE.md](AUTO_CAPTURE.md))
 - Form-heavy flows are managed in ViewModels with reactive state.
 
@@ -80,7 +80,7 @@ flowchart TD
     A --> C[Stats / Insights]
     A --> BG[Budget]
     A --> D[Accounts]
-    A --> E[More / Settings]
+    A --> E[More] --> E2[Settings]
 
     B --> B1[Log Transaction]
     BG --> BG1[Start Cycle]

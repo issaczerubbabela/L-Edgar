@@ -11,9 +11,14 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 ### Changed
 
 - Changelog: shorter entries, each under the version it shipped in
+- More: sync status, Trips, Auto-capture and your data tools on one screen, with settings behind the gear
+- Settings: grouped into Appearance, Security, Sync & backup, About and a Danger zone
+- Erase all local data (was Reset All Data): sits in the Danger zone and needs you to type ERASE
+- Theme option "System MUI" is now "System default"
 
 ### Developer
 
+- More tab: MoreScreen and SettingsScreen split, with new features added in one place (MoreFeatures)
 - ChangelogMarkdownTest enforces the changelog style: length, sentence count, capitals, no repeats, ordered dates
 - Changelog rebuilt from the release tags (0.x into 1.0.0, 1.0.1-1.0.2 into 1.1.0, auto-capture into 1.2.0)
 - ui-ux-pro-max design skill (nextlevelbuilder/ui-ux-pro-max-skill) in .claude/skills

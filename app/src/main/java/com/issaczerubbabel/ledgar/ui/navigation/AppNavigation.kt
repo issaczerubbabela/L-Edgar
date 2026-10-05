@@ -63,7 +63,9 @@ import com.issaczerubbabel.ledgar.ui.screens.FilterSelectionScreen
 import com.issaczerubbabel.ledgar.ui.screens.FilteredTransactionsScreen
 import com.issaczerubbabel.ledgar.ui.screens.OverallAccountStatsScreen
 import com.issaczerubbabel.ledgar.ui.screens.SearchScreen
+import com.issaczerubbabel.ledgar.ui.screens.MoreScreen
 import com.issaczerubbabel.ledgar.ui.screens.SettingsScreen
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.issaczerubbabel.ledgar.ui.screens.AppsScriptSetupScreen
 import com.issaczerubbabel.ledgar.ui.screens.ChangelogScreen
 import com.issaczerubbabel.ledgar.ui.screens.CaptureInboxScreen
@@ -100,6 +102,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object OverallAccountStats : Screen("overall_account_stats", "OverallAccountStats", Icons.Filled.BarChart)
     object AddAccount : Screen(ACCOUNT_ROUTE_ADD, "AddAccount", Icons.Filled.Paid)
     object More : Screen("more", "More", Icons.Filled.MoreHoriz)
+    object Settings : Screen("settings", "Settings", Icons.Filled.Settings)
     object DropdownManagement : Screen("dropdown_management", "DropdownManagement", Icons.Filled.Settings)
     object AppsScriptSetup : Screen("apps_script_setup", "AppsScriptSetup", Icons.Filled.Settings)
     object Changelog : Screen("changelog", "Changelog", Icons.Filled.Settings)
@@ -115,8 +118,14 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
 private fun tripExpenseRoute(tripId: Long, expenseId: Long = 0L, captureId: Long = 0L) =
     "trip_expense/$tripId?expenseId=$expenseId&captureId=$captureId"
 
-/** Trip screens are reached from More; the tab stays highlighted while you are on them. */
-private val TRIP_SUB_ROUTES = setOf(Screen.Trips.route, Screen.Trip.route, Screen.TripExpense.route, Screen.TripReview.route)
+/** Screens reached from More (trips and settings); the tab stays highlighted while you are on them. */
+private val MORE_SUB_ROUTES = setOf(
+    Screen.Settings.route,
+    Screen.Trips.route,
+    Screen.Trip.route,
+    Screen.TripExpense.route,
+    Screen.TripReview.route
+)
 
 private const val LOG_BASE_ROUTE = "log"
 
@@ -470,7 +479,7 @@ fun AppNavigation() {
                         val selected = currentDest?.hierarchy?.any { it.route == screen.route } == true ||
                             (screen == Screen.Budget && currentDest?.route in BUDGET_SUB_ROUTES) ||
                             (screen == Screen.Trans && currentDest?.route == Screen.CaptureInbox.route) ||
-                            (screen == Screen.More && currentDest?.route in TRIP_SUB_ROUTES)
+                            (screen == Screen.More && currentDest?.route in MORE_SUB_ROUTES)
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
@@ -687,13 +696,36 @@ fun AppNavigation() {
                 )
             }
             composable(Screen.More.route) {
-                SettingsScreen(
+                MoreScreen(
                     innerPadding = innerPadding,
+                    onNavigateToSettings = {
+                        navController.navigate(Screen.Settings.route) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onNavigateToFeature = { route ->
+                        navController.navigate(route) {
+                            launchSingleTop = true
+                        }
+                    },
                     onNavigateToDropdownManagement = {
                         navController.navigate(Screen.DropdownManagement.route) {
                             launchSingleTop = true
                         }
                     },
+                    onNavigateToAppsScriptSetup = {
+                        navController.navigate(Screen.AppsScriptSetup.route) {
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
+            composable(Screen.Settings.route) { entry ->
+                // Share More's SettingsViewModel so a running backup or restore keeps its state across both screens.
+                val moreEntry = remember(entry) { navController.getBackStackEntry(Screen.More.route) }
+                SettingsScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
                     onNavigateToAppsScriptSetup = {
                         navController.navigate(Screen.AppsScriptSetup.route) {
                             launchSingleTop = true
@@ -704,16 +736,7 @@ fun AppNavigation() {
                             launchSingleTop = true
                         }
                     },
-                    onNavigateToCaptureSettings = {
-                        navController.navigate(Screen.CaptureSettings.route) {
-                            launchSingleTop = true
-                        }
-                    },
-                    onNavigateToTrips = {
-                        navController.navigate(Screen.Trips.route) {
-                            launchSingleTop = true
-                        }
-                    }
+                    vm = hiltViewModel(moreEntry)
                 )
             }
             composable(Screen.CaptureInbox.route) {
