@@ -149,8 +149,9 @@ fun DayChart(days: List<DayTotal>) {
     val max = days.maxOf { it.paise }.coerceAtLeast(1L)
     val barArea = 120.dp
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val slot = (maxWidth / days.size).coerceAtLeast(60.dp)
-        val scrolls = slot * days.size > maxWidth
+        val available = maxWidth
+        val slot = (available / days.size).coerceAtLeast(60.dp)
+        val scrolls = slot * days.size > available
         Row(
             modifier = (if (scrolls) Modifier.horizontalScroll(rememberScrollState()) else Modifier).fillMaxWidth(),
             horizontalArrangement = Arrangement.Start
@@ -158,7 +159,7 @@ fun DayChart(days: List<DayTotal>) {
             days.forEach { day ->
                 val date = runCatching { LocalDate.parse(day.date) }.getOrNull()
                 Column(
-                    modifier = Modifier.width(if (scrolls) slot else maxWidth / days.size),
+                    modifier = Modifier.width(if (scrolls) slot else available / days.size),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
