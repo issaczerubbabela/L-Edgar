@@ -7,9 +7,16 @@ import com.issaczerubbabel.ledgar.util.formatRupeesExact
  * Settlements (see the Trips section of CONTEXT.md). Pure: no Room, no Android. Amounts are whole
  * paise so Shares always add up to the expense exactly.
  */
-enum class SplitMode { EQUAL, ADJUST, EXACT }
+enum class SplitMode { EQUAL, CUSTOM }
 
-data class TripMember(val id: Long, val name: String, val isSelf: Boolean = false, val upiId: String? = null)
+data class TripMember(
+    val id: Long,
+    val name: String,
+    val isSelf: Boolean = false,
+    val upiId: String? = null,
+    /** Index into [MemberPalette]; the Member colour shown everywhere in the Trip. */
+    val colorIndex: Int = 0
+)
 
 data class TripExpenseInput(
     val id: Long,
@@ -20,8 +27,8 @@ data class TripExpenseInput(
     val mode: SplitMode,
     /** Members the expense is split between, in Trip Member order. */
     val memberIds: List<Long>,
-    /** ADJUST: each Member's fixed extra. EXACT: each Member's whole Share. Unused for EQUAL. */
-    val inputs: Map<Long, Long> = emptyMap(),
+    /** CUSTOM: each Locked amount. Members not listed split what is left equally. Unused for EQUAL. */
+    val locked: Map<Long, Long> = emptyMap(),
     val category: String = ""
 )
 
@@ -45,43 +52,58 @@ data class PostPreviewRow(
 /** Why a split can't be saved, or null when it can. */
 sealed interface SplitProblem {
     data object NoMembers : SplitProblem
-    data class ExactLeft(val leftPaise: Long) : SplitProblem // negative: assigned too much
-    data object AdjustTooLarge : SplitProblem
+
+    /** The Locked amounts add up to more than the expense. */
+    data class OverAssigned(val overPaise: Long) : SplitProblem
+
+    /** Everyone is locked and the amounts add up to less than the expense. */
+    data class UnderAssigned(val leftPaise: Long) : SplitProblem
+}
+
+/** One row of the "does this settle everyone?" check. */
+data class CheckRow(val memberId: Long, val balancePaise: Long, val paysPaise: Long, val receivesPaise: Long) {
+    /** What the Member is still owed (or owes) once the Suggested payments are made. */
+    val afterPaise: Long get() = balancePaise + paysPaise - receivesPaise
+}
+
+enum class LedgerKind { EXPENSE, SETTLEMENT }
+
+/** One line of a Member's Balance: how an expense or Settlement moved it. */
+data class LedgerLine(val label: String, val detail: String, val deltaPaise: Long, val kind: LedgerKind)
+
+data class MemberLedger(val memberId: Long, val lines: List<LedgerLine>) {
+    val netPaise: Long get() = lines.sumOf { it.deltaPaise }
 }
 
 object TripMath {
 
     /**
-     * Each Member's Share of [expense]. EQUAL and ADJUST use a largest-remainder split: the leftover
-     * paise go one each to Members in a rotation seeded by the expense id, so the same person isn't
-     * always charged the extra paisa. EXACT returns the entered amounts as they are.
+     * Each Member's Share of [expense]. EQUAL splits it equally. CUSTOM gives each Locked amount to
+     * its Member and splits what is left equally between the rest. Leftover paise go one each to
+     * Members in a rotation seeded by the expense id, so the same person isn't always charged the
+     * extra paisa.
      */
     fun shares(expense: TripExpenseInput): Map<Long, Long> {
         val ids = expense.memberIds
         if (ids.isEmpty()) return emptyMap()
-        return when (expense.mode) {
-            SplitMode.EXACT -> ids.associateWith { expense.inputs[it] ?: 0L }
-            SplitMode.ADJUST -> {
-                val extras = ids.associateWith { (expense.inputs[it] ?: 0L).coerceAtLeast(0L) }
-                val rest = (expense.amountPaise - extras.values.sum()).coerceAtLeast(0L)
-                val equal = equalSplit(rest, ids, expense.id)
-                ids.associateWith { equal.getValue(it) + extras.getValue(it) }
-            }
-            SplitMode.EQUAL -> equalSplit(expense.amountPaise, ids, expense.id)
-        }
+        if (expense.mode == SplitMode.EQUAL) return equalSplit(expense.amountPaise, ids, expense.id)
+        val freeIds = ids.filter { it !in expense.locked }
+        val used = ids.filter { it in expense.locked }.sumOf { lockedAmount(expense, it) }
+        val free = equalSplit((expense.amountPaise - used).coerceAtLeast(0L), freeIds, expense.id)
+        return ids.associateWith { id -> if (id in expense.locked) lockedAmount(expense, id) else free.getValue(id) }
     }
 
+    private fun lockedAmount(expense: TripExpenseInput, id: Long) = (expense.locked[id] ?: 0L).coerceAtLeast(0L)
+
     fun splitProblem(expense: TripExpenseInput): SplitProblem? {
-        if (expense.memberIds.isEmpty()) return SplitProblem.NoMembers
-        return when (expense.mode) {
-            SplitMode.EXACT -> {
-                val left = expense.amountPaise - expense.memberIds.sumOf { expense.inputs[it] ?: 0L }
-                if (left != 0L) SplitProblem.ExactLeft(left) else null
-            }
-            SplitMode.ADJUST ->
-                if (expense.memberIds.sumOf { expense.inputs[it] ?: 0L } > expense.amountPaise) SplitProblem.AdjustTooLarge else null
-            SplitMode.EQUAL -> null
-        }
+        val ids = expense.memberIds
+        if (ids.isEmpty()) return SplitProblem.NoMembers
+        if (expense.mode == SplitMode.EQUAL) return null
+        val used = ids.filter { it in expense.locked }.sumOf { lockedAmount(expense, it) }
+        if (used > expense.amountPaise) return SplitProblem.OverAssigned(used - expense.amountPaise)
+        val everyoneLocked = ids.all { it in expense.locked }
+        if (everyoneLocked && used < expense.amountPaise) return SplitProblem.UnderAssigned(expense.amountPaise - used)
+        return null
     }
 
     fun equalSplit(totalPaise: Long, ids: List<Long>, seed: Long): Map<Long, Long> {
@@ -126,7 +148,7 @@ object TripMath {
         val order = balances.withIndex().associate { it.value.memberId to it.index }
         val creditors = balances.filter { it.netPaise > 0 }.map { it.memberId to it.netPaise }
             .sortedWith(compareByDescending<Pair<Long, Long>> { it.second }.thenBy { order.getValue(it.first) })
-            .map { it.first to it.second }.toMutableList()
+            .toMutableList()
         val debtors = balances.filter { it.netPaise < 0 }.map { it.memberId to -it.netPaise }
             .sortedWith(compareByDescending<Pair<Long, Long>> { it.second }.thenBy { order.getValue(it.first) })
             .toMutableList()
@@ -144,50 +166,52 @@ object TripMath {
         return out
     }
 
+    /**
+     * Shows that [plan] settles everyone: each Member's Balance, what they pay and receive in the
+     * Suggested payments, and what is left, which is zero for every Member when the plan is complete.
+     */
+    fun settlementCheck(balances: List<MemberBalance>, plan: List<PlannedPayment>): List<CheckRow> =
+        balances.map { b ->
+            CheckRow(
+                memberId = b.memberId,
+                balancePaise = b.netPaise,
+                paysPaise = plan.filter { it.fromId == b.memberId }.sumOf { it.amountPaise },
+                receivesPaise = plan.filter { it.toId == b.memberId }.sumOf { it.amountPaise }
+            )
+        }
+
+    /** How each expense and Settlement moved one Member's Balance; the lines add up to that Balance. */
+    fun memberLedger(
+        memberId: Long,
+        members: List<TripMember>,
+        expenses: List<TripExpenseInput>,
+        settlements: List<TripSettlementInput>
+    ): MemberLedger {
+        val names = members.associate { it.id to it.name }
+        val lines = mutableListOf<LedgerLine>()
+        expenses.sortedWith(compareBy({ it.date }, { it.id })).forEach { e ->
+            val share = shares(e)[memberId] ?: 0L
+            val paid = if (e.payerId == memberId) e.amountPaise else 0L
+            if (share == 0L && paid == 0L) return@forEach
+            val detail = listOfNotNull(
+                if (paid > 0) "paid ${rupees(paid)}" else null,
+                if (share > 0) "Share ${rupees(share)}" else null
+            ).joinToString(" · ")
+            lines += LedgerLine(e.purpose, detail, paid - share, LedgerKind.EXPENSE)
+        }
+        settlements.forEach { s ->
+            if (s.fromId == memberId) lines += LedgerLine("Paid ${names[s.toId].orEmpty()}", "Settlement", s.amountPaise, LedgerKind.SETTLEMENT)
+            if (s.toId == memberId) lines += LedgerLine("Got paid by ${names[s.fromId].orEmpty()}", "Settlement", -s.amountPaise, LedgerKind.SETTLEMENT)
+        }
+        return MemberLedger(memberId, lines)
+    }
+
     /** One row per Trip expense where [selfId]'s Share is above zero, by date then id (ADR-0008). */
     fun postPreview(tripName: String, selfId: Long, expenses: List<TripExpenseInput>): List<PostPreviewRow> =
         expenses.sortedWith(compareBy({ it.date }, { it.id })).mapNotNull { e ->
             val mine = shares(e)[selfId] ?: 0L
             if (mine <= 0) null else PostPreviewRow(e.id, e.date, "$tripName · ${e.purpose}", e.category, mine)
         }
-
-    fun summaryText(
-        tripName: String,
-        members: List<TripMember>,
-        expenses: List<TripExpenseInput>,
-        settlements: List<TripSettlementInput>
-    ): String {
-        val balances = balances(members, expenses, settlements)
-        val names = members.associate { it.id to it.name }
-        val plan = settleUpPlan(balances)
-        return buildString {
-            append(tripName).append('\n')
-            append("Total spent: ").append(rupees(expenses.sumOf { it.amountPaise })).append("\n\n")
-            append("Shares\n")
-            balances.forEach { b ->
-                append("• ").append(names[b.memberId]).append(": ").append(rupees(b.sharePaise))
-                    .append(" (paid ").append(rupees(b.paidPaise)).append(")\n")
-            }
-            append('\n')
-            if (plan.isEmpty()) {
-                append("Everyone is settled.")
-            } else {
-                append("To settle up\n")
-                append(plan.joinToString("\n") { "• ${names[it.fromId]} pays ${names[it.toId]} ${rupees(it.amountPaise)}" })
-            }
-        }
-    }
-
-    fun csv(members: List<TripMember>, expenses: List<TripExpenseInput>): String {
-        val names = members.associate { it.id to it.name }
-        val header = listOf("date", "purpose", "category", "amount", "paid_by") + members.map { it.name }
-        val rows = expenses.sortedWith(compareBy({ it.date }, { it.id })).map { e ->
-            val s = shares(e)
-            listOf(e.date, e.purpose, e.category, decimal(e.amountPaise), names[e.payerId].orEmpty()) +
-                members.map { decimal(s[it.id] ?: 0L) }
-        }
-        return (listOf(header) + rows).joinToString("\n") { row -> row.joinToString(",") { csvField(it) } }
-    }
 
     fun rupees(paise: Long): String = formatRupeesExact(paise / 100.0)
 
@@ -196,7 +220,4 @@ object TripMath {
         val abs = kotlin.math.abs(paise)
         return sign + (abs / 100) + "." + (abs % 100).toString().padStart(2, '0')
     }
-
-    private fun csvField(value: String): String =
-        if (value.any { it == ',' || it == '"' || it == '\n' }) "\"" + value.replace("\"", "\"\"") + "\"" else value
 }
