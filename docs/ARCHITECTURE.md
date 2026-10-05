@@ -153,7 +153,7 @@ sequenceDiagram
 
 1. Settings triggers importFromSheets.
 2. Repository imports dropdowns, accounts and budgets and overwrites the local lists, then bucket_budgets (cycles with nested buckets and categories), replacing the local cycle tables.
-3. Transactions come in through the same Pull as every Sync (`TransactionSyncer`), merged by Transaction ID; conflicts appear in Settings.
+3. Transactions come in through the same Pull as every Sync (`TransactionSyncer`), merged by Transaction ID; conflicts appear in More.
 
 ### CSV Import
 
