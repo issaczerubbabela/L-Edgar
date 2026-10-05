@@ -16,20 +16,39 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
-        version = "v1.3.1",
+        version = "v1.3.2",
         date = "2026-10-05",
         changed = listOf(
-            "Changelog: shorter entries, each under the version it shipped in",
             "More: sync status, Trips, Auto-capture and your data tools on one screen, with settings behind the gear",
             "Settings: grouped into Appearance, Security, Sync & backup, About and a Danger zone",
             "Erase all local data (was Reset All Data): sits in the Danger zone and needs you to type ERASE",
             "Theme option \"System MUI\" is now \"System default\""
         ),
         developer = listOf(
-            "More tab: MoreScreen and SettingsScreen split, with new features added in one place (MoreFeatures)",
+            "More tab: MoreScreen and SettingsScreen split, with new features added in one place (MoreFeatures)"
+        )
+    ),
+    ChangelogRelease(
+        version = "v1.3.1",
+        date = "2026-10-05",
+        added = listOf(
+            "Trips: a Summary tab with charts by Category, Paid vs Share and spend by day",
+            "Trips: every person has a colour, shown on their expenses, balances and payments",
+            "Trips: tap Does this settle everyone? or a payment to see how the balances add up",
+            "Trips: export a statement for one person, a balances CSV or a PDF report"
+        ),
+        changed = listOf(
+            "Trips: Custom split replaces Adjust and Exact. Type an amount to lock it; the rest splits equally",
+            "Trips: roomier screens that adapt to small phones, large fonts and tablets",
+            "Changelog: shorter entries, each under the version it shipped in"
+        ),
+        developer = listOf(
+            "Trip tables 22 → 23: person colours, and Adjust / Exact splits become Custom with every Share unchanged",
+            "TripMath gains the Custom split, settle-up check and ledgers; TripSummary and TripExports have tests",
             "ChangelogMarkdownTest enforces the changelog style: length, sentence count, capitals, no repeats, ordered dates",
             "Changelog rebuilt from the release tags (0.x into 1.0.0, 1.0.1-1.0.2 into 1.1.0, auto-capture into 1.2.0)",
-            "ui-ux-pro-max design skill (nextlevelbuilder/ui-ux-pro-max-skill) in .claude/skills"
+            "ui-ux-pro-max design skill (nextlevelbuilder/ui-ux-pro-max-skill) in .claude/skills",
+            "Trip glossary: Suggested payment, Member colour and Locked amount in CONTEXT.md"
         )
     ),
     ChangelogRelease(

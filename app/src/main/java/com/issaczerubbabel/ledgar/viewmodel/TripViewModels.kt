@@ -11,14 +11,22 @@ import com.issaczerubbabel.ledgar.data.repository.CaptureRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.PostRow
 import com.issaczerubbabel.ledgar.data.repository.TripDetail
+import com.issaczerubbabel.ledgar.data.repository.TripListItem
 import com.issaczerubbabel.ledgar.data.repository.TripRepository
+import com.issaczerubbabel.ledgar.trip.CategoryTotal
+import com.issaczerubbabel.ledgar.trip.CheckRow
+import com.issaczerubbabel.ledgar.trip.DayTotal
 import com.issaczerubbabel.ledgar.trip.MemberBalance
 import com.issaczerubbabel.ledgar.trip.PlannedPayment
+import com.issaczerubbabel.ledgar.trip.ReportBlock
 import com.issaczerubbabel.ledgar.trip.SplitMode
 import com.issaczerubbabel.ledgar.trip.SplitProblem
 import com.issaczerubbabel.ledgar.trip.TripExpenseInput
+import com.issaczerubbabel.ledgar.trip.TripExports
 import com.issaczerubbabel.ledgar.trip.TripMath
+import com.issaczerubbabel.ledgar.trip.TripMember
 import com.issaczerubbabel.ledgar.trip.TripSettlementInput
+import com.issaczerubbabel.ledgar.trip.TripSummary
 import com.issaczerubbabel.ledgar.util.TransactionType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -37,20 +45,45 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
-private fun TripSettlementRecord.toInput() = TripSettlementInput(fromMemberId, toMemberId, amountPaise)
+fun TripSettlementRecord.toInput() = TripSettlementInput(fromMemberId, toMemberId, amountPaise)
 
-/** What the Trip screen's three tabs show, worked out by [TripMath]. */
+/** What the Trip screen's tabs show, worked out by the trip maths. */
 data class TripScreenState(
     val detail: TripDetail,
     val balances: List<MemberBalance>,
     val plan: List<PlannedPayment>,
+    val check: List<CheckRow>,
     val totalPaise: Long,
     val myShareTotalPaise: Long,
-    val myShares: Map<Long, Long>
+    val myShares: Map<Long, Long>,
+    val categoriesAll: List<CategoryTotal>,
+    val categoriesMine: List<CategoryTotal>,
+    val days: List<DayTotal>,
+    val biggest: List<TripExpenseInput>,
+    val uncategorised: Int
 ) {
     val isArchived: Boolean get() = detail.trip.isArchived
+    val settlementInputs: List<TripSettlementInput> get() = detail.settlements.map { it.toInput() }
+    val myBalance: MemberBalance? get() = detail.self?.let { me -> balances.firstOrNull { it.memberId == me.id } }
+    val averagePerMemberPaise: Long get() = TripSummary.averagePerMemberPaise(totalPaise, detail.members.size)
+}
+
+private val shortDate = DateTimeFormatter.ofPattern("d MMM")
+private val yearDate = DateTimeFormatter.ofPattern("d MMM yyyy")
+
+/** "10–12 Oct 2026", or "From 10 Oct 2026" while the Trip has no end date. */
+fun tripDateRange(trip: TripRecord): String {
+    val start = runCatching { LocalDate.parse(trip.startDate) }.getOrNull() ?: return trip.startDate
+    val end = trip.endDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    return when {
+        end == null -> "From ${start.format(yearDate)}"
+        start.year == end.year && start.month == end.month -> "${start.dayOfMonth}–${end.format(yearDate)}"
+        start.year == end.year -> "${start.format(shortDate)} – ${end.format(yearDate)}"
+        else -> "${start.format(yearDate)} – ${end.format(yearDate)}"
+    }
 }
 
 @HiltViewModel
@@ -58,7 +91,7 @@ class TripsViewModel @Inject constructor(
     private val repository: TripRepository
 ) : ViewModel() {
 
-    val trips: StateFlow<List<TripRecord>> = repository.observeTrips()
+    val items: StateFlow<List<TripListItem>> = repository.observeTripItems()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun createTrip(name: String, startDate: String, endDate: String?, members: List<String>, onCreated: (Long) -> Unit) {
@@ -68,7 +101,7 @@ class TripsViewModel @Inject constructor(
 }
 
 /** The Active Trip for the Trans tab banner: name, total and expense count. */
-data class ActiveTripSummary(val tripId: Long, val name: String, val totalPaise: Long, val expenseCount: Int)
+data class ActiveTripSummary(val tripId: Long, val name: String, val totalPaise: Long, val expenseCount: Int, val members: List<TripMember>)
 
 @HiltViewModel
 class ActiveTripViewModel @Inject constructor(
@@ -79,7 +112,7 @@ class ActiveTripViewModel @Inject constructor(
     val active: StateFlow<ActiveTripSummary?> = repository.observeActiveTrip()
         .flatMapLatest { trip -> if (trip == null) flowOf(null) else repository.observeDetail(trip.id) }
         .map { detail ->
-            detail?.let { ActiveTripSummary(it.trip.id, it.trip.name, it.expenses.sumOf { e -> e.amountPaise }, it.expenses.size) }
+            detail?.let { ActiveTripSummary(it.trip.id, it.trip.name, it.expenses.sumOf { e -> e.amountPaise }, it.expenses.size, it.members) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 }
@@ -99,15 +132,22 @@ class TripViewModel @Inject constructor(
         detail?.let {
             val settlements = it.settlements.map { s -> s.toInput() }
             val balances = TripMath.balances(it.members, it.expenses, settlements)
+            val plan = TripMath.settleUpPlan(balances)
             val selfId = it.self?.id
             val myShares = it.expenses.associate { e -> e.id to (selfId?.let { id -> TripMath.shares(e)[id] } ?: 0L) }
             TripScreenState(
                 detail = it,
                 balances = balances,
-                plan = TripMath.settleUpPlan(balances),
+                plan = plan,
+                check = TripMath.settlementCheck(balances, plan),
                 totalPaise = it.expenses.sumOf { e -> e.amountPaise },
                 myShareTotalPaise = myShares.values.sum(),
-                myShares = myShares
+                myShares = myShares,
+                categoriesAll = TripSummary.categoryTotals(it.expenses, selfId, justMe = false),
+                categoriesMine = TripSummary.categoryTotals(it.expenses, selfId, justMe = true),
+                days = TripSummary.dayTotals(it.expenses),
+                biggest = TripSummary.biggest(it.expenses),
+                uncategorised = TripSummary.uncategorisedCount(it.expenses)
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
@@ -119,7 +159,8 @@ class TripViewModel @Inject constructor(
         launchSafely { repository.addMember(tripId, name) }
     }
 
-    fun updateMember(memberId: Long, name: String, upiId: String?) = launchSafely { repository.updateMember(memberId, name, upiId) }
+    fun updateMember(memberId: Long, name: String, upiId: String?, colorIndex: Int) =
+        launchSafely { repository.updateMember(memberId, name, upiId, colorIndex) }
 
     fun removeMember(memberId: Long) = launchSafely {
         if (!repository.removeMember(memberId)) _message.value = "They're on an expense or a payment. Edit those first."
@@ -137,10 +178,22 @@ class TripViewModel @Inject constructor(
     }
 
     fun summaryText(): String? = state.value?.detail?.let {
-        TripMath.summaryText(it.trip.name, it.members, it.expenses, it.settlements.map { s -> s.toInput() })
+        TripExports.summaryText(it.trip.name, it.members, it.expenses, it.settlements.map { s -> s.toInput() })
     }
 
-    fun csvText(): String? = state.value?.detail?.let { TripMath.csv(it.members, it.expenses) }
+    fun statementText(memberId: Long): String? = state.value?.detail?.let {
+        TripExports.statementText(it.trip.name, memberId, it.members, it.expenses, it.settlements.map { s -> s.toInput() })
+    }
+
+    fun expensesCsv(): String? = state.value?.detail?.let { TripExports.expensesCsv(it.members, it.expenses) }
+
+    fun balancesCsv(): String? = state.value?.detail?.let {
+        TripExports.balancesCsv(it.members, it.expenses, it.settlements.map { s -> s.toInput() })
+    }
+
+    fun reportBlocks(): List<ReportBlock>? = state.value?.detail?.let {
+        TripExports.reportBlocks(it.trip.name, tripDateRange(it.trip), it.members, it.expenses, it.settlements.map { s -> s.toInput() })
+    }
 
     private fun launchSafely(block: suspend () -> Unit) {
         viewModelScope.launch {
@@ -156,7 +209,8 @@ data class TripExpenseForm(
     val payerId: Long = 0,
     val mode: SplitMode = SplitMode.EQUAL,
     val memberIds: List<Long> = emptyList(),
-    val inputs: Map<Long, String> = emptyMap(),
+    /** Custom split: what was typed for each locked Member. */
+    val locked: Map<Long, String> = emptyMap(),
     val category: String = "",
     val date: String = LocalDate.now().toString()
 )
@@ -179,11 +233,18 @@ data class TripExpenseScreenState(
             payerId = form.payerId,
             mode = form.mode,
             memberIds = detail?.members?.map { it.id }?.filter { it in form.memberIds } ?: form.memberIds,
-            inputs = form.inputs.mapValues { parsePaise(it.value) }.filterValues { it != 0L },
+            locked = if (form.mode == SplitMode.CUSTOM) form.locked.mapValues { parsePaise(it.value) } else emptyMap(),
             category = form.category
         )
 
     val shares: Map<Long, Long> get() = TripMath.shares(input)
+
+    /** The people in the expense whose amount is not locked: they split what is left. */
+    val freeMemberIds: List<Long>
+        get() = input.memberIds.filter { it !in input.locked }
+
+    val lockedTotalPaise: Long
+        get() = input.memberIds.filter { it in input.locked }.sumOf { input.locked.getValue(it) }
 
     val outsideTrip: Boolean
         get() = detail?.trip?.let { form.date < it.startDate || (it.endDate != null && form.date > it.endDate) } ?: false
@@ -196,9 +257,8 @@ data class TripExpenseScreenState(
             else -> when (val p = TripMath.splitProblem(input)) {
                 null -> null
                 SplitProblem.NoMembers -> "Pick at least one person"
-                SplitProblem.AdjustTooLarge -> "The extras are more than the amount"
-                is SplitProblem.ExactLeft ->
-                    if (p.leftPaise > 0) "${TripMath.rupees(p.leftPaise)} left to assign" else "${TripMath.rupees(-p.leftPaise)} too much assigned"
+                is SplitProblem.OverAssigned -> "${TripMath.rupees(p.overPaise)} more than the total. Lower a locked amount."
+                is SplitProblem.UnderAssigned -> "${TripMath.rupees(p.leftPaise)} left to assign. Unlock someone or change an amount."
             }
         }
 }
@@ -243,7 +303,7 @@ class TripExpenseViewModel @Inject constructor(
                     payerId = existing.payerId,
                     mode = existing.mode,
                     memberIds = existing.memberIds,
-                    inputs = existing.inputs.mapValues { paiseToInput(it.value) },
+                    locked = existing.locked.mapValues { paiseToInput(it.value) },
                     category = existing.category,
                     date = existing.date
                 )
@@ -268,17 +328,18 @@ class TripExpenseViewModel @Inject constructor(
     fun setPayer(memberId: Long) = edit { it.copy(payerId = memberId) }
     fun setCategory(value: String) = edit { it.copy(category = value) }
     fun setDate(value: String) = edit { it.copy(date = value) }
-    fun setInput(memberId: Long, value: String) = edit { it.copy(inputs = it.inputs + (memberId to value)) }
 
-    fun setMode(mode: SplitMode) {
-        val s = _state.value
-        // Switching to Exact starts from the equal split, so only the differences need typing.
-        val inputs = if (mode == SplitMode.EXACT) s.copy(form = s.form.copy(mode = SplitMode.EQUAL)).shares.mapValues { paiseToInput(it.value) } else emptyMap()
-        edit { it.copy(mode = mode, inputs = inputs) }
+    fun setMode(mode: SplitMode) = edit { it.copy(mode = mode, locked = emptyMap()) }
+
+    /** Typing an amount locks that Member; clearing the field unlocks them. */
+    fun setLocked(memberId: Long, text: String) = edit {
+        if (text.isBlank()) it.copy(locked = it.locked - memberId) else it.copy(locked = it.locked + (memberId to text))
     }
 
+    fun unlock(memberId: Long) = edit { it.copy(locked = it.locked - memberId) }
+
     fun toggleMember(memberId: Long) = edit {
-        if (memberId in it.memberIds) it.copy(memberIds = it.memberIds - memberId, inputs = it.inputs - memberId)
+        if (memberId in it.memberIds) it.copy(memberIds = it.memberIds - memberId, locked = it.locked - memberId)
         else it.copy(memberIds = it.memberIds + memberId)
     }
 
@@ -308,7 +369,7 @@ data class ReviewRowUi(
     val date: String,
     val description: String,
     val ofAmountPaise: Long,
-    val payerName: String,
+    val payer: TripMember?,
     val amount: String,
     val category: String,
     val accountId: Long?,
@@ -362,7 +423,7 @@ class TripReviewViewModel @Inject constructor(
     val state: StateFlow<ReviewState> = combine(repository.observeDetail(tripId), edits, defaultAccount, accounts) { detail, edited, chosen, accountList ->
         if (detail == null) return@combine ReviewState()
         val selfId = detail.self?.id ?: return@combine ReviewState(tripName = detail.trip.name)
-        val names = detail.members.associate { it.id to it.name }
+        val membersById = detail.members.associateBy { it.id }
         val fallback = chosen ?: accountList.firstOrNull()?.id
         val preview = TripMath.postPreview(detail.trip.name, selfId, detail.expenses)
         val byId = detail.expenses.associateBy { it.id }
@@ -377,7 +438,7 @@ class TripReviewViewModel @Inject constructor(
                     date = row.date,
                     description = row.description,
                     ofAmountPaise = source.amountPaise,
-                    payerName = names[source.payerId].orEmpty(),
+                    payer = membersById[source.payerId],
                     amount = e.amount ?: paiseToInput(row.sharePaise),
                     category = e.category ?: row.category,
                     accountId = e.accountId ?: fallback,

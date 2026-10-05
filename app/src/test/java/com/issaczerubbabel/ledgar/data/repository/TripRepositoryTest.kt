@@ -152,4 +152,70 @@ class TripRepositoryTest {
         assertTrue(db.captureDao().observePending().first().isEmpty())
         assertEquals("TRIP", db.captureDao().getById(captureId)!!.status)
     }
+
+    @Test
+    fun everyoneOnATripGetsTheirOwnColour() = runBlocking {
+        val trip = goaTrip()
+        assertEquals(listOf(0, 1, 2), trip.members.map { it.colorIndex })
+        repo.addMember(trip.trip.id, "Arjun")
+        val after = repo.observeDetail(trip.trip.id).first()!!
+        assertEquals(listOf(0, 1, 2, 3), after.members.map { it.colorIndex })
+    }
+
+    @Test
+    fun aRemovedPersonsColourGoesToTheNextNewcomerAndOthersKeepTheirs() = runBlocking {
+        val trip = goaTrip()
+        repo.removeMember(trip.member("Rahul"))
+        repo.addMember(trip.trip.id, "Arjun")
+        val after = repo.observeDetail(trip.trip.id).first()!!
+        assertEquals(listOf("You" to 0, "Priya" to 2, "Arjun" to 1), after.members.map { it.name to it.colorIndex })
+    }
+
+    @Test
+    fun aPersonsColourCanBeChanged() = runBlocking {
+        val trip = goaTrip()
+        repo.updateMember(trip.member("Priya"), "Priya", "priya@ybl", colorIndex = 6)
+        val priya = repo.observeDetail(trip.trip.id).first()!!.members.first { it.name == "Priya" }
+        assertEquals(6, priya.colorIndex)
+        assertEquals("priya@ybl", priya.upiId)
+    }
+
+    @Test
+    fun aCustomSplitStoresWhoWasLockedAndEveryShare() = runBlocking {
+        val trip = goaTrip()
+        val dinner = trip.expense(300000, "You", "Dinner").copy(
+            mode = SplitMode.CUSTOM,
+            locked = mapOf(trip.member("Priya") to 150000L)
+        )
+        val id = repo.saveExpense(trip.trip.id, dinner)
+        val saved = repo.observeDetail(trip.trip.id).first()!!.expenses.single()
+        assertEquals(SplitMode.CUSTOM, saved.mode)
+        assertEquals(mapOf(trip.member("Priya") to 150000L), saved.locked)
+        val stored = db.tripDao().getSharesFor(id).associate { it.memberId to it.sharePaise }
+        assertEquals(mapOf(trip.member("You") to 75000L, trip.member("Rahul") to 75000L, trip.member("Priya") to 150000L), stored)
+    }
+
+    @Test
+    fun switchingBackToEqualForgetsTheLocks() = runBlocking {
+        val trip = goaTrip()
+        val locked = trip.expense(300000, "You", "Dinner").copy(mode = SplitMode.CUSTOM, locked = mapOf(trip.member("Priya") to 150000L))
+        val id = repo.saveExpense(trip.trip.id, locked)
+        repo.saveExpense(trip.trip.id, locked.copy(id = id, mode = SplitMode.EQUAL, locked = emptyMap()))
+        val saved = repo.observeDetail(trip.trip.id).first()!!.expenses.single()
+        assertEquals(SplitMode.EQUAL, saved.mode)
+        assertTrue(saved.locked.isEmpty())
+        assertEquals(listOf(100000L, 100000L, 100000L), db.tripDao().getSharesFor(id).map { it.sharePaise })
+    }
+
+    @Test
+    fun theTripsListShowsEachTripsPeopleAndTotal() = runBlocking {
+        val trip = goaTrip()
+        repo.saveExpense(trip.trip.id, trip.expense(30000, "You", "Dinner"))
+        repo.saveExpense(trip.trip.id, trip.expense(12000, "Rahul", "Cab"))
+        val item = repo.observeTripItems().first().single()
+        assertEquals("Goa trip", item.trip.name)
+        assertEquals(3, item.members.size)
+        assertEquals(42000L, item.totalPaise)
+        assertEquals(2, item.expenseCount)
+    }
 }

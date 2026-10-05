@@ -48,7 +48,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
         TripExpenseShareRecord::class,
         TripSettlementRecord::class
     ],
-    version = 22,
+    version = 23,
     exportSchema = false
 )
 abstract class SheetSyncDatabase : RoomDatabase() {
