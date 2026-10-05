@@ -23,7 +23,7 @@ fun releaseSetting(name: String): String? =
 val releaseStoreFile = releaseSetting("RELEASE_STORE_FILE")
 
 // One place for the version: versionCode is derived so it always grows with versionName.
-val appVersionName = "1.3.0"
+val appVersionName = "1.3.1"
 val appVersionCode = appVersionName.split(".").map(String::toInt).let { (major, minor, patch) -> major * 10_000 + minor * 100 + patch }
 
 android {
