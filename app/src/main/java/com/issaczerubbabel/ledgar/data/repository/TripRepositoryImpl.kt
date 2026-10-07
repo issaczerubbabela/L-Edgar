@@ -11,6 +11,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.TripExpenseShareRecord
 import com.issaczerubbabel.ledgar.data.local.entity.TripMemberRecord
 import com.issaczerubbabel.ledgar.data.local.entity.TripRecord
 import com.issaczerubbabel.ledgar.data.local.entity.TripSettlementRecord
+import com.issaczerubbabel.ledgar.trip.MemberPalette
 import com.issaczerubbabel.ledgar.trip.SplitMode
 import com.issaczerubbabel.ledgar.trip.TripExpenseInput
 import com.issaczerubbabel.ledgar.trip.TripMath
@@ -32,6 +33,20 @@ class TripRepositoryImpl @Inject constructor(
 
     override fun observeTrips(): Flow<List<TripRecord>> = tripDao.observeTrips()
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeTripItems(): Flow<List<TripListItem>> =
+        tripDao.observeTrips().flatMapLatest { trips ->
+            if (trips.isEmpty()) {
+                flowOf(emptyList())
+            } else {
+                combine(trips.map { observeDetail(it.id) }) { details ->
+                    details.filterNotNull().map { d ->
+                        TripListItem(d.trip, d.members, d.expenses.sumOf { it.amountPaise }, d.expenses.size)
+                    }
+                }
+            }
+        }
+
     override fun observeActiveTrip(): Flow<TripRecord?> = tripDao.observeActiveTrip()
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -50,7 +65,7 @@ class TripRepositoryImpl @Inject constructor(
                     val order = members.withIndex().associate { it.value.id to it.index }
                     TripDetail(
                         trip = trip,
-                        members = members.map { TripMember(it.id, it.name, it.isSelf, it.upiId) },
+                        members = members.map { TripMember(it.id, it.name, it.isSelf, it.upiId, it.colorIndex) },
                         expenses = expenses.map { e ->
                             val rows = byExpense[e.id].orEmpty().sortedBy { order[it.memberId] ?: Int.MAX_VALUE }
                             TripExpenseInput(
@@ -59,9 +74,9 @@ class TripRepositoryImpl @Inject constructor(
                                 purpose = e.purpose,
                                 amountPaise = e.amountPaise,
                                 payerId = e.payerMemberId,
-                                mode = runCatching { SplitMode.valueOf(e.splitMode) }.getOrDefault(SplitMode.EQUAL),
+                                mode = if (e.splitMode == SplitMode.CUSTOM.name) SplitMode.CUSTOM else SplitMode.EQUAL,
                                 memberIds = rows.map { it.memberId },
-                                inputs = rows.filter { it.inputPaise != 0L }.associate { it.memberId to it.inputPaise },
+                                locked = rows.filter { it.locked }.associate { it.memberId to it.inputPaise },
                                 category = e.category
                             )
                         },
@@ -75,23 +90,31 @@ class TripRepositoryImpl @Inject constructor(
     override suspend fun createTrip(name: String, startDate: String, endDate: String?, otherMembers: List<String>): Long =
         database.withTransaction {
             val tripId = tripDao.insertTrip(TripRecord(name = name.trim(), startDate = startDate, endDate = endDate))
-            tripDao.insertMember(TripMemberRecord(tripId = tripId, name = "You", isSelf = true, displayOrder = 0))
+            tripDao.insertMember(TripMemberRecord(tripId = tripId, name = "You", isSelf = true, displayOrder = 0, colorIndex = 0))
             otherMembers.map(String::trim).filter(String::isNotEmpty).forEachIndexed { i, member ->
-                tripDao.insertMember(TripMemberRecord(tripId = tripId, name = member, displayOrder = i + 1))
+                tripDao.insertMember(TripMemberRecord(tripId = tripId, name = member, displayOrder = i + 1, colorIndex = (i + 1) % MemberPalette.colors.size))
             }
             tripId
         }
 
     override suspend fun addMember(tripId: Long, name: String): Long = database.withTransaction {
         requireActive(tripId)
-        val order = (tripDao.getMembers(tripId).maxOfOrNull { it.displayOrder } ?: 0) + 1
-        tripDao.insertMember(TripMemberRecord(tripId = tripId, name = name.trim(), displayOrder = order))
+        val existing = tripDao.getMembers(tripId)
+        val order = (existing.maxOfOrNull { it.displayOrder } ?: 0) + 1
+        val colour = MemberPalette.nextFree(existing.map { it.colorIndex })
+        tripDao.insertMember(TripMemberRecord(tripId = tripId, name = name.trim(), displayOrder = order, colorIndex = colour))
     }
 
-    override suspend fun updateMember(memberId: Long, name: String, upiId: String?) = database.withTransaction {
+    override suspend fun updateMember(memberId: Long, name: String, upiId: String?, colorIndex: Int) = database.withTransaction {
         val member = tripDao.getMember(memberId) ?: return@withTransaction
         requireActive(member.tripId)
-        tripDao.updateMember(member.copy(name = name.trim().ifEmpty { member.name }, upiId = upiId?.trim()?.ifEmpty { null }))
+        tripDao.updateMember(
+            member.copy(
+                name = name.trim().ifEmpty { member.name },
+                upiId = upiId?.trim()?.ifEmpty { null },
+                colorIndex = Math.floorMod(colorIndex, MemberPalette.colors.size)
+            )
+        )
     }
 
     override suspend fun removeMember(memberId: Long): Boolean = database.withTransaction {
@@ -127,14 +150,16 @@ class TripRepositoryImpl @Inject constructor(
             expense.id
         }
         val shares = TripMath.shares(expense.copy(id = id))
-        val keepInputs = expense.mode != SplitMode.EQUAL
+        val custom = expense.mode == SplitMode.CUSTOM
         tripDao.insertShares(
             expense.memberIds.map { memberId ->
+                val lockedHere = custom && memberId in expense.locked
                 TripExpenseShareRecord(
                     expenseId = id,
                     memberId = memberId,
-                    inputPaise = if (keepInputs) expense.inputs[memberId] ?: 0L else 0L,
-                    sharePaise = shares[memberId] ?: 0L
+                    inputPaise = if (lockedHere) expense.locked.getValue(memberId) else 0L,
+                    sharePaise = shares[memberId] ?: 0L,
+                    locked = lockedHere
                 )
             }
         )

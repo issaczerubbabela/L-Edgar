@@ -57,6 +57,7 @@ The release build is shrunk with R8, which can break reflection-based code in wa
 4. Build/update Compose screens, wire navigation.
 5. If remote-facing, update `scripts/AppsScript.gs` contract and the Retrofit DTO/API methods together — the two must stay in sync since there's no shared schema. The script also exists as a copy in `ui/screens/AppsScriptSetupScreen.kt` (what users paste into Apps Script): change both, and run `node --test scripts/tests/transaction-sync.test.js` and `node --test scripts/tests/bucket-budgets.test.js`, which fail if they drift. Never send new data in `records`: a script older than your change files `records` as transactions. Bump `SCRIPT_VERSION` in the script and `TransactionSyncer.REQUIRED_SCRIPT_VERSION` together when the app starts depending on a new script behaviour.
 6. Validate sync behavior for insert/update/delete and import paths.
+7. A new user-facing feature gets one entry in `ui/navigation/MoreFeatures.kt` (id, title, icon, route); the More tab renders its tiles from that list. Settings holds only app-wide configuration; a feature keeps its own settings inside itself.
 
 ## Mandatory changelog policy
 
@@ -66,6 +67,20 @@ Any prompt that changes a repository file (code, UI, sync, schema, or instructio
 - Regenerate `CHANGELOG.md` from it: `UPDATE_CHANGELOG=1 ./gradlew testDebugUnitTest --tests "*ChangelogMarkdownTest"`. The test fails if the two drift.
 - Only create a new `ChangelogRelease` entry when explicitly asked to bump the version, and bump `appVersionName` in `app/build.gradle.kts` to match (versionCode is derived from it).
 - Skip this only when the change is genuinely read-only (no repository files modified).
+
+### Changelog style
+
+`ChangelogMarkdownTest` fails the build when an entry breaks the first four rules; the rest are for you to follow.
+
+- **Short.** At most 110 characters for `added`/`changed`/`fixed`, 140 for `developer`, at most two sentences, no full stop at the end. Start user-facing entries with a capital letter.
+- **One change per entry, at most 16 entries per section.** Merge related changes ("Stats: a spending calendar, Paid from and period bars") instead of adding more.
+- **Never repeat an entry** across releases. If a later change reworks something, describe what's new, not the whole feature again.
+- **Releases stay newest first**, dated `yyyy-MM-dd`.
+- **Lead with the area** when it helps scanning: `Trips: …`, `Stats: …`, `Auto-capture: …`, using the name the user sees in the app.
+- **Write for the user**, in plain words and present tense: what they can now do, see or stop worrying about. Name screens and buttons as the app shows them. No class names, ticket numbers or "now" / "new" filler outside `developer`.
+- **Pick the section by what the user notices:** `added` for something they couldn't do before, `changed` for something that works differently, `fixed` for something that was wrong. Internal work (tests, refactors, docs, CI, skills) goes in `developer`.
+- **A tagged release is frozen.** Once `vX.Y.Z` is pushed, never edit or add to its section: new work goes in the top, unreleased `ChangelogRelease`. Check with `git tag` before editing.
+- **Update the entry as a feature grows.** When a later commit on the same unreleased feature changes what an earlier bullet says, rewrite that bullet instead of appending a correction.
 
 ## Releasing
 

@@ -182,8 +182,20 @@ A repayment between two Members that moves their Balances towards zero. It never
 _Avoid_: reimbursement, payback
 
 **Settle-up plan**:
-The fewest payments between Members that bring every Balance to zero.
+The fewest Suggested payments between Members that bring every Balance to zero.
 _Avoid_: simplified debts
+
+**Suggested payment**:
+One payment in the Settle-up plan, from a Member who owes to a Member who is owed. It becomes a Settlement once the user marks it paid.
+_Avoid_: settlement (for a payment not yet made), debt
+
+**Member colour**:
+The colour that identifies a Member everywhere in a Trip. It never means money direction; gets back and owes keep their own colours.
+_Avoid_: payer colour, tag
+
+**Locked amount**:
+A Share the user typed for one Member in a Custom split. Members without a Locked amount split what is left equally.
+_Avoid_: adjustment, exact amount, override
 
 **Post**:
 Turning the user's Shares of a Trip into Transactions, after the user reviews and edits them. Posting archives the Trip.

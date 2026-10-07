@@ -136,8 +136,15 @@ object DatabaseModule {
         }
     }
 
-    /** Adds the `recurring_rules` table and the column linking a Transaction back to the rule that created it. */
+    /** Trip Member colours, and Adjust / Exact splits become Custom with every Share unchanged. */
     internal val MIGRATION_22_23 = object : Migration(22, 23) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            TripMigration.upgradeTo23(db)
+        }
+    }
+
+    /** Adds the `recurring_rules` table and the column linking a Transaction back to the rule that created it. */
+    internal val MIGRATION_23_24 = object : Migration(23, 24) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL(
                 "CREATE TABLE IF NOT EXISTS `recurring_rules` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
@@ -308,6 +315,7 @@ object DatabaseModule {
             .addMigrations(MIGRATION_20_21)
             .addMigrations(MIGRATION_21_22)
             .addMigrations(MIGRATION_22_23)
+            .addMigrations(MIGRATION_23_24)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .addCallback(callback)
             .build()

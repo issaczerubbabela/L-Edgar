@@ -40,7 +40,7 @@ graph TD
   - Stats (Insights)
   - Budget (salary-cycle buckets; sub-screens: Start cycle, Plan buckets, Bucket detail)
   - Accounts
-  - More (Settings)
+  - More (sync status, features, data tools) and Settings, opened from the gear on More
   - Review inbox and Auto-capture settings, reached from a banner on Trans, a badge on the Trans tab and More (see [AUTO_CAPTURE.md](AUTO_CAPTURE.md))
 - Form-heavy flows are managed in ViewModels with reactive state.
 
@@ -80,7 +80,7 @@ flowchart TD
     A --> C[Stats / Insights]
     A --> BG[Budget]
     A --> D[Accounts]
-    A --> E[More / Settings]
+    A --> E[More] --> E2[Settings]
 
     B --> B1[Log Transaction]
     BG --> BG1[Start Cycle]
@@ -153,7 +153,7 @@ sequenceDiagram
 
 1. Settings triggers importFromSheets.
 2. Repository imports dropdowns, accounts and budgets and overwrites the local lists, then bucket_budgets (cycles with nested buckets and categories), replacing the local cycle tables.
-3. Transactions come in through the same Pull as every Sync (`TransactionSyncer`), merged by Transaction ID; conflicts appear in Settings.
+3. Transactions come in through the same Pull as every Sync (`TransactionSyncer`), merged by Transaction ID; conflicts appear in More.
 
 ### CSV Import
 
@@ -368,6 +368,18 @@ erDiagram
   Only a Confirm creates an `expense_records` row (`confirmedExpenseId`), in one Room transaction.
 - `merchant_rules.origin` is USER, LEARNED or CANDIDATE (a candidate is a run of confirmations, never matched).
 - None of these tables is sent to the Sheet or covered by `BackupWorker`.
+
+### trips / trip_members / trip_expenses / trip_expense_shares / trip_settlements
+
+- Purpose: splitting a trip's shared costs (terms in `CONTEXT.md` under Trips; ADR-0008). Added in database v22; v23 added
+  `trip_members.colorIndex` and `trip_expense_shares.locked`.
+- Amounts are whole paise. `trip_expenses.splitMode` is `EQUAL` or `CUSTOM`; before v23 it could also be `ADJUST` or
+  `EXACT`, which the 22 -> 23 migration converts (`trip/LegacySplit`) so every stored Share is unchanged. In a Custom
+  split a `trip_expense_shares` row with `locked = 1` holds the Locked amount in `inputPaise`; everyone else splits the rest.
+- All the maths (Shares, Balances, the Settle-up plan and its check, ledgers, chart numbers, export text) lives in the pure
+  `trip/` package (`TripMath`, `TripSummary`, `TripExports`) and is unit tested without Android.
+- Only Post writes to `expense_records` (the user's Share, `trip_expenses.postedExpenseId` links back); none of these tables is
+  sent to the Sheet or covered by `BackupWorker`.
 
 ## 8. Dependency Injection Graph (Conceptual)
 
