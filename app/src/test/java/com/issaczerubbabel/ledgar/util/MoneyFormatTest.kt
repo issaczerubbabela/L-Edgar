@@ -42,6 +42,31 @@ class MoneyFormatTest {
     }
 
     @Test
+    fun moneyAlwaysShowsPaiseWithIndianGrouping() {
+        assertEquals("₹0.00", formatMoney(0.0))
+        assertEquals("₹2,47,980.50", formatMoney(247980.5))
+        assertEquals("₹1,23,45,678.00", formatMoney(12345678.0))
+        assertEquals("₹999.99", formatMoney(999.99))
+    }
+
+    @Test
+    fun moneyUsesATrueMinusAndAPlusOnlyWhenAsked() {
+        assertEquals("−₹18,640.00", formatMoney(-18640.0))
+        assertEquals("₹340.00", formatMoney(340.0))
+        assertEquals("+₹340.00", formatMoney(340.0, signed = true))
+        assertEquals("−₹340.00", formatMoney(-340.0, signed = true))
+        assertEquals("₹0.00", formatMoney(0.0, signed = true))
+    }
+
+    @Test
+    fun moneyRoundsToPaiseAndNeverShowsMinusZero() {
+        assertEquals("₹0.30", formatMoney(0.1 + 0.2))
+        assertEquals("₹0.00", formatMoney(-0.004))
+        assertEquals("₹0.00", formatMoney(0.1 + 0.2 - 0.3))
+        assertEquals("₹1,483.34", formatMoney(1483.336))
+    }
+
+    @Test
     fun aFieldShowsNoTrailingPointZero() {
         assertEquals("68000", amountToInput(68000.0))
         assertEquals("0", amountToInput(0.0))

@@ -19,6 +19,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Accounts: Liabilities come from the Liability role, and an overpaid card lowers them
 - Accounts: Assets, Liabilities and Total leave out Accounts that aren't included in totals
 - Overall Stats: moving money between your own Accounts no longer counts as income and expense
+- Income and expense amounts are lighter on dark backgrounds, so they're easier to read
 
 ### Fixed
 
@@ -30,6 +31,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - AccountMath: one pure module for balances, totals, statements, net worth, cash flow and movers, with tests
 - Room 23 → 24: reconciledAt, Liability roles from the old keywords, and Transfers linked to their destination
 - Adjustment Transaction type (ADR-0009): syncs with its sign, moves only Account balances, never Stats or Buckets
+- formatMoney: exact ₹ amounts with Indian grouping, a true minus and an optional +, with tests
 
 ## [1.3.2] - 2026-10-05
 

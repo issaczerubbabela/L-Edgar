@@ -26,7 +26,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Accounts: a Transaction changes a balance only when dated after its As-of date, however late you log it",
             "Accounts: Liabilities come from the Liability role, and an overpaid card lowers them",
             "Accounts: Assets, Liabilities and Total leave out Accounts that aren't included in totals",
-            "Overall Stats: moving money between your own Accounts no longer counts as income and expense"
+            "Overall Stats: moving money between your own Accounts no longer counts as income and expense",
+            "Income and expense amounts are lighter on dark backgrounds, so they're easier to read"
         ),
         fixed = listOf(
             "Accounts: old transfers that only saved the destination's name count on that Account everywhere",
@@ -35,7 +36,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
         developer = listOf(
             "AccountMath: one pure module for balances, totals, statements, net worth, cash flow and movers, with tests",
             "Room 23 → 24: reconciledAt, Liability roles from the old keywords, and Transfers linked to their destination",
-            "Adjustment Transaction type (ADR-0009): syncs with its sign, moves only Account balances, never Stats or Buckets"
+            "Adjustment Transaction type (ADR-0009): syncs with its sign, moves only Account balances, never Stats or Buckets",
+            "formatMoney: exact ₹ amounts with Indian grouping, a true minus and an optional +, with tests"
         )
     ),
     ChangelogRelease(
