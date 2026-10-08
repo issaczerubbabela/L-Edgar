@@ -5,7 +5,7 @@ An offline-first Android expense tracker. Each user keeps their data on their ph
 ## Money
 
 **Transaction**:
-One movement of money: an Expense, an Income or a Transfer. Stored as `ExpenseRecord` in `expense_records`.
+One movement of money: an Expense, an Income, a Transfer or a Balance adjustment. Stored as `ExpenseRecord` in `expense_records`.
 _Avoid_: record, entry, expense (when you mean any type)
 
 **Transfer**:
@@ -15,6 +15,14 @@ _Avoid_: payment between accounts
 **Account**:
 A place money is held or owed, such as a bank account, card, loan or cash wallet. Its balance is its Initial balance plus the Transactions dated after its As-of date. A balance below zero means money owed.
 _Avoid_: asset (the UI's "Edit All Assets" means Accounts), payment mode
+
+**Balance adjustment**:
+A Transaction that only corrects one Account's balance to match the bank, for the difference found when Reconciling. It is never Earned, Spent or Saved.
+_Avoid_: correction, manual balance edit
+
+**Reconcile**:
+Typing in what the bank shows for an Account today, so the app adds a Balance adjustment for any difference. The Initial balance stays as it was.
+_Avoid_: edit balance, sync (for this)
 
 **Account group**:
 The named group an Account belongs to, picked from the `ACCOUNT_GROUP` Dropdown options.
