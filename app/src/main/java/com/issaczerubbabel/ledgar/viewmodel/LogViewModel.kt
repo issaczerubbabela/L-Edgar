@@ -127,7 +127,18 @@ class LogViewModel @Inject constructor(
                 amount = if (record.amount % 1.0 == 0.0) record.amount.toInt().toString() else record.amount.toString()
                 remarks = record.remarks
             }
-        } else if (copyTransactionId != null) {
+        } else if (copyTransactionId == null) {
+            // Opened from an Account's page: start an Expense, Income or Transfer from that Account.
+            val prefillType = savedStateHandle.get<String>("prefillType").orEmpty()
+            val prefillAccountId = savedStateHandle.get<Long>("prefillAccountId")?.takeIf { it > 0L }
+            if (prefillType in listOf(TransactionType.EXPENSE, TransactionType.INCOME, TransactionType.TRANSFER)) {
+                selectedType = prefillType
+            }
+            if (prefillAccountId != null) {
+                if (selectedType == TransactionType.TRANSFER) selectedFromAccountId = prefillAccountId
+                else selectedAccountId = prefillAccountId
+            }
+        } else {
             viewModelScope.launch {
                 val source = repository.getById(copyTransactionId)
                 if (source == null) {

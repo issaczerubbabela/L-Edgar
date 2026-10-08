@@ -79,7 +79,8 @@ import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
     object Log : Screen(
-        "log?transactionId={transactionId}&copyTransactionId={copyTransactionId}&copyDateMode={copyDateMode}",
+        "log?transactionId={transactionId}&copyTransactionId={copyTransactionId}&copyDateMode={copyDateMode}" +
+            "&prefillType={prefillType}&prefillAccountId={prefillAccountId}",
         "Log",
         Icons.Filled.AddCircle
     )
@@ -191,7 +192,9 @@ private fun Context.openSystemSecuritySettings() {
 private fun logRoute(
     transactionId: Long? = null,
     copyTransactionId: Long? = null,
-    useTodayDateForCopy: Boolean = false
+    useTodayDateForCopy: Boolean = false,
+    prefillType: String? = null,
+    prefillAccountId: Long? = null
 ): String {
     val params = mutableListOf<String>()
     transactionId?.let { params += "transactionId=$it" }
@@ -199,6 +202,8 @@ private fun logRoute(
         params += "copyTransactionId=$it"
         params += "copyDateMode=${if (useTodayDateForCopy) "today" else "original"}"
     }
+    prefillType?.let { params += "prefillType=$it" }
+    prefillAccountId?.let { params += "prefillAccountId=$it" }
     return if (params.isEmpty()) LOG_BASE_ROUTE else "$LOG_BASE_ROUTE?${params.joinToString("&")}" 
 }
 
@@ -557,6 +562,14 @@ fun AppNavigation() {
                     navArgument("copyDateMode") {
                         type = NavType.StringType
                         defaultValue = "original"
+                    },
+                    navArgument("prefillType") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    },
+                    navArgument("prefillAccountId") {
+                        type = NavType.LongType
+                        defaultValue = -1L
                     }
                 )
             ) {
@@ -890,7 +903,15 @@ fun AppNavigation() {
             composable("account_detail/{accountId}") {
                 AccountDetailScreen(
                     innerPadding = innerPadding,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onOpenTransaction = { transactionId ->
+                        navController.navigate(logRoute(transactionId = transactionId)) { launchSingleTop = true }
+                    },
+                    onAddTransaction = { type, accountId ->
+                        navController.navigate(logRoute(prefillType = type, prefillAccountId = accountId)) {
+                            launchSingleTop = true
+                        }
+                    }
                 )
             }
             composable(Screen.OverallAccountStats.route) {

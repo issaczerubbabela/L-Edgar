@@ -20,6 +20,8 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Accounts: Assets, Liabilities and Total leave out Accounts that aren't included in totals
 - Overall Stats: moving money between your own Accounts no longer counts as income and expense
 - Income and expense amounts are lighter on dark backgrounds, so they're easier to read
+- Account page: Balance today, Transfer and Add buttons, and one scrolling statement in place of the chart
+- Account page: each month shows Opening, In, Out and Closing that add up, and rows show the balance after
 
 ### Fixed
 
