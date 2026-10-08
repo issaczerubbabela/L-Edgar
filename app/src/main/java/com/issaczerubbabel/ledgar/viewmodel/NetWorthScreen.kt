@@ -132,11 +132,13 @@ fun netWorthScreen(book: AccountBook, today: LocalDate, period: NetWorthPeriod):
                 val sum = accounts.sumOf { AccountMath.paise(balances.getValue(it.id)) }
                 if (isLiability) -sum else sum
             }
-            .filterValues { it > 0L }
-        val whole = byGroup.values.sum().takeIf { it > 0L } ?: return emptyList()
+            .filterValues { it != 0L }
+        // Shares are of the groups above zero; a group below zero is still listed, so the rows add up to the total.
+        val whole = byGroup.values.filter { it > 0L }.sum()
         return byGroup.entries.sortedByDescending { it.value }.map { (group, paise) ->
-            val fraction = paise.toFloat() / whole
-            ShareUi(group, formatMoney(AccountMath.rupees(paise)), fraction, String.format(Locale.ENGLISH, "%.1f%%", fraction * 100))
+            val fraction = if (paise > 0L && whole > 0L) paise.toFloat() / whole else 0f
+            val percent = if (paise > 0L) String.format(Locale.ENGLISH, "%.1f%%", fraction * 100) else "below zero"
+            ShareUi(group, formatMoney(AccountMath.rupees(paise)), fraction, percent)
         }
     }
 

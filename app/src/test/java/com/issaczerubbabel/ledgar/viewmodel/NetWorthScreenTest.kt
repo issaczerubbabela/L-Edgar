@@ -76,6 +76,15 @@ class NetWorthScreenTest {
     }
 
     @Test
+    fun aGroupBelowZeroIsStillListedSoTheRowsAddUpToAssets() {
+        val overdrawn = accounts + AccountRecord(id = 4, groupName = "Cash", accountName = "Wallet", initialBalance = -60.0, initialBalanceDate = "2026-06-30")
+        val shares = netWorthScreen(AccountBook.of(overdrawn, roles, transactions), today, NetWorthPeriod.SIX_MONTHS)
+        assertEquals("₹900.00", shares.assetsTotal)
+        assertEquals(listOf("Bank" to "100.0%", "Cash" to "below zero"), shares.assetShares.map { it.name to it.percent })
+        assertEquals("−₹60.00", shares.assetShares.last().amount)
+    }
+
+    @Test
     fun moversAddUpToThisMonthsChange() {
         assertEquals(listOf("HDFC Millennia" to "−₹40.00", "HDFC Savings" to "+₹10.00"), state.movers.map { it.name to it.change })
         assertEquals("Change since 30 Sep. Together: −₹30.00", state.moversNote)

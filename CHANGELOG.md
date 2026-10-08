@@ -49,6 +49,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Reconcile: pure outcome and sheet logic, written by AccountRepository in one Room transaction, with tests
 - Apps Script: _accounts gains Reconciled At after Last Backed Up; an older Sheet reads it as blank
 - NetWorthScreen: Android-free state for the Net worth screen, with tests; the Overall Stats files are gone
+- Net worth charts set In/Out and line colours explicitly, and groups below zero stay listed so shares add up
 
 ## [1.3.2] - 2026-10-05
 

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -56,14 +57,19 @@ import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottomAxis
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStartAxis
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberColumnCartesianLayer
+import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLine
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
+import com.patrykandpatrick.vico.compose.common.component.rememberLineComponent
 import com.patrykandpatrick.vico.compose.common.component.rememberShapeComponent
+import com.patrykandpatrick.vico.compose.common.fill
 import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
 import com.patrykandpatrick.vico.core.cartesian.axis.Axis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.core.cartesian.data.ChartValues
+import com.patrykandpatrick.vico.core.cartesian.layer.ColumnCartesianLayer
+import com.patrykandpatrick.vico.core.cartesian.layer.LineCartesianLayer
 import com.patrykandpatrick.vico.core.cartesian.marker.CartesianMarker
 import com.patrykandpatrick.vico.core.cartesian.marker.CartesianMarkerValueFormatter
 import com.patrykandpatrick.vico.core.cartesian.marker.ColumnCartesianLayerMarkerTarget
@@ -178,6 +184,7 @@ private fun HistorySection(state: NetWorthUiState, producer: CartesianChartModel
 private fun HistoryChart(points: List<NetWorthMonthUi>, producer: CartesianChartModelProducer, summary: String) {
     val bottomAxisFormatter = remember(points) { indexFormatter { points.getOrNull(it)?.shortLabel.orEmpty() } }
     val startAxisFormatter = remember { valueFormatter(::compactRupees) }
+    val lineColor = MaterialTheme.colorScheme.primary
     val markerFormatter = remember(points) {
         CartesianMarkerValueFormatter { _, targets ->
             val point = targets.firstOrNull()?.xIndex?.let { points.getOrNull(it) } ?: return@CartesianMarkerValueFormatter ""
@@ -186,7 +193,14 @@ private fun HistoryChart(points: List<NetWorthMonthUi>, producer: CartesianChart
     }
     CartesianChartHost(
         chart = rememberCartesianChart(
-            rememberLineCartesianLayer(),
+            rememberLineCartesianLayer(
+                lineProvider = LineCartesianLayer.LineProvider.series(
+                    rememberLine(
+                        fill = remember(lineColor) { LineCartesianLayer.LineFill.single(fill(lineColor)) },
+                        areaFill = remember(lineColor) { LineCartesianLayer.AreaFill.single(fill(lineColor.copy(alpha = 0.18f))) }
+                    )
+                )
+            ),
             startAxis = rememberStartAxis(valueFormatter = startAxisFormatter),
             bottomAxis = rememberBottomAxis(valueFormatter = bottomAxisFormatter),
             marker = rememberMarker(markerFormatter)
@@ -218,7 +232,12 @@ private fun CashFlowSection(state: NetWorthUiState, producer: CartesianChartMode
         }
         CartesianChartHost(
             chart = rememberCartesianChart(
-                rememberColumnCartesianLayer(),
+                rememberColumnCartesianLayer(
+                    columnProvider = ColumnCartesianLayer.ColumnProvider.series(
+                        rememberLineComponent(color = IncomeBlue, thickness = 8.dp, shape = Shape.rounded(40)),
+                        rememberLineComponent(color = ExpenseOrange, thickness = 8.dp, shape = Shape.rounded(40))
+                    )
+                ),
                 startAxis = rememberStartAxis(valueFormatter = startAxisFormatter),
                 bottomAxis = rememberBottomAxis(valueFormatter = bottomAxisFormatter),
                 marker = rememberMarker(markerFormatter)
@@ -295,7 +314,7 @@ private fun ShareGroup(title: String, shares: List<ShareUi>, color: Color) {
                         share.percent,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.width(56.dp).padding(start = 8.dp)
+                        modifier = Modifier.widthIn(min = 56.dp).padding(start = 8.dp)
                     )
                 }
                 Box(
