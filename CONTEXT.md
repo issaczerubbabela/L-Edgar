@@ -35,6 +35,10 @@ _Avoid_: debt group (keywords in a group's name no longer decide this)
 The sum of the balances of every Account included in totals: Assets minus Liabilities. It is the "Total" on the Accounts tab.
 _Avoid_: balance (for the total), total assets
 
+**Cash flow**:
+Money moving into and out of the Accounts Included in totals in a period. A Transfer counts only when it crosses that boundary; Balance adjustments are shown apart from it.
+_Avoid_: income/expense (for this; those are Earned and Spent)
+
 **Included in totals**:
 Whether an Account counts towards Assets, Liabilities and Net worth. It doesn't affect whether the Account is shown.
 
