@@ -33,6 +33,8 @@ interface AccountRepository {
     /** Puts the Accounts in [accountIds]' order, first to last, in one Room transaction. */
     suspend fun setDisplayOrder(accountIds: List<Long>)
     suspend fun hasTransactions(accountId: Long): Boolean
+    /** How many Transactions use the Account, on any side; deleted ones waiting to sync don't count. */
+    suspend fun countTransactions(accountId: Long): Int
     suspend fun delete(record: AccountRecord)
     suspend fun permanentlyDeleteAccount(
         accountId: Long,

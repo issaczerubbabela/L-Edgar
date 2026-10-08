@@ -1,232 +1,218 @@
 package com.issaczerubbabel.ledgar.viewmodel
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
+import com.issaczerubbabel.ledgar.data.local.entity.DropdownRole
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
-import com.issaczerubbabel.ledgar.data.repository.PermanentDeleteStrategy
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
+import com.issaczerubbabel.ledgar.data.repository.PermanentDeleteStrategy
+import com.issaczerubbabel.ledgar.util.amountToInput
+import com.issaczerubbabel.ledgar.util.parseAmountInput
+import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import dagger.hilt.android.lifecycle.HiltViewModel
-import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import javax.inject.Inject
 
-data class AddEditAccountUiState(
+/** Another Account that Delete… can move Transactions to. */
+data class AccountChoice(val id: Long, val label: String)
+
+data class AccountFormUiState(
+    /** Null while adding. */
     val accountId: Long? = null,
-    val selectedGroup: String = "",
-    val accountName: String = "",
+    val group: String = "",
+    val name: String = "",
+    /** For a Liability group, the Amount owed (positive). Read-only once the Account exists. */
     val amountInput: String = "",
-    val initialBalanceDate: String = LocalDate.now().toString(),
+    /** The As-of date: the amount is the balance at the end of this day. */
+    val asOfDate: LocalDate = LocalDate.now(),
     val description: String = "",
     val includeInTotals: Boolean = true,
-    val isHidden: Boolean = false
+    val isHidden: Boolean = false,
+    val groups: List<String> = emptyList(),
+    val liabilityGroups: Set<String> = emptySet(),
+    val errors: AccountFormErrors = AccountFormErrors(),
+    val transactionCount: Int = 0,
+    val otherAccounts: List<AccountChoice> = emptyList(),
+    val isLoaded: Boolean = false
 ) {
-    val isEditMode: Boolean
-        get() = accountId != null
+    val isEditMode: Boolean get() = accountId != null
+    val isLiability: Boolean get() = group in liabilityGroups
 }
 
+/** What the form asks its screen to do once an action is done. */
+enum class AccountFormResult { Saved, Archived, Deleted }
+
+/**
+ * The one Add/Edit Account form (opened with an `accountId` to edit, without one to add). Editing
+ * never changes the Initial balance or As-of date: Reconcile corrects a balance (ADR-0009).
+ */
 @HiltViewModel
 class AddEditAccountViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
     private val accountRepository: AccountRepository,
-    dropdownOptionRepository: DropdownOptionRepository
+    private val dropdownOptionRepository: DropdownOptionRepository
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(AddEditAccountUiState())
-    val uiState: StateFlow<AddEditAccountUiState> = _uiState.asStateFlow()
+    private val editingId: Long? = savedStateHandle.get<Long>("accountId")?.takeIf { it > 0L }
 
-    val accountGroups: StateFlow<List<String>> = dropdownOptionRepository
-        .getOptionsByType("ACCOUNT_GROUP")
-        .map { options -> options.map { it.name } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _uiState = MutableStateFlow(AccountFormUiState(accountId = editingId))
+    val uiState: StateFlow<AccountFormUiState> = _uiState.asStateFlow()
 
-    val allAccounts: StateFlow<List<AccountRecord>> = accountRepository
-        .getAllAccounts()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _results = MutableSharedFlow<AccountFormResult>()
+    val results: SharedFlow<AccountFormResult> = _results.asSharedFlow()
 
-    private val _events = MutableSharedFlow<String>(replay = 0)
-    val events: SharedFlow<String> = _events.asSharedFlow()
-
-    private val _saved = MutableSharedFlow<Unit>(replay = 0)
-    val saved: SharedFlow<Unit> = _saved.asSharedFlow()
-
-    private val _deleted = MutableSharedFlow<Unit>(replay = 0)
-    val deleted: SharedFlow<Unit> = _deleted.asSharedFlow()
+    private val _messages = MutableSharedFlow<String>()
+    val messages: SharedFlow<String> = _messages.asSharedFlow()
 
     init {
         viewModelScope.launch {
-            accountGroups.collect { groups ->
-                _uiState.update { current ->
-                    if (groups.isEmpty()) {
-                        current.copy(selectedGroup = "")
-                    } else if (current.selectedGroup.isBlank() || current.selectedGroup !in groups) {
-                        current.copy(selectedGroup = groups.first())
-                    } else {
-                        current
-                    }
+            dropdownOptionRepository.getOptionsByType(ACCOUNT_GROUP).collect { options ->
+                _uiState.update { state ->
+                    val names = options.map { it.name }
+                    state.copy(
+                        groups = names,
+                        liabilityGroups = options.filter { it.role == DropdownRole.LIABILITY }.mapTo(mutableSetOf()) { it.name },
+                        // A new Account starts in the first group; an edited one keeps its own.
+                        group = if (state.group.isBlank() && editingId == null) names.firstOrNull().orEmpty() else state.group
+                    )
                 }
             }
         }
+        viewModelScope.launch {
+            accountRepository.getAllAccounts().collect { accounts ->
+                _uiState.update { state ->
+                    state.copy(
+                        otherAccounts = accounts.filter { it.id != editingId }
+                            .map { AccountChoice(it.id, "${it.accountName} (${it.groupName})") }
+                    )
+                }
+            }
+        }
+        viewModelScope.launch { load() }
     }
 
-    fun startCreate() {
-        _uiState.update {
-            AddEditAccountUiState(
-                    selectedGroup = accountGroups.value.firstOrNull().orEmpty(),
-                    initialBalanceDate = LocalDate.now().toString()
+    private suspend fun load() {
+        val id = editingId ?: run {
+            _uiState.update { it.copy(isLoaded = true) }
+            return
+        }
+        val account = accountRepository.getAccountById(id) ?: run {
+            _messages.emit("Account not found")
+            return
+        }
+        val count = accountRepository.countTransactions(id)
+        // Read the role directly: the groups Flow may not have arrived yet.
+        val isLiability = dropdownOptionRepository.getAllOptionsSnapshot().any {
+            it.optionType == ACCOUNT_GROUP && it.name == account.groupName && it.role == DropdownRole.LIABILITY
+        }
+        _uiState.update { state ->
+            state.copy(
+                group = account.groupName,
+                name = account.accountName,
+                amountInput = amountToInput(AccountForm.amountShown(account.initialBalance, isLiability)),
+                asOfDate = parseFlexibleDate(account.initialBalanceDate) ?: LocalDate.now(),
+                description = account.description.orEmpty(),
+                includeInTotals = account.includeInTotals,
+                isHidden = account.isHidden,
+                transactionCount = count,
+                isLoaded = true
             )
         }
     }
 
-    fun startEdit(accountId: Long) {
+    fun setGroup(group: String) = _uiState.update { it.copy(group = group, errors = it.errors.copy(group = null)) }
+    fun setName(name: String) = _uiState.update { it.copy(name = name, errors = it.errors.copy(name = null)) }
+    fun setAmount(amount: String) = _uiState.update { it.copy(amountInput = amount, errors = it.errors.copy(amount = null)) }
+    fun setAsOfDate(date: LocalDate) = _uiState.update { it.copy(asOfDate = date) }
+    fun setDescription(description: String) = _uiState.update { it.copy(description = description) }
+    fun setIncludeInTotals(include: Boolean) = _uiState.update { it.copy(includeInTotals = include) }
+    fun setHidden(hidden: Boolean) = _uiState.update { it.copy(isHidden = hidden) }
+
+    /** Adds an Account group (or picks the one already called that) and selects it. */
+    fun addGroup(name: String) {
         viewModelScope.launch {
-            val account = accountRepository.getAccountById(accountId)
-            if (account == null) {
-                _events.emit("Account not found")
-                return@launch
-            }
-            _uiState.update {
-                AddEditAccountUiState(
-                    accountId = account.id,
-                    selectedGroup = account.groupName,
-                    accountName = account.accountName,
-                    amountInput = account.initialBalance.toString(),
-                    initialBalanceDate = account.initialBalanceDate,
-                    description = account.description.orEmpty(),
-                    includeInTotals = account.includeInTotals,
-                    isHidden = account.isHidden
-                )
-            }
+            val added = dropdownOptionRepository.addOptionIfAbsent(ACCOUNT_GROUP, name) ?: return@launch
+            setGroup(added)
         }
-    }
-
-    fun updateGroup(group: String) {
-        _uiState.update { it.copy(selectedGroup = group) }
-    }
-
-    fun updateName(name: String) {
-        _uiState.update { it.copy(accountName = name) }
-    }
-
-    fun updateAmount(amount: String) {
-        _uiState.update { it.copy(amountInput = amount) }
-    }
-
-    fun updateInitialBalanceDate(initialBalanceDate: String) {
-        _uiState.update { it.copy(initialBalanceDate = initialBalanceDate) }
-    }
-
-    fun updateDescription(description: String) {
-        _uiState.update { it.copy(description = description) }
-    }
-
-    fun updateIncludeInTotals(include: Boolean) {
-        _uiState.update { it.copy(includeInTotals = include) }
-    }
-
-    fun updateHidden(hidden: Boolean) {
-        _uiState.update { it.copy(isHidden = hidden) }
     }
 
     fun save() {
         val state = _uiState.value
-        val name = state.accountName.trim()
-        val parsedAmount = state.amountInput.trim().toDoubleOrNull()
-
-        if (state.selectedGroup.isBlank()) {
-            viewModelScope.launch { _events.emit("Select account group") }
-            return
-        }
-        if (name.isBlank()) {
-            viewModelScope.launch { _events.emit("Enter account name") }
-            return
-        }
-        if (parsedAmount == null) {
-            viewModelScope.launch { _events.emit("Enter valid amount") }
-            return
-        }
-
         viewModelScope.launch {
-            val existing = state.accountId?.let { accountRepository.getAccountById(it) }
-            val displayOrder = existing?.displayOrder
-                ?: (accountRepository.getAllAccountsSnapshot().maxOfOrNull { it.displayOrder } ?: -1) + 1
-
-            accountRepository.save(
+            val others = accountRepository.getAllAccountsSnapshot().filter { it.id != editingId }
+            val errors = AccountForm.validate(
+                group = state.group,
+                name = state.name,
+                amountInput = state.amountInput,
+                otherAccountNames = others.map { it.accountName },
+                isAdding = editingId == null
+            )
+            if (!errors.isEmpty) {
+                _uiState.update { it.copy(errors = errors) }
+                return@launch
+            }
+            val existing = editingId?.let { accountRepository.getAccountById(it) }
+            val record = if (existing != null) {
+                existing.copy(
+                    groupName = state.group,
+                    accountName = state.name.trim(),
+                    description = state.description.trim().ifBlank { null },
+                    includeInTotals = state.includeInTotals,
+                    isHidden = state.isHidden
+                )
+            } else {
                 AccountRecord(
-                    id = state.accountId ?: 0,
-                    groupName = state.selectedGroup,
-                    accountName = name,
-                    initialBalance = parsedAmount,
-                    initialBalanceDate = state.initialBalanceDate,
+                    groupName = state.group,
+                    accountName = state.name.trim(),
+                    initialBalance = AccountForm.initialBalance(parseAmountInput(state.amountInput) ?: 0.0, state.isLiability),
+                    initialBalanceDate = state.asOfDate.toString(),
                     isHidden = state.isHidden,
-                    displayOrder = displayOrder,
+                    displayOrder = (others.maxOfOrNull { it.displayOrder } ?: -1) + 1,
                     description = state.description.trim().ifBlank { null },
                     includeInTotals = state.includeInTotals
                 )
-            )
-
-            _saved.emit(Unit)
+            }
+            accountRepository.save(record)
+            _results.emit(AccountFormResult.Saved)
         }
     }
 
-    fun deleteIfAllowed() {
-        val accountId = _uiState.value.accountId ?: return
-
+    /** Hidden and left out of totals; its Transactions stay. */
+    fun archive() {
+        val id = editingId ?: return
         viewModelScope.launch {
-            val account = accountRepository.getAccountById(accountId)
-            if (account == null) {
-                _events.emit("Account not found")
-                return@launch
-            }
-
-            if (accountRepository.hasTransactions(accountId)) {
-                accountRepository.save(
-                    account.copy(
-                        isHidden = true,
-                        includeInTotals = false
-                    )
-                )
-                _events.emit("Account has linked transactions, so it was archived (hidden) instead of deleted.")
-                _deleted.emit(Unit)
-                return@launch
-            }
-
-            accountRepository.delete(account)
-            _deleted.emit(Unit)
+            val account = accountRepository.getAccountById(id) ?: return@launch
+            accountRepository.save(account.copy(isHidden = true, includeInTotals = false))
+            _messages.emit("${account.accountName} archived")
+            _results.emit(AccountFormResult.Archived)
         }
     }
 
-    fun deletePermanently(reassignToAccountId: Long? = null) {
-        val accountId = _uiState.value.accountId ?: return
-
+    /** Deletes the Account, first moving its Transactions to [moveToAccountId] or, when null, deleting them. */
+    fun delete(moveToAccountId: Long?) {
+        val id = editingId ?: return
         viewModelScope.launch {
-            val strategy = if (reassignToAccountId == null) {
-                PermanentDeleteStrategy.REMOVE_LINKED_TRANSACTIONS
-            } else {
-                PermanentDeleteStrategy.REASSIGN_LINKED_TRANSACTIONS
-            }
-
             val deleted = accountRepository.permanentlyDeleteAccount(
-                accountId = accountId,
-                strategy = strategy,
-                reassignToAccountId = reassignToAccountId
+                accountId = id,
+                strategy = if (moveToAccountId == null) PermanentDeleteStrategy.REMOVE_LINKED_TRANSACTIONS
+                else PermanentDeleteStrategy.REASSIGN_LINKED_TRANSACTIONS,
+                reassignToAccountId = moveToAccountId
             )
-
-            if (!deleted) {
-                _events.emit("Unable to delete account permanently")
-                return@launch
-            }
-
-            _deleted.emit(Unit)
+            if (deleted) _results.emit(AccountFormResult.Deleted) else _messages.emit("Couldn't delete this account")
         }
+    }
+
+    private companion object {
+        const val ACCOUNT_GROUP = "ACCOUNT_GROUP"
     }
 }

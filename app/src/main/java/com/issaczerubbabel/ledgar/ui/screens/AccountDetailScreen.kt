@@ -37,17 +37,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -66,7 +60,6 @@ import com.issaczerubbabel.ledgar.ui.theme.ExpenseOrange
 import com.issaczerubbabel.ledgar.ui.theme.IncomeBlue
 import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.viewmodel.AccountDetailViewModel
-import com.issaczerubbabel.ledgar.viewmodel.AddEditAccountViewModel
 import com.issaczerubbabel.ledgar.viewmodel.StatementMonthUi
 import com.issaczerubbabel.ledgar.viewmodel.StatementRowUi
 
@@ -81,32 +74,12 @@ fun AccountDetailScreen(
     onBack: () -> Unit,
     onOpenTransaction: (Long) -> Unit,
     onAddTransaction: (type: String, accountId: Long) -> Unit,
-    vm: AccountDetailViewModel = hiltViewModel(),
-    formVm: AddEditAccountViewModel = hiltViewModel()
+    onEditAccount: (Long) -> Unit,
+    vm: AccountDetailViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
-    val formState by formVm.uiState.collectAsStateWithLifecycle()
-    val accountGroups by formVm.accountGroups.collectAsStateWithLifecycle()
-    val allAccounts by formVm.allAccounts.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
-    var showEditSheet by remember { mutableStateOf(false) }
-    var showPermanentDeleteDialog by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        formVm.saved.collect { showEditSheet = false }
-    }
-    LaunchedEffect(Unit) {
-        formVm.deleted.collect {
-            showEditSheet = false
-            onBack()
-        }
-    }
-    LaunchedEffect(Unit) {
-        formVm.events.collect { snackbarHostState.showSnackbar(it) }
-    }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -130,10 +103,7 @@ fun AccountDetailScreen(
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
                 actions = {
-                    IconButton(onClick = {
-                        formVm.startEdit(state.accountId)
-                        showEditSheet = true
-                    }) {
+                    IconButton(onClick = { onEditAccount(state.accountId) }) {
                         Icon(Icons.Filled.Edit, contentDescription = "Edit account")
                     }
                 },
@@ -210,38 +180,6 @@ fun AccountDetailScreen(
                 }
             }
         }
-    }
-
-    if (showEditSheet) {
-        AddEditAccountSheet(
-            state = formState,
-            accountGroups = accountGroups,
-            onDismiss = { showEditSheet = false },
-            onGroupChange = formVm::updateGroup,
-            onNameChange = formVm::updateName,
-            onAmountChange = formVm::updateAmount,
-            onInitialBalanceDateChange = formVm::updateInitialBalanceDate,
-            onDescriptionChange = formVm::updateDescription,
-            onIncludeInTotalsChange = formVm::updateIncludeInTotals,
-            onHiddenChange = formVm::updateHidden,
-            onSave = formVm::save,
-            onDelete = formVm::deleteIfAllowed,
-            onDeletePermanently = { showPermanentDeleteDialog = true }
-        )
-    }
-
-    if (showPermanentDeleteDialog) {
-        AccountPermanentDeleteDialog(
-            accountName = state.accountName,
-            reassignOptions = allAccounts
-                .filter { it.id != state.accountId }
-                .map { ReassignAccountOption(id = it.id, label = "${it.accountName} (${it.groupName})") },
-            onDismiss = { showPermanentDeleteDialog = false },
-            onConfirm = { reassignToAccountId ->
-                showPermanentDeleteDialog = false
-                formVm.deletePermanently(reassignToAccountId)
-            }
-        )
     }
 }
 

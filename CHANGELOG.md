@@ -24,6 +24,8 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Account page: each month shows Opening, In, Out and Closing that add up, and rows show the balance after
 - Accounts: a Net worth card with this month's change, and collapsible groups with their subtotals
 - Accounts: drag Accounts and groups in Edit order; Show/Hide and Delete live in an Account's edit form
+- Accounts: one Add/Edit form; a Liability asks for the Amount owed, and the Initial balance is set once
+- Accounts: Archive or Delete… in the edit form; Delete… moves an Account's transactions or deletes them
 
 ### Fixed
 
@@ -37,6 +39,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Adjustment Transaction type (ADR-0009): syncs with its sign, moves only Account balances, never Stats or Buckets
 - formatMoney: exact ₹ amounts with Indian grouping, a true minus and an optional +, with tests
 - Accounts tab and Account page state come from Android-free AccountsTab and AccountPage, with tests
+- AccountForm: the form's validation, signs and delete rule are Android-free, with tests; AddAccountScreen is gone
 
 ## [1.3.2] - 2026-10-05
 

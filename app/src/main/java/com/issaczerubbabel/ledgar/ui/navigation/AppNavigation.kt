@@ -56,7 +56,7 @@ import com.issaczerubbabel.ledgar.ui.screens.InsightsScreen
 import com.issaczerubbabel.ledgar.ui.screens.LogScreen
 import com.issaczerubbabel.ledgar.ui.screens.AccountDetailScreen
 import com.issaczerubbabel.ledgar.ui.screens.AccountsScreen
-import com.issaczerubbabel.ledgar.ui.screens.AddAccountScreen
+import com.issaczerubbabel.ledgar.ui.screens.AccountFormScreen
 import com.issaczerubbabel.ledgar.ui.screens.BookmarksScreen
 import com.issaczerubbabel.ledgar.ui.screens.DropdownManagementScreen
 import com.issaczerubbabel.ledgar.ui.screens.FilterSelectionScreen
@@ -73,8 +73,8 @@ import com.issaczerubbabel.ledgar.ui.screens.CaptureSettingsScreen
 import com.issaczerubbabel.ledgar.ui.screens.UnparsedAlertsScreen
 import com.issaczerubbabel.ledgar.viewmodel.CaptureBadgeViewModel
 import com.issaczerubbabel.ledgar.data.preferences.AppLockAuthMode
+import com.issaczerubbabel.ledgar.viewmodel.AccountFormResult
 import com.issaczerubbabel.ledgar.viewmodel.AppLockViewModel
-import com.issaczerubbabel.ledgar.viewmodel.ACCOUNT_ROUTE_ADD
 import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
@@ -101,7 +101,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object Accounts : Screen("accounts", "Accounts", Icons.Filled.Paid)
     object AccountDetail : Screen("account_detail/{accountId}", "AccountDetail", Icons.Filled.Paid)
     object OverallAccountStats : Screen("overall_account_stats", "OverallAccountStats", Icons.Filled.BarChart)
-    object AddAccount : Screen(ACCOUNT_ROUTE_ADD, "AddAccount", Icons.Filled.Paid)
+    object AccountForm : Screen("account_form?accountId={accountId}", "AccountForm", Icons.Filled.Paid)
     object More : Screen("more", "More", Icons.Filled.MoreHoriz)
     object Settings : Screen("settings", "Settings", Icons.Filled.Settings)
     object DropdownManagement : Screen("dropdown_management", "DropdownManagement", Icons.Filled.Settings)
@@ -250,7 +250,8 @@ fun AppNavigation() {
 
     val showBottomBar =
         currentDest?.route != Screen.FilteredTransactions.route &&
-            currentDest?.route != Screen.Log.route
+            currentDest?.route != Screen.Log.route &&
+            currentDest?.route != Screen.AccountForm.route
 
     val navigateToTransactionsAfterUnlock = {
         appLockViewModel.markUnlocked()
@@ -699,13 +700,26 @@ fun AppNavigation() {
                             launchSingleTop = true
                         }
                     },
+                    onAddAccount = { navController.navigate("account_form") { launchSingleTop = true } },
                 )
             }
-            composable(Screen.AddAccount.route) {
-                AddAccountScreen(
-                    innerPadding = innerPadding,
-                    onBack = { navController.popBackStack() },
-                    onSaved = { navController.popBackStack() }
+            composable(
+                route = Screen.AccountForm.route,
+                arguments = listOf(
+                    navArgument("accountId") {
+                        type = NavType.LongType
+                        defaultValue = -1L
+                    }
+                )
+            ) {
+                AccountFormScreen(
+                    onClose = { navController.popBackStack() },
+                    onFinished = { result ->
+                        // An archived or deleted Account's page is gone too: go back to the Accounts tab.
+                        val backToAccounts = result != AccountFormResult.Saved &&
+                            navController.popBackStack(Screen.Accounts.route, inclusive = false)
+                        if (!backToAccounts) navController.popBackStack()
+                    }
                 )
             }
             composable(Screen.More.route) {
@@ -911,6 +925,9 @@ fun AppNavigation() {
                         navController.navigate(logRoute(prefillType = type, prefillAccountId = accountId)) {
                             launchSingleTop = true
                         }
+                    },
+                    onEditAccount = { accountId ->
+                        navController.navigate("account_form?accountId=$accountId") { launchSingleTop = true }
                     }
                 )
             }

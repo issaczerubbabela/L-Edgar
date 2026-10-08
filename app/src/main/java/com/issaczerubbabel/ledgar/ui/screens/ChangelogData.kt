@@ -31,7 +31,9 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Account page: Balance today, Transfer and Add buttons, and one scrolling statement in place of the chart",
             "Account page: each month shows Opening, In, Out and Closing that add up, and rows show the balance after",
             "Accounts: a Net worth card with this month's change, and collapsible groups with their subtotals",
-            "Accounts: drag Accounts and groups in Edit order; Show/Hide and Delete live in an Account's edit form"
+            "Accounts: drag Accounts and groups in Edit order; Show/Hide and Delete live in an Account's edit form",
+            "Accounts: one Add/Edit form; a Liability asks for the Amount owed, and the Initial balance is set once",
+            "Accounts: Archive or Delete… in the edit form; Delete… moves an Account's transactions or deletes them"
         ),
         fixed = listOf(
             "Accounts: old transfers that only saved the destination's name count on that Account everywhere",
@@ -42,7 +44,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Room 23 → 24: reconciledAt, Liability roles from the old keywords, and Transfers linked to their destination",
             "Adjustment Transaction type (ADR-0009): syncs with its sign, moves only Account balances, never Stats or Buckets",
             "formatMoney: exact ₹ amounts with Indian grouping, a true minus and an optional +, with tests",
-            "Accounts tab and Account page state come from Android-free AccountsTab and AccountPage, with tests"
+            "Accounts tab and Account page state come from Android-free AccountsTab and AccountPage, with tests",
+            "AccountForm: the form's validation, signs and delete rule are Android-free, with tests; AddAccountScreen is gone"
         )
     ),
     ChangelogRelease(

@@ -36,14 +36,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -71,7 +68,6 @@ import com.issaczerubbabel.ledgar.viewmodel.AccountGroupUi
 import com.issaczerubbabel.ledgar.viewmodel.AccountRowUi
 import com.issaczerubbabel.ledgar.viewmodel.AccountsTabUiState
 import com.issaczerubbabel.ledgar.viewmodel.AccountsViewModel
-import com.issaczerubbabel.ledgar.viewmodel.AddEditAccountViewModel
 import kotlin.math.roundToInt
 
 /**
@@ -84,32 +80,15 @@ fun AccountsScreen(
     innerPadding: PaddingValues,
     onOpenAccountDetail: (Long) -> Unit,
     onOpenOverallStats: () -> Unit,
-    vm: AccountsViewModel = hiltViewModel(),
-    formVm: AddEditAccountViewModel = hiltViewModel()
+    onAddAccount: () -> Unit,
+    vm: AccountsViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
-    val allAccounts by vm.allAccounts.collectAsStateWithLifecycle()
-    val formState by formVm.uiState.collectAsStateWithLifecycle()
-    val accountGroups by formVm.accountGroups.collectAsStateWithLifecycle()
-    var showAddSheet by remember { mutableStateOf(false) }
     var editingOrder by remember { mutableStateOf(false) }
     var showHidden by remember { mutableStateOf(false) }
     var collapsedGroups by remember { mutableStateOf(emptySet<String>()) }
-    var pendingPermanentDeleteAccountId by remember { mutableStateOf<Long?>(null) }
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    LaunchedEffect(Unit) {
-        formVm.saved.collect { showAddSheet = false }
-    }
-    LaunchedEffect(Unit) {
-        vm.events.collect { snackbarHostState.showSnackbar(it) }
-    }
-    LaunchedEffect(Unit) {
-        formVm.events.collect { snackbarHostState.showSnackbar(it) }
-    }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Accounts", style = MaterialTheme.typography.headlineSmall) },
@@ -121,10 +100,7 @@ fun AccountsScreen(
                             Icon(Icons.Filled.SwapVert, contentDescription = "Edit order")
                         }
                         FilledTonalButton(
-                            onClick = {
-                                formVm.startCreate()
-                                showAddSheet = true
-                            },
+                            onClick = onAddAccount,
                             modifier = Modifier.padding(end = 8.dp)
                         ) {
                             Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -212,40 +188,6 @@ fun AccountsScreen(
                 }
             }
         }
-    }
-
-    if (showAddSheet) {
-        AddEditAccountSheet(
-            state = formState,
-            accountGroups = accountGroups,
-            onDismiss = { showAddSheet = false },
-            onGroupChange = formVm::updateGroup,
-            onNameChange = formVm::updateName,
-            onAmountChange = formVm::updateAmount,
-            onInitialBalanceDateChange = formVm::updateInitialBalanceDate,
-            onDescriptionChange = formVm::updateDescription,
-            onIncludeInTotalsChange = formVm::updateIncludeInTotals,
-            onHiddenChange = formVm::updateHidden,
-            onSave = formVm::save,
-            onDelete = formVm::deleteIfAllowed,
-            onDeletePermanently = { pendingPermanentDeleteAccountId = formState.accountId }
-        )
-    }
-
-    val pendingDeleteAccountId = pendingPermanentDeleteAccountId
-    if (pendingDeleteAccountId != null) {
-        val accountName = allAccounts.firstOrNull { it.id == pendingDeleteAccountId }?.accountName ?: "Account"
-        AccountPermanentDeleteDialog(
-            accountName = accountName,
-            reassignOptions = allAccounts
-                .filter { it.id != pendingDeleteAccountId }
-                .map { ReassignAccountOption(id = it.id, label = "${it.accountName} (${it.groupName})") },
-            onDismiss = { pendingPermanentDeleteAccountId = null },
-            onConfirm = { reassignToAccountId ->
-                vm.deleteAccountPermanently(accountId = pendingDeleteAccountId, reassignToAccountId = reassignToAccountId)
-                pendingPermanentDeleteAccountId = null
-            }
-        )
     }
 }
 

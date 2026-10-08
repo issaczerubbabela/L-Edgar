@@ -77,6 +77,8 @@ class AccountRepositoryImpl @Inject constructor(
     override suspend fun hasTransactions(accountId: Long): Boolean =
         expenseDao.countRecordsForAccount(accountId) > 0
 
+    override suspend fun countTransactions(accountId: Long): Int = expenseDao.countRecordsForAccount(accountId)
+
     override suspend fun delete(record: AccountRecord) = dao.delete(record)
 
     override suspend fun permanentlyDeleteAccount(
