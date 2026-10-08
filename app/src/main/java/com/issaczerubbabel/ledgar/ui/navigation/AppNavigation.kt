@@ -61,7 +61,7 @@ import com.issaczerubbabel.ledgar.ui.screens.BookmarksScreen
 import com.issaczerubbabel.ledgar.ui.screens.DropdownManagementScreen
 import com.issaczerubbabel.ledgar.ui.screens.FilterSelectionScreen
 import com.issaczerubbabel.ledgar.ui.screens.FilteredTransactionsScreen
-import com.issaczerubbabel.ledgar.ui.screens.OverallAccountStatsScreen
+import com.issaczerubbabel.ledgar.ui.screens.NetWorthScreen
 import com.issaczerubbabel.ledgar.ui.screens.SearchScreen
 import com.issaczerubbabel.ledgar.ui.screens.MoreScreen
 import com.issaczerubbabel.ledgar.ui.screens.SettingsScreen
@@ -100,7 +100,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object BucketDetail : Screen("bucket/{bucketId}", "BucketDetail", Icons.Filled.AccountBalanceWallet)
     object Accounts : Screen("accounts", "Accounts", Icons.Filled.Paid)
     object AccountDetail : Screen("account_detail/{accountId}", "AccountDetail", Icons.Filled.Paid)
-    object OverallAccountStats : Screen("overall_account_stats", "OverallAccountStats", Icons.Filled.BarChart)
+    object NetWorth : Screen("net_worth", "NetWorth", Icons.Filled.BarChart)
     object AccountForm : Screen("account_form?accountId={accountId}", "AccountForm", Icons.Filled.Paid)
     object More : Screen("more", "More", Icons.Filled.MoreHoriz)
     object Settings : Screen("settings", "Settings", Icons.Filled.Settings)
@@ -695,8 +695,8 @@ fun AppNavigation() {
                     onOpenAccountDetail = { accountId ->
                         navController.navigate("account_detail/$accountId")
                     },
-                    onOpenOverallStats = {
-                        navController.navigate(Screen.OverallAccountStats.route) {
+                    onOpenNetWorth = {
+                        navController.navigate(Screen.NetWorth.route) {
                             launchSingleTop = true
                         }
                     },
@@ -934,8 +934,8 @@ fun AppNavigation() {
                     }
                 )
             }
-            composable(Screen.OverallAccountStats.route) {
-                OverallAccountStatsScreen(
+            composable(Screen.NetWorth.route) {
+                NetWorthScreen(
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() },
                 )

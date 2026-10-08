@@ -82,7 +82,7 @@ import kotlin.math.roundToInt
 fun AccountsScreen(
     innerPadding: PaddingValues,
     onOpenAccountDetail: (Long) -> Unit,
-    onOpenOverallStats: () -> Unit,
+    onOpenNetWorth: () -> Unit,
     onAddAccount: () -> Unit,
     onOpenTransaction: (Long) -> Unit,
     vm: AccountsViewModel = hiltViewModel()
@@ -126,7 +126,7 @@ fun AccountsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item(key = "net-worth") {
-                NetWorthCard(state = state, onClick = onOpenOverallStats)
+                NetWorthCard(state = state, onClick = onOpenNetWorth)
             }
 
             if (state.isLoaded && state.groups.isEmpty() && state.hiddenAccounts.isEmpty()) {

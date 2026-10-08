@@ -15,14 +15,15 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Reconcile: Start fresh from today sets a new starting balance after a long break
 - Accounts: each Account says when you last reconciled it, with a dot after 30 days
 - Accounts: transfers naming an account you don't have are listed, so you can pick the right one
+- Net worth: the trend over 6M, 1Y or All, where your money is, and this month's biggest movers
 
 ### Changed
 
-- Accounts: the list, an Account's page and Overall Stats all show the same balance for an Account
+- Accounts: the list, an Account's page and Net worth all show the same balance for an Account
 - Accounts: a Transaction changes a balance only when dated after its As-of date, however late you log it
 - Accounts: Liabilities come from the Liability role, and an overpaid card lowers them
 - Accounts: Assets, Liabilities and Total leave out Accounts that aren't included in totals
-- Overall Stats: moving money between your own Accounts no longer counts as income and expense
+- Net worth (was Overall Stats): cash flow leaves out money moved between your own Accounts
 - Income and expense amounts are lighter on dark backgrounds, so they're easier to read
 - Account page: Balance today, Transfer and Add buttons, and one scrolling statement in place of the chart
 - Account page: each month shows Opening, In, Out and Closing that add up, and rows show the balance after
@@ -47,6 +48,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - AccountForm: the form's validation, signs and delete rule are Android-free, with tests; AddAccountScreen is gone
 - Reconcile: pure outcome and sheet logic, written by AccountRepository in one Room transaction, with tests
 - Apps Script: _accounts gains Reconciled At after Last Backed Up; an older Sheet reads it as blank
+- NetWorthScreen: Android-free state for the Net worth screen, with tests; the Overall Stats files are gone
 
 ## [1.3.2] - 2026-10-05
 
