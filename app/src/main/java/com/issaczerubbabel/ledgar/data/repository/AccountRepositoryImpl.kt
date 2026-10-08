@@ -1,6 +1,8 @@
 package com.issaczerubbabel.ledgar.data.repository
 
 import com.issaczerubbabel.ledgar.account.AccountMath
+import com.issaczerubbabel.ledgar.account.Reconcile
+import com.issaczerubbabel.ledgar.account.ReconcileOutcome
 import com.issaczerubbabel.ledgar.data.local.dao.AccountDao
 import com.issaczerubbabel.ledgar.data.local.dao.DropdownOptionDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
@@ -10,6 +12,7 @@ import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import java.time.LocalDate
 import javax.inject.Inject
 
 class AccountRepositoryImpl @Inject constructor(
@@ -80,6 +83,25 @@ class AccountRepositoryImpl @Inject constructor(
     override suspend fun countTransactions(accountId: Long): Int = expenseDao.countRecordsForAccount(accountId)
 
     override suspend fun delete(record: AccountRecord) = dao.delete(record)
+
+    override suspend fun reconcile(accountId: Long, bankBalance: Double, today: LocalDate): Boolean =
+        write(accountId) { account ->
+            val book = AccountBook.of(listOf(account), emptyList(), expenseDao.getAllRecordsSnapshot().filter { it.syncAction != "DELETE" })
+            val balance = AccountMath.balances(book.accounts, book.transactions).getValue(accountId)
+            Reconcile.reconcile(account, appBalance = balance, bankBalance = bankBalance, today = today)
+        }
+
+    override suspend fun startFresh(accountId: Long, bankBalance: Double, today: LocalDate): Boolean =
+        write(accountId) { account -> Reconcile.startFresh(account, bankBalance, today) }
+
+    private suspend fun write(accountId: Long, outcomeFor: suspend (AccountRecord) -> ReconcileOutcome): Boolean =
+        database.withTransaction {
+            val account = dao.getAccountById(accountId) ?: return@withTransaction false
+            val outcome = outcomeFor(account)
+            outcome.adjustment?.let { expenseDao.insert(it) }
+            dao.update(outcome.account)
+            true
+        }
 
     override suspend fun permanentlyDeleteAccount(
         accountId: Long,

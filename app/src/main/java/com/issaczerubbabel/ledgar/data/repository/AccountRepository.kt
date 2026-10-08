@@ -2,6 +2,7 @@ package com.issaczerubbabel.ledgar.data.repository
 
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import kotlinx.coroutines.flow.Flow
+import java.time.LocalDate
 
 data class AccountBalance(
     val accountId: Long,
@@ -36,6 +37,14 @@ interface AccountRepository {
     /** How many Transactions use the Account, on any side; deleted ones waiting to sync don't count. */
     suspend fun countTransactions(accountId: Long): Int
     suspend fun delete(record: AccountRecord)
+    /**
+     * Reconciles the Account with [bankBalance] (ADR-0009): a Balance adjustment dated [today] for
+     * any difference, and the Account marked as reconciled today, in one Room transaction.
+     * False if the Account no longer exists.
+     */
+    suspend fun reconcile(accountId: Long, bankBalance: Double, today: LocalDate): Boolean
+    /** Makes [bankBalance] the Account's Initial balance at the end of [today]; earlier Transactions stop counting. */
+    suspend fun startFresh(accountId: Long, bankBalance: Double, today: LocalDate): Boolean
     suspend fun permanentlyDeleteAccount(
         accountId: Long,
         strategy: PermanentDeleteStrategy,

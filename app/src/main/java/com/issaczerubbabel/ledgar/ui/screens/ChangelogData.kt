@@ -19,7 +19,10 @@ val changelogReleases: List<ChangelogRelease> = listOf(
         version = "v1.4.0",
         date = "2026-10-08",
         added = listOf(
-            "Dropdowns: an Account group can count as Liability, such as a credit card or loan"
+            "Dropdowns: an Account group can count as Liability, such as a credit card or loan",
+            "Reconcile: type what your bank shows and a Balance adjustment closes the gap without rewriting history",
+            "Reconcile: Start fresh from today sets a new starting balance after a long break",
+            "Accounts: each Account says when you last reconciled it, with a dot after 30 days"
         ),
         changed = listOf(
             "Accounts: the list, an Account's page and Overall Stats all show the same balance for an Account",
@@ -45,7 +48,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Adjustment Transaction type (ADR-0009): syncs with its sign, moves only Account balances, never Stats or Buckets",
             "formatMoney: exact ₹ amounts with Indian grouping, a true minus and an optional +, with tests",
             "Accounts tab and Account page state come from Android-free AccountsTab and AccountPage, with tests",
-            "AccountForm: the form's validation, signs and delete rule are Android-free, with tests; AddAccountScreen is gone"
+            "AccountForm: the form's validation, signs and delete rule are Android-free, with tests; AddAccountScreen is gone",
+            "Reconcile: pure outcome and sheet logic, written by AccountRepository in one Room transaction, with tests"
         )
     ),
     ChangelogRelease(

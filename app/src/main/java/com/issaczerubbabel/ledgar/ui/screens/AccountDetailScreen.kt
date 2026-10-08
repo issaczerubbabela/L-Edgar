@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Edit
@@ -37,11 +38,17 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -60,6 +67,7 @@ import com.issaczerubbabel.ledgar.ui.theme.ExpenseOrange
 import com.issaczerubbabel.ledgar.ui.theme.IncomeBlue
 import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.viewmodel.AccountDetailViewModel
+import com.issaczerubbabel.ledgar.viewmodel.ReconcileViewModel
 import com.issaczerubbabel.ledgar.viewmodel.StatementMonthUi
 import com.issaczerubbabel.ledgar.viewmodel.StatementRowUi
 
@@ -75,11 +83,19 @@ fun AccountDetailScreen(
     onOpenTransaction: (Long) -> Unit,
     onAddTransaction: (type: String, accountId: Long) -> Unit,
     onEditAccount: (Long) -> Unit,
-    vm: AccountDetailViewModel = hiltViewModel()
+    vm: AccountDetailViewModel = hiltViewModel(),
+    reconcileVm: ReconcileViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
+    var showReconcile by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(Unit) {
+        reconcileVm.messages.collect { snackbarHostState.showSnackbar(it) }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -122,7 +138,7 @@ fun AccountDetailScreen(
                 BalanceHeader(
                     balance = state.balanceToday,
                     isNegative = state.isBalanceNegative,
-                    note = state.initialBalanceNote
+                    note = listOf(state.lastChecked, state.initialBalanceNote).filter { it.isNotBlank() }.joinToString("\n")
                 )
             }
             item(key = "actions") {
@@ -132,6 +148,12 @@ fun AccountDetailScreen(
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    ActionButton(
+                        label = "Reconcile",
+                        icon = Icons.Filled.DoneAll,
+                        modifier = Modifier.weight(1f),
+                        onClick = { showReconcile = true }
+                    )
                     ActionButton(
                         label = "Transfer",
                         icon = Icons.Filled.SwapHoriz,
@@ -181,6 +203,10 @@ fun AccountDetailScreen(
             }
         }
     }
+
+    if (showReconcile) {
+        ReconcileSheet(vm = reconcileVm, onDismiss = { showReconcile = false })
+    }
 }
 
 @Composable
@@ -215,12 +241,14 @@ private fun BalanceHeader(balance: String, isNegative: Boolean, note: String) {
 private fun ActionButton(label: String, icon: ImageVector, modifier: Modifier, onClick: () -> Unit) {
     FilledTonalButton(
         onClick = onClick,
-        modifier = modifier.heightIn(min = 56.dp),
-        shape = RoundedCornerShape(16.dp)
+        modifier = modifier.heightIn(min = 64.dp),
+        shape = RoundedCornerShape(16.dp),
+        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
     ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        }
     }
 }
 

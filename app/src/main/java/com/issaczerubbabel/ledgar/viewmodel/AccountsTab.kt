@@ -1,8 +1,10 @@
 package com.issaczerubbabel.ledgar.viewmodel
 
 import com.issaczerubbabel.ledgar.account.AccountMath
+import com.issaczerubbabel.ledgar.account.Reconcile
 import com.issaczerubbabel.ledgar.data.repository.AccountBook
 import com.issaczerubbabel.ledgar.util.formatMoney
+import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -17,7 +19,11 @@ data class AccountRowUi(
     val balance: String,
     val isNegative: Boolean,
     val isIncludedInTotals: Boolean,
-    val isHidden: Boolean
+    val isHidden: Boolean,
+    /** "Reconciled 12 days ago", or "Counted…" for Cash. */
+    val lastChecked: String = "",
+    /** Not reconciled for more than 30 days: the row shows a dot. */
+    val isStale: Boolean = false
 )
 
 /** One Account group: its shown Accounts, and the subtotal of those Included in totals, hidden or not. */
@@ -61,6 +67,7 @@ fun accountsTab(book: AccountBook, today: LocalDate): AccountsTabUiState {
     book.records.forEach { record ->
         val snapshot = snapshots.getValue(record.id)
         val balance = balances.getValue(record.id)
+        val reconciledAt = record.reconciledAt?.let(::parseFlexibleDate)
         rowsByGroup.getOrPut(record.groupName) { mutableListOf() } += AccountRowUi(
             id = record.id,
             name = record.accountName,
@@ -68,7 +75,9 @@ fun accountsTab(book: AccountBook, today: LocalDate): AccountsTabUiState {
             balance = formatMoney(balance),
             isNegative = AccountMath.paise(balance) < 0,
             isIncludedInTotals = snapshot.includedInTotals,
-            isHidden = record.isHidden
+            isHidden = record.isHidden,
+            lastChecked = Reconcile.lastCheckedLabel(reconciledAt, record.groupName, today),
+            isStale = Reconcile.isStale(reconciledAt, today)
         )
     }
     val groups = rowsByGroup.map { (name, rows) ->

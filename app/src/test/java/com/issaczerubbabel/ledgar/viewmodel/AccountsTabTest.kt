@@ -95,6 +95,27 @@ class AccountsTabTest {
     }
 
     @Test
+    fun rowsSayWhenTheyWereLastCheckedAndFlagStaleOnes() {
+        val checked = records.map {
+            when (it.id) {
+                1L -> it.copy(reconciledAt = "2026-10-08")
+                3L -> it.copy(reconciledAt = "2026-10-06")
+                9L -> it.copy(reconciledAt = "2026-08-29")
+                else -> it
+            }
+        }
+        val rows = accountsTab(AccountBook.of(checked, roles, october), LocalDate.of(2026, 10, 8))
+            .groups.flatMap { it.rows }.associateBy { it.name }
+        assertEquals("Reconciled today", rows.getValue("HDFC Savings").lastChecked)
+        assertEquals("Counted 2 days ago", rows.getValue("Wallet").lastChecked)
+        assertEquals("Reconciled 40 days ago", rows.getValue("Bike loan").lastChecked)
+        assertTrue(rows.getValue("Bike loan").isStale)
+        assertFalse(rows.getValue("HDFC Savings").isStale)
+        assertEquals("Not reconciled yet", rows.getValue("SBI Salary").lastChecked)
+        assertFalse(rows.getValue("SBI Salary").isStale)
+    }
+
+    @Test
     fun movingAnAccountReordersOnlyItsGroup() {
         val order = orderAfterMovingAccount(state.groups, "Bank", from = 2, to = 0)
         assertEquals(listOf(10L, 1L, 2L, 3L, 4L, 6L, 7L, 5L, 8L, 9L), order)

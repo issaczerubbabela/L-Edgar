@@ -130,6 +130,22 @@ class AddEditAccountViewModel @Inject constructor(
         }
     }
 
+    /** Re-reads the read-only balance fields after Start fresh, keeping any unsaved edits to the rest. */
+    fun refreshBalance() {
+        val id = editingId ?: return
+        viewModelScope.launch {
+            val account = accountRepository.getAccountById(id) ?: return@launch
+            val count = accountRepository.countTransactions(id)
+            _uiState.update { state ->
+                state.copy(
+                    amountInput = amountToInput(AccountForm.amountShown(account.initialBalance, state.isLiability)),
+                    asOfDate = parseFlexibleDate(account.initialBalanceDate) ?: state.asOfDate,
+                    transactionCount = count
+                )
+            }
+        }
+    }
+
     fun setGroup(group: String) = _uiState.update { it.copy(group = group, errors = it.errors.copy(group = null)) }
     fun setName(name: String) = _uiState.update { it.copy(name = name, errors = it.errors.copy(name = null)) }
     fun setAmount(amount: String) = _uiState.update { it.copy(amountInput = amount, errors = it.errors.copy(amount = null)) }

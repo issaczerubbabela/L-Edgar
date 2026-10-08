@@ -66,6 +66,7 @@ import com.issaczerubbabel.ledgar.viewmodel.AccountForm
 import com.issaczerubbabel.ledgar.viewmodel.AccountFormResult
 import com.issaczerubbabel.ledgar.viewmodel.AccountFormUiState
 import com.issaczerubbabel.ledgar.viewmodel.AddEditAccountViewModel
+import com.issaczerubbabel.ledgar.viewmodel.ReconcileViewModel
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -80,9 +81,11 @@ private val asOfLabel = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH
 fun AccountFormScreen(
     onClose: () -> Unit,
     onFinished: (AccountFormResult) -> Unit,
-    vm: AddEditAccountViewModel = hiltViewModel()
+    vm: AddEditAccountViewModel = hiltViewModel(),
+    reconcileVm: ReconcileViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
+    var showReconcile by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     var showDatePicker by remember { mutableStateOf(false) }
     var showNewGroup by remember { mutableStateOf(false) }
@@ -90,6 +93,8 @@ fun AccountFormScreen(
 
     LaunchedEffect(Unit) { vm.results.collect { onFinished(it) } }
     LaunchedEffect(Unit) { vm.messages.collect { snackbarHostState.showSnackbar(it) } }
+    LaunchedEffect(Unit) { reconcileVm.messages.collect { snackbarHostState.showSnackbar(it) } }
+    LaunchedEffect(Unit) { reconcileVm.done.collect { vm.refreshBalance() } }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -156,7 +161,12 @@ fun AccountFormScreen(
                 }
             }
 
-            BalanceFields(state = state, onAmountChange = vm::setAmount, onPickDate = { showDatePicker = true })
+            BalanceFields(
+                state = state,
+                onAmountChange = vm::setAmount,
+                onPickDate = { showDatePicker = true },
+                onReconcile = { showReconcile = true }
+            )
 
             OutlinedTextField(
                 value = state.description,
@@ -207,6 +217,10 @@ fun AccountFormScreen(
         )
     }
 
+    if (showReconcile) {
+        ReconcileSheet(vm = reconcileVm, onDismiss = { showReconcile = false })
+    }
+
     if (showNewGroup) {
         NewGroupDialog(
             onDismiss = { showNewGroup = false },
@@ -241,7 +255,12 @@ private fun FieldLabel(text: String) {
 }
 
 @Composable
-private fun BalanceFields(state: AccountFormUiState, onAmountChange: (String) -> Unit, onPickDate: () -> Unit) {
+private fun BalanceFields(
+    state: AccountFormUiState,
+    onAmountChange: (String) -> Unit,
+    onPickDate: () -> Unit,
+    onReconcile: () -> Unit
+) {
     val readOnly = state.isEditMode
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -279,6 +298,11 @@ private fun BalanceFields(state: AccountFormUiState, onAmountChange: (String) ->
             style = MaterialTheme.typography.bodySmall,
             color = if (state.errors.amount != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
         )
+        if (readOnly) {
+            OutlinedButton(onClick = onReconcile, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text("Reconcile")
+            }
+        }
     }
 }
 

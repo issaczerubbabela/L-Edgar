@@ -1,11 +1,14 @@
 package com.issaczerubbabel.ledgar.viewmodel
 
 import com.issaczerubbabel.ledgar.account.AccountMath
+import com.issaczerubbabel.ledgar.account.Reconcile
 import com.issaczerubbabel.ledgar.account.StatementMonth
 import com.issaczerubbabel.ledgar.account.StatementRow
 import com.issaczerubbabel.ledgar.account.StatementRowKind
 import com.issaczerubbabel.ledgar.data.repository.AccountBook
 import com.issaczerubbabel.ledgar.util.formatMoney
+import com.issaczerubbabel.ledgar.util.parseFlexibleDate
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -48,6 +51,8 @@ data class AccountPageUiState(
     val isBalanceNegative: Boolean = false,
     /** "Balance at end of 31 Aug 2026 was ₹12,000.00". */
     val initialBalanceNote: String = "",
+    /** "Reconciled 12 days ago", or "Counted…" for Cash. */
+    val lastChecked: String = "",
     /** Newest month first. */
     val months: List<StatementMonthUi> = emptyList(),
     val isLoaded: Boolean = false
@@ -58,7 +63,7 @@ private val dayLabel = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
 private val longDateLabel = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
 
 /** The account page for [accountId], from [AccountMath]'s statement. Null when the Account no longer exists. */
-internal fun accountPage(book: AccountBook, accountId: Long): AccountPageUiState? {
+internal fun accountPage(book: AccountBook, accountId: Long, today: LocalDate = LocalDate.now()): AccountPageUiState? {
     val account = book.accounts.firstOrNull { it.id == accountId } ?: return null
     val record = book.records.firstOrNull { it.id == accountId }
     val namesById = book.accounts.associate { it.id to it.name }
@@ -112,6 +117,7 @@ internal fun accountPage(book: AccountBook, accountId: Long): AccountPageUiState
         isBalanceNegative = AccountMath.paise(balance) < 0,
         initialBalanceNote = "Balance at end of ${account.asOfDate.format(longDateLabel)} was ${formatMoney(account.initialBalance)}"
             .takeIf { record != null }.orEmpty(),
+        lastChecked = record?.let { Reconcile.lastCheckedLabel(it.reconciledAt?.let(::parseFlexibleDate), account.group, today) }.orEmpty(),
         months = AccountMath.statement(account, book.transactions).map(::monthUi),
         isLoaded = true
     )
