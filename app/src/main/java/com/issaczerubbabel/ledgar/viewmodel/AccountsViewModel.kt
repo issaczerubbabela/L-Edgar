@@ -5,14 +5,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
+import com.issaczerubbabel.ledgar.account.AccountMath
+import com.issaczerubbabel.ledgar.account.StatementMonth
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.PermanentDeleteStrategy
-import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
-import com.issaczerubbabel.ledgar.util.parseAsOfDateTime
-import com.issaczerubbabel.ledgar.util.parseFlexibleDate
-import com.issaczerubbabel.ledgar.util.parseTransactionDateTime
+import com.issaczerubbabel.ledgar.util.TransactionType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,11 +20,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -46,7 +43,6 @@ data class AccountsScreenUiState(
     val assets: Double = 0.0,
     val liabilities: Double = 0.0,
     val total: Double = 0.0,
-    val autoClassifiedLiabilityGroups: List<String> = emptyList(),
     val assetGroups: Map<String, List<AccountListItemUi>> = emptyMap(),
     val liabilityGroups: Map<String, List<AccountListItemUi>> = emptyMap()
 )
@@ -55,26 +51,6 @@ data class AccountsScreenUiState(
 class AccountsViewModel @Inject constructor(
     private val accountRepository: AccountRepository
 ) : ViewModel() {
-
-    private val liabilityGroupKeywords = listOf(
-        "credit card",
-        "loan",
-        "owed",
-        "overdraft",
-        "debt",
-        "payable"
-    )
-
-    private val assetGroupKeywords = listOf(
-        "cash",
-        "bank",
-        "account",
-        "investment",
-        "railway e-wallet",
-        "e-wallet",
-        "wallet",
-        "savings"
-    )
 
     private val _events = MutableSharedFlow<String>(replay = 0)
     val events: SharedFlow<String> = _events.asSharedFlow()
@@ -88,62 +64,33 @@ class AccountsViewModel @Inject constructor(
         .getAllAccounts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val accountItems: StateFlow<List<AccountListItemUi>> = accountRepository
-        .getAccountsWithBalances()
-        .map { accountsWithBalances ->
-            accountsWithBalances.mapIndexed { index, (account, balance) ->
+    val uiState: StateFlow<AccountsScreenUiState> = accountRepository
+        .getAccountBook()
+        .map { book ->
+            val balances = AccountMath.balances(book.accounts, book.transactions)
+            val totals = AccountMath.totals(book.accounts, book.transactions)
+            val liabilityIds = book.accounts.filter { it.isLiability }.mapTo(mutableSetOf()) { it.id }
+            val items = book.records.mapIndexed { index, account ->
                 AccountListItemUi(
                     id = account.id,
                     accountGroup = account.accountGroup,
                     accountName = account.accountName,
-                    balance = balance,
+                    balance = balances.getValue(account.id),
                     isHidden = account.isHidden,
                     canMoveUp = index > 0,
-                    canMoveDown = index < accountsWithBalances.lastIndex
+                    canMoveDown = index < book.records.lastIndex
                 )
             }
+            val (liabilities, assets) = items.partition { it.id in liabilityIds }
+            AccountsScreenUiState(
+                assets = totals.assets,
+                liabilities = totals.liabilities,
+                total = totals.netWorth,
+                assetGroups = assets.groupBy { it.accountGroup },
+                liabilityGroups = liabilities.groupBy { it.accountGroup }
+            )
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    private val groupedAccountItems: StateFlow<Map<String, List<AccountListItemUi>>> = accountItems
-        .map { items ->
-            items.groupBy { it.accountGroup }
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
-
-    val uiState: StateFlow<AccountsScreenUiState> = combine(
-        groupedAccountItems,
-        accountItems
-    ) { groups, _ ->
-        val assetGroups = groups.filterKeys { isAssetGroup(it) }
-        val liabilityGroups = groups.filterKeys { isLiabilityGroup(it) }
-        val autoLiabilityGroups = groups.keys.filter { isLiabilityGroup(it) }
-
-        val assets = assetGroups.values.flatten().sumOf { it.balance }
-        val liabilities = liabilityGroups.values.flatten().sumOf { kotlin.math.abs(it.balance) }
-
-        AccountsScreenUiState(
-            assets = assets,
-            liabilities = liabilities,
-            total = assets - liabilities,
-            autoClassifiedLiabilityGroups = autoLiabilityGroups,
-            assetGroups = assetGroups,
-            liabilityGroups = liabilityGroups
-        )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AccountsScreenUiState())
-
-    private fun isAssetGroup(groupName: String): Boolean {
-        val normalized = groupName.trim().lowercase(Locale.getDefault())
-        if (isLiabilityGroup(groupName)) return false
-        if (assetGroupKeywords.any { normalized.contains(it) }) return true
-        // Default unknown groups to asset to keep net-worth view complete.
-        return true
-    }
-
-    private fun isLiabilityGroup(groupName: String): Boolean {
-        val normalized = groupName.trim().lowercase(Locale.getDefault())
-        return liabilityGroupKeywords.any { normalized.contains(it) }
-    }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AccountsScreenUiState())
 
     fun toggleAccountVisibility(accountId: Long) {
         viewModelScope.launch {
@@ -243,114 +190,84 @@ data class AccountDetailUiState(
 )
 
 @HiltViewModel
-@OptIn(ExperimentalCoroutinesApi::class)
 class AccountDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    accountRepository: AccountRepository,
-    expenseRepository: ExpenseRepository
+    accountRepository: AccountRepository
 ) : ViewModel() {
 
     private val accountId: Long = checkNotNull(savedStateHandle.get<String>("accountId")).toLong()
     private val selectedMonth = MutableStateFlow(YearMonth.now())
     val statementChartModelProducer = CartesianChartModelProducer()
 
-    private val accountFlow: StateFlow<AccountRecord?> = accountRepository
-        .getAllAccounts()
-        .map { accounts -> accounts.firstOrNull { it.id == accountId } }
+    private val accountBook = accountRepository.getAccountBook()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    private val accountScopedRecords: StateFlow<List<ExpenseRecord>> = expenseRepository
-        .getRecordsForAccount(accountId)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    /** The selected month's statement section, with the balances either side of it. */
+    private data class MonthView(
+        val record: AccountRecord?,
+        val opening: Double,
+        val month: StatementMonth?,
+        val recordsById: Map<Long, ExpenseRecord>
+    )
 
-    private val monthRecords: StateFlow<List<ExpenseRecord>> = combine(
-        selectedMonth,
-        accountScopedRecords
-    ) { ym, records ->
-        val startOfMonth = ym.atDay(1).toString()
-        val endOfMonth = ym.atEndOfMonth().toString()
-        records
-            .filter { it.date >= startOfMonth && it.date <= endOfMonth }
-            .sortedWith(compareBy<ExpenseRecord> { it.date }.thenBy { it.id })
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    private val historicalSum: StateFlow<Double?> = combine(
-        selectedMonth,
-        accountFlow,
-        accountScopedRecords
-    ) { ym, account, records ->
-        val beforeDate = ym.atDay(1).toString()
-        val asOfDate = account?.initialBalanceDate ?: "1970-01-01"
-        records
-            .filter { isAfterAsOf(it, asOfDate) && it.date < beforeDate }
-            .sumOf { accountDelta(it, accountId, asOfDate) }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+    private val monthView: StateFlow<MonthView?> = combine(accountBook, selectedMonth) { book, ym ->
+        book ?: return@combine null
+        val snapshot = book.accounts.firstOrNull { it.id == accountId } ?: return@combine null
+        val statement = AccountMath.statement(snapshot, book.transactions)
+        val month = statement.firstOrNull { it.month == ym }
+        // A month without Transactions opens where the latest earlier month closed.
+        val opening = month?.opening
+            ?: statement.firstOrNull { it.month < ym }?.closing
+            ?: snapshot.initialBalance
+        val rowIds = month?.rows.orEmpty().mapTo(mutableSetOf()) { it.transactionId }
+        MonthView(
+            record = book.records.firstOrNull { it.id == accountId },
+            opening = opening,
+            month = month,
+            recordsById = book.transactionRecords.filter { it.id in rowIds }.associateBy { it.id }
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     init {
         viewModelScope.launch {
-            combine(accountFlow, historicalSum, monthRecords, selectedMonth) { account, history, records, ym ->
-                val baseBalance = (account?.initialBalance ?: 0.0) + (history ?: 0.0)
-                buildDailyRunningBalanceSeries(records, baseBalance, ym)
-            }.collect { (xValues, yValues) ->
-                statementChartModelProducer.runTransaction {
-                    lineSeries { series(xValues, yValues) }
+            combine(monthView, selectedMonth) { view, ym -> view?.let { dailyBalanceSeries(it, ym) } }
+                .collect { points ->
+                    val (xValues, yValues) = points ?: return@collect
+                    statementChartModelProducer.runTransaction {
+                        lineSeries { series(xValues, yValues) }
+                    }
                 }
-            }
         }
     }
 
-    val uiState: StateFlow<AccountDetailUiState> = combine(
-        accountFlow,
-        historicalSum,
-        monthRecords,
-        selectedMonth
-    ) { account, historySum, records, ym ->
+    val uiState: StateFlow<AccountDetailUiState> = combine(monthView, selectedMonth) { view, ym ->
         val periodFormatter = DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)
-
-        val sorted = records.sortedWith(compareBy<ExpenseRecord> { it.date }.thenBy { it.id })
-
-        val asOfDate = account?.initialBalanceDate ?: "1970-01-01"
-
-        val deposit = records.sumOf { record ->
-            if (record.type == "Income" && accountDelta(record, accountId, asOfDate) > 0.0) record.amount else 0.0
-        }
-        val withdrawal = records.sumOf { record ->
-            if (record.type == "Expense" && accountDelta(record, accountId, asOfDate) < 0.0) record.amount else 0.0
-        }
-        val total = deposit - withdrawal
-
-        val baseBalance = (account?.initialBalance ?: 0.0) + (historySum ?: 0.0)
-        val endBalance = baseBalance + total
-
-        var running = baseBalance
-        val statement = sorted.map { record ->
-            running += accountDelta(record, accountId, asOfDate)
-            val item = AccountStatementItemUi(
-                id = record.id,
-                date = record.date,
-                category = record.category,
-                description = record.description,
-                paymentMode = record.paymentMode,
-                amount = record.amount,
-                type = record.type,
-                runningBalance = running
+        val month = view?.month
+        val entries = month?.rows.orEmpty().map { row ->
+            val record = view?.recordsById?.get(row.transactionId)
+            AccountStatementItemUi(
+                id = row.transactionId,
+                date = row.date.toString(),
+                category = record?.category?.ifBlank { null } ?: TransactionType.label(record?.type.orEmpty()),
+                description = record?.description.orEmpty(),
+                paymentMode = record?.paymentMode.orEmpty(),
+                amount = row.amount,
+                type = record?.type.orEmpty(),
+                runningBalance = row.balanceAfter
             )
-            item
         }
-
-        val displayStatement = statement.sortedByDescending { it.date }
-
+        val opening = view?.opening ?: 0.0
         AccountDetailUiState(
             accountId = accountId,
-            accountName = account?.accountName ?: "Account",
-            asOfDate = account?.initialBalanceDate ?: "1970-01-01",
+            accountName = view?.record?.accountName ?: "Account",
+            asOfDate = view?.record?.initialBalanceDate ?: "1970-01-01",
             selectedMonth = ym,
             periodLabel = ym.format(periodFormatter),
-            deposit = deposit,
-            withdrawal = withdrawal,
-            total = total,
-            currentBalance = endBalance,
-            entries = displayStatement
+            deposit = month?.moneyIn ?: 0.0,
+            withdrawal = month?.moneyOut ?: 0.0,
+            total = (month?.moneyIn ?: 0.0) - (month?.moneyOut ?: 0.0),
+            currentBalance = month?.closing ?: opening,
+            entries = entries
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AccountDetailUiState(accountId = accountId))
 
@@ -370,50 +287,19 @@ class AccountDetailViewModel @Inject constructor(
         selectedMonth.value = YearMonth.of(year, month.coerceIn(1, 12))
     }
 
-    private fun accountDelta(record: ExpenseRecord, accountId: Long, asOfDate: String): Double {
-        if (!isAfterAsOf(record, asOfDate)) return 0.0
-        val accountName = accountFlow.value?.accountName.orEmpty()
-        return when {
-            record.type == "Income" && (record.toAccountId == accountId || record.accountId == accountId) -> record.amount
-            record.type == "Expense" && (record.fromAccountId == accountId || record.accountId == accountId) -> -record.amount
-            record.type == "Transfer" && record.toAccountId == accountId -> record.amount
-            record.type == "Transfer" && record.toAccountId == null &&
-                !record.toAccountName.isNullOrBlank() &&
-                record.toAccountName.equals(accountName, ignoreCase = true) -> record.amount
-            record.type == "Transfer" && record.fromAccountId == accountId -> -record.amount
-            else -> 0.0
-        }
-    }
-
-    private fun buildDailyRunningBalanceSeries(
-        records: List<ExpenseRecord>,
-        baseBalance: Double,
-        ym: YearMonth
-    ): Pair<List<Double>, List<Double>> {
-        val asOfDate = accountFlow.value?.initialBalanceDate ?: "1970-01-01"
-        val dailyNetByDay = records.groupBy {
-            runCatching { LocalDate.parse(it.date).dayOfMonth }.getOrDefault(1)
-        }.mapValues { (_, txns) ->
-            txns.sumOf { accountDelta(it, accountId, asOfDate) }
-        }
-
-        var running = baseBalance
+    private fun dailyBalanceSeries(view: MonthView, ym: YearMonth): Pair<List<Double>, List<Double>> {
+        // Rows are newest first; the last one on each day leaves that day's closing balance.
+        val closingByDay = view.month?.rows.orEmpty()
+            .reversed()
+            .associate { it.date.dayOfMonth to it.balanceAfter }
+        var running = view.opening
         val xValues = mutableListOf<Double>()
         val yValues = mutableListOf<Double>()
         for (day in 1..ym.lengthOfMonth()) {
-            running += dailyNetByDay[day] ?: 0.0
+            running = closingByDay[day] ?: running
             xValues += day.toDouble()
             yValues += running
         }
         return xValues to yValues
-    }
-
-    private fun isAfterAsOf(record: ExpenseRecord, asOfDate: String): Boolean {
-        val tx = parseTransactionDateTime(dateRaw = record.date, timestampRaw = record.remoteTimestamp)
-        val asOf = parseAsOfDateTime(asOfDate)
-        return when {
-            tx != null && asOf != null -> tx.isAfter(asOf)
-            else -> false
-        }
     }
 }

@@ -204,7 +204,8 @@ fun AccountDetailScreen(
                     DayHeader(date)
                 }
                 itemsIndexed(entriesForDay, key = { _, entry -> entry.id }) { index, entry ->
-                    val isIncome = entry.type == "Income"
+                    // Amounts are signed: what this row did to the Account's balance.
+                    val isMoneyIn = entry.amount >= 0.0
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -241,9 +242,9 @@ fun AccountDetailScreen(
                         Spacer(Modifier.width(8.dp))
                         Column(horizontalAlignment = Alignment.End, modifier = Modifier.width(136.dp)) {
                             Text(
-                                "₹ ${money(entry.amount)}",
+                                "${if (isMoneyIn) "+" else "−"}₹ ${money(kotlin.math.abs(entry.amount))}",
                                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = if (isIncome) IncomeBlue else ExpenseOrange
+                                color = if (isMoneyIn) IncomeBlue else ExpenseOrange
                             )
                             Text(
                                 "PostBal ${money(entry.runningBalance)}",

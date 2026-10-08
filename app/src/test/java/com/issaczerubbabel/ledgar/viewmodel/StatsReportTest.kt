@@ -132,6 +132,22 @@ class StatsReportTest {
     }
 
     @Test
+    fun balanceAdjustmentsAreNeverEarnedSpentOrSaved() {
+        val totals = build(
+            listOf(
+                income("2026-09-25", 68000.0, "Salary"),
+                expense("2026-09-01", 400.0),
+                adjustment("2026-09-10", 500.0, account = 4),
+                adjustment("2026-09-11", -300.0, account = 5, category = "Investments/Savings")
+            )
+        ).totals
+
+        assertEquals(68000.0, totals.earned, 0.0)
+        assertEquals(400.0, totals.spent, 0.0)
+        assertEquals(0.0, totals.saved, 0.0)
+    }
+
+    @Test
     fun aTransferWithoutAccountIdsIsMatchedByAccountName() {
         val record = ExpenseRecord(
             date = "2026-09-05", type = "Transfer", category = "", description = "", amount = 1200.0, remarks = "",
@@ -468,6 +484,9 @@ class StatsReportTest {
 
     private fun income(date: String, amount: Double, category: String) =
         ExpenseRecord(date = date, type = "Income", category = category, description = "", amount = amount, accountId = 4L, remarks = "")
+
+    private fun adjustment(date: String, amount: Double, account: Long, category: String = "") =
+        ExpenseRecord(date = date, type = "Adjustment", category = category, description = "", amount = amount, accountId = account, remarks = "")
 
     private fun transfer(date: String, amount: Double, from: Long, to: Long) =
         ExpenseRecord(date = date, type = "Transfer", category = "", description = "", amount = amount, remarks = "", fromAccountId = from, toAccountId = to)

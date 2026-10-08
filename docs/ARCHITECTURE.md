@@ -175,7 +175,10 @@ erDiagram
         string groupName
         string accountName
         double initialBalance
+        string initialBalanceDate
         bool isHidden
+        bool includeInTotals
+        string reconciledAt
     }
 
     EXPENSE_RECORDS {
@@ -298,6 +301,10 @@ erDiagram
 - Used by:
   - Account listing and detail statement screens.
   - Transfer transactions (fromAccountId/toAccountId).
+- Balances, totals, statements and net worth are worked out only in the pure `account/AccountMath`, from the
+  snapshots `AccountRepository.getAccountBook()` reads. An `Adjustment` Transaction (ADR-0009) moves only its
+  `accountId`'s balance. An Account is a Liability when its group's `dropdown_options.role` is `LIABILITY`;
+  v24 gave that role to groups whose names matched the old keywords and added `reconciledAt` (null until Reconciled).
 
 ### budgets
 

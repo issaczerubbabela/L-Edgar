@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.viewmodel.BookmarksViewModel
 
@@ -110,7 +111,7 @@ private fun BookmarkedTransactionRow(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = record.description.ifBlank { record.category },
+                text = record.description.ifBlank { record.category.ifBlank { TransactionType.label(record.type) } },
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 1,
@@ -124,7 +125,8 @@ private fun BookmarkedTransactionRow(
         }
 
         Text(
-            text = "${record.date} • ${record.type} • ${record.category}",
+            text = listOf(record.date, TransactionType.label(record.type), record.category)
+                .filter { it.isNotBlank() }.joinToString(" • "),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

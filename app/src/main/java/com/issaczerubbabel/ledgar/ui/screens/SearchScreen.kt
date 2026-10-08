@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.viewmodel.SearchUiState
@@ -250,7 +251,7 @@ private fun SearchResultRow(record: ExpenseRecord, onClick: () -> Unit) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = record.description.ifBlank { record.category },
+                text = record.description.ifBlank { record.category.ifBlank { TransactionType.label(record.type) } },
                 style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -265,7 +266,8 @@ private fun SearchResultRow(record: ExpenseRecord, onClick: () -> Unit) {
         }
 
         Text(
-            text = "${record.date} • ${record.type} • ${record.category}",
+            text = listOf(record.date, TransactionType.label(record.type), record.category)
+                .filter { it.isNotBlank() }.joinToString(" • "),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

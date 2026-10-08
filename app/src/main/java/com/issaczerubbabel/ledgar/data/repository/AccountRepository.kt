@@ -21,6 +21,8 @@ enum class PermanentDeleteStrategy {
 interface AccountRepository {
     fun getAllAccounts(): Flow<List<AccountRecord>>
     fun getAllVisibleAccounts(): Flow<List<AccountRecord>>
+    /** Accounts and Transactions as AccountMath reads them; every balance on screen comes from this. */
+    fun getAccountBook(): Flow<AccountBook>
     fun getAccountBalances(): Flow<List<AccountBalance>>
     fun getAccountsWithBalances(): Flow<List<AccountWithBalance>>
     fun getBalanceForAccount(accountId: Long): Flow<Double>

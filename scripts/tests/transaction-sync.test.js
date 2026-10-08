@@ -289,6 +289,20 @@ test("transfers keep their from and to accounts", () => {
   assert.deepEqual([row.fromAccountName, row.toAccountName], ["Bank", "Cash"]);
 });
 
+test("a negative Balance adjustment comes back with its sign, type and account", () => {
+  const app = loadScript(SCRIPT);
+  app.post({
+    target: "transactions",
+    action: "upsert",
+    transactions: [transaction("adj", { type: "Adjustment", expCategory: "", amount: -45.5, accountName: "SBI Salary" })],
+  });
+  const [row] = app.get().data;
+  assert.deepEqual(
+    [row.type, row.amount, row.accountName, row.expCategory, row.incCategory],
+    ["Adjustment", -45.5, "SBI Salary", "", ""],
+  );
+});
+
 test("text fields are stored as text, not turned into dates or formulas", () => {
   const app = loadScript(SCRIPT);
   app.post({ target: "transactions", action: "upsert", transactions: [transaction("a")] });

@@ -6,6 +6,31 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `app/src/main/java/com/issaczerubbabel/ledgar/ui/screens/ChangelogData.kt`,
 which is also what the app shows under More > Changelog. Developer notes appear here only.
 
+## [1.4.0] - 2026-10-08
+
+### Added
+
+- Dropdowns: an Account group can count as Liability, such as a credit card or loan
+
+### Changed
+
+- Accounts: the list, an Account's page and Overall Stats all show the same balance for an Account
+- Accounts: a Transaction changes a balance only when dated after its As-of date, however late you log it
+- Accounts: Liabilities come from the Liability role, and an overpaid card lowers them
+- Accounts: Assets, Liabilities and Total leave out Accounts that aren't included in totals
+- Overall Stats: moving money between your own Accounts no longer counts as income and expense
+
+### Fixed
+
+- Accounts: old transfers that only saved the destination's name count on that Account everywhere
+- Accounts: totals and balances add up to the paisa, with no stray digits or −₹0.00
+
+### Developer
+
+- AccountMath: one pure module for balances, totals, statements, net worth, cash flow and movers, with tests
+- Room 23 → 24: reconciledAt, Liability roles from the old keywords, and Transfers linked to their destination
+- Adjustment Transaction type (ADR-0009): syncs with its sign, and stays out of Stats, Buckets and totals
+
 ## [1.3.2] - 2026-10-05
 
 ### Changed
@@ -163,6 +188,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - Room database, Vico charts and date-parsing tests
 
+[1.4.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.4.0
 [1.3.2]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.3.2
 [1.3.1]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.3.1
 [1.3.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.3.0

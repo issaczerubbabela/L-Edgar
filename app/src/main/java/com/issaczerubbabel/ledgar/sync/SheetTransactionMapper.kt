@@ -4,6 +4,7 @@ import com.issaczerubbabel.ledgar.data.local.dao.AccountDao
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.remote.ImportRecordDto
+import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.util.normalizeTimestampKey
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import javax.inject.Inject
@@ -70,6 +71,7 @@ class SheetTransactionMapper @Inject constructor(private val accountDao: Account
         val mappedCategoryRaw = when {
             resolvedType.equals("Expense", ignoreCase = true) -> dto.expCategory
             resolvedType.equals("Income", ignoreCase = true) -> dto.incCategory
+            resolvedType == TransactionType.ADJUSTMENT -> null
             else -> dto.expCategory ?: dto.incCategory
         }
         val mappedCategory = mappedCategoryRaw
@@ -184,6 +186,7 @@ class SheetTransactionMapper @Inject constructor(private val accountDao: Account
             t == "expense" -> "Expense"
             t == "income" -> "Income"
             t == "transfer" -> "Transfer"
+            t == "adjustment" -> TransactionType.ADJUSTMENT
             else -> rawType.trim().replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         }
     }

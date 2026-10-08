@@ -13,6 +13,7 @@ import com.issaczerubbabel.ledgar.data.local.dao.AccountDao
 import com.issaczerubbabel.ledgar.data.local.dao.BucketBudgetDao
 import com.issaczerubbabel.ledgar.data.local.dao.BudgetDao
 import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
+import com.issaczerubbabel.ledgar.data.local.migration.AccountMigration
 import com.issaczerubbabel.ledgar.data.local.migration.BucketBudgetMigration
 import com.issaczerubbabel.ledgar.data.local.migration.CaptureMigration
 import com.issaczerubbabel.ledgar.data.local.migration.TripMigration
@@ -139,6 +140,13 @@ object DatabaseModule {
     internal val MIGRATION_22_23 = object : Migration(22, 23) {
         override fun migrate(db: SupportSQLiteDatabase) {
             TripMigration.upgradeTo23(db)
+        }
+    }
+
+    /** Accounts revamp: Liability roles, "reconciled on" dates and linked Transfer destinations. */
+    internal val MIGRATION_23_24 = object : Migration(23, 24) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            AccountMigration.upgradeTo24(db)
         }
     }
 
@@ -287,6 +295,7 @@ object DatabaseModule {
             .addMigrations(MIGRATION_20_21)
             .addMigrations(MIGRATION_21_22)
             .addMigrations(MIGRATION_22_23)
+            .addMigrations(MIGRATION_23_24)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .addCallback(callback)
             .build()

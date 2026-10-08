@@ -16,6 +16,29 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
+        version = "v1.4.0",
+        date = "2026-10-08",
+        added = listOf(
+            "Dropdowns: an Account group can count as Liability, such as a credit card or loan"
+        ),
+        changed = listOf(
+            "Accounts: the list, an Account's page and Overall Stats all show the same balance for an Account",
+            "Accounts: a Transaction changes a balance only when dated after its As-of date, however late you log it",
+            "Accounts: Liabilities come from the Liability role, and an overpaid card lowers them",
+            "Accounts: Assets, Liabilities and Total leave out Accounts that aren't included in totals",
+            "Overall Stats: moving money between your own Accounts no longer counts as income and expense"
+        ),
+        fixed = listOf(
+            "Accounts: old transfers that only saved the destination's name count on that Account everywhere",
+            "Accounts: totals and balances add up to the paisa, with no stray digits or −₹0.00"
+        ),
+        developer = listOf(
+            "AccountMath: one pure module for balances, totals, statements, net worth, cash flow and movers, with tests",
+            "Room 23 → 24: reconciledAt, Liability roles from the old keywords, and Transfers linked to their destination",
+            "Adjustment Transaction type (ADR-0009): syncs with its sign, and stays out of Stats, Buckets and totals"
+        )
+    ),
+    ChangelogRelease(
         version = "v1.3.2",
         date = "2026-10-05",
         changed = listOf(

@@ -231,9 +231,6 @@ fun AccountsScreen(
                 liabilities = state.liabilities,
                 total = state.total
             )
-            if (state.autoClassifiedLiabilityGroups.isNotEmpty()) {
-                LiabilityLegendChip(state.autoClassifiedLiabilityGroups)
-            }
             if (actionMode != AccountActionMode.None) {
                 ActionModeHint(actionMode)
             }
@@ -364,28 +361,6 @@ fun AccountsScreen(
             }
         )
     }
-}
-
-@Composable
-private fun LiabilityLegendChip(groups: List<String>) {
-    AssistChip(
-        onClick = {},
-        enabled = false,
-        label = {
-            Text(
-                text = "Auto-classified liabilities: ${groups.joinToString(", ")}",
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        colors = AssistChipDefaults.assistChipColors(
-            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    )
 }
 
 @Composable

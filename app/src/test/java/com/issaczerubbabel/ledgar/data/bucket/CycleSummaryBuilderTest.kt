@@ -108,6 +108,22 @@ class CycleSummaryBuilderTest {
     }
 
     @Test
+    fun balanceAdjustmentsAreNotBucketSpending() {
+        val summary = build(
+            buckets = listOf(bucket(1, "Food", 5000.0)),
+            assignments = listOf(route(1, "Food")),
+            records = listOf(
+                expense("2026-09-01", "Food", 100.0),
+                expense("2026-09-02", "Food", -250.0, type = "Adjustment"),
+                expense("2026-09-03", "", 400.0, type = "Adjustment")
+            )
+        )
+
+        assertEquals(100.0, summary.buckets.single().spent, 0.0)
+        assertEquals(100.0, summary.totalSpent, 0.0)
+    }
+
+    @Test
     fun aRunningCycleKeepsAbsorbingSpendAfterItsEndDate() {
         val summary = build(
             buckets = listOf(bucket(1, "Food", 5000.0)),
