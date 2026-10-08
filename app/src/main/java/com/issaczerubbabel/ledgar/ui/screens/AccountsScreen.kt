@@ -2,75 +2,82 @@ package com.issaczerubbabel.ledgar.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.issaczerubbabel.ledgar.ui.theme.ExpenseRed
-import com.issaczerubbabel.ledgar.ui.theme.IncomeBlue
-import com.issaczerubbabel.ledgar.viewmodel.AddEditAccountViewModel
-import com.issaczerubbabel.ledgar.viewmodel.AccountListItemUi
+import com.issaczerubbabel.ledgar.ui.theme.ExpenseOrange
+import com.issaczerubbabel.ledgar.viewmodel.AccountGroupUi
+import com.issaczerubbabel.ledgar.viewmodel.AccountRowUi
+import com.issaczerubbabel.ledgar.viewmodel.AccountsTabUiState
 import com.issaczerubbabel.ledgar.viewmodel.AccountsViewModel
+import com.issaczerubbabel.ledgar.viewmodel.AddEditAccountViewModel
+import kotlin.math.roundToInt
 
-private enum class AccountActionMode {
-    None,
-    ShowHide,
-    Delete,
-    ModifyOrders
-}
-
-@Composable
-private fun responsiveTextSize(baseSp: Float, minSp: Float = 12f, maxSp: Float = 24f) =
-    (
-        baseSp * (LocalConfiguration.current.screenWidthDp / 411f).coerceIn(0.9f, 1.08f)
-    ).coerceIn(minSp, maxSp).sp
-
+/**
+ * The Accounts tab: a Net worth card that opens Net worth, then each Account group with its
+ * subtotal, asset groups before Liability groups. Edit order replaces the list with drag handles.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountsScreen(
@@ -84,47 +91,19 @@ fun AccountsScreen(
     val allAccounts by vm.allAccounts.collectAsStateWithLifecycle()
     val formState by formVm.uiState.collectAsStateWithLifecycle()
     val accountGroups by formVm.accountGroups.collectAsStateWithLifecycle()
-    var showMenu by remember { mutableStateOf(false) }
     var showAddSheet by remember { mutableStateOf(false) }
-    var actionMode by remember { mutableStateOf(AccountActionMode.None) }
+    var editingOrder by remember { mutableStateOf(false) }
     var showHidden by remember { mutableStateOf(false) }
+    var collapsedGroups by remember { mutableStateOf(emptySet<String>()) }
     var pendingPermanentDeleteAccountId by remember { mutableStateOf<Long?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
 
-    val visibleAssetGroups = remember(state.assetGroups) {
-        state.assetGroups
-            .mapValues { (_, accounts) -> accounts.filterNot { it.isHidden } }
-            .filterValues { it.isNotEmpty() }
-    }
-    val visibleLiabilityGroups = remember(state.liabilityGroups) {
-        state.liabilityGroups
-            .mapValues { (_, accounts) -> accounts.filterNot { it.isHidden } }
-            .filterValues { it.isNotEmpty() }
-    }
-    val hiddenAssetGroups = remember(state.assetGroups) {
-        state.assetGroups
-            .mapValues { (_, accounts) -> accounts.filter { it.isHidden } }
-            .filterValues { it.isNotEmpty() }
-    }
-    val hiddenLiabilityGroups = remember(state.liabilityGroups) {
-        state.liabilityGroups
-            .mapValues { (_, accounts) -> accounts.filter { it.isHidden } }
-            .filterValues { it.isNotEmpty() }
-    }
-    val hiddenCount = remember(hiddenAssetGroups, hiddenLiabilityGroups) {
-        hiddenAssetGroups.values.sumOf { it.size } + hiddenLiabilityGroups.values.sumOf { it.size }
-    }
-
     LaunchedEffect(Unit) {
-        formVm.saved.collect {
-            showAddSheet = false
-        }
+        formVm.saved.collect { showAddSheet = false }
     }
-
     LaunchedEffect(Unit) {
         vm.events.collect { snackbarHostState.showSnackbar(it) }
     }
-
     LaunchedEffect(Unit) {
         formVm.events.collect { snackbarHostState.showSnackbar(it) }
     }
@@ -132,190 +111,102 @@ fun AccountsScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        text = "Accounts",
-                        color = MaterialTheme.colorScheme.onBackground,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        softWrap = false
-                    )
-                },
+            TopAppBar(
+                title = { Text("Accounts", style = MaterialTheme.typography.headlineSmall) },
                 actions = {
-                    IconButton(onClick = onOpenOverallStats) {
-                        Icon(Icons.Filled.BarChart, contentDescription = "Overall stats")
-                    }
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "More")
-                    }
-                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Add", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) },
+                    if (editingOrder) {
+                        TextButton(onClick = { editingOrder = false }) { Text("Done") }
+                    } else {
+                        IconButton(onClick = { editingOrder = true }) {
+                            Icon(Icons.Filled.SwapVert, contentDescription = "Edit order")
+                        }
+                        FilledTonalButton(
                             onClick = {
-                                showMenu = false
-                                actionMode = AccountActionMode.None
                                 formVm.startCreate()
                                 showAddSheet = true
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = if (actionMode == AccountActionMode.ShowHide) "Done Show/Hide" else "Show/Hide",
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    softWrap = false
-                                )
                             },
-                            onClick = {
-                                showMenu = false
-                                actionMode = if (actionMode == AccountActionMode.ShowHide) {
-                                    AccountActionMode.None
-                                } else {
-                                    AccountActionMode.ShowHide
-                                }
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = if (actionMode == AccountActionMode.Delete) "Done Delete" else "Delete",
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    softWrap = false
-                                )
-                            },
-                            onClick = {
-                                showMenu = false
-                                actionMode = if (actionMode == AccountActionMode.Delete) {
-                                    AccountActionMode.None
-                                } else {
-                                    AccountActionMode.Delete
-                                }
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = if (actionMode == AccountActionMode.ModifyOrders) "Done Modify Orders" else "Modify Orders",
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    softWrap = false
-                                )
-                            },
-                            onClick = {
-                                showMenu = false
-                                actionMode = if (actionMode == AccountActionMode.ModifyOrders) {
-                                    AccountActionMode.None
-                                } else {
-                                    AccountActionMode.ModifyOrders
-                                }
-                            }
-                        )
+                            modifier = Modifier.padding(end = 8.dp)
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Add")
+                        }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         },
         containerColor = MaterialTheme.colorScheme.background
-    ) { topPad ->
-        Column(
+    ) { topPadding ->
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(topPad)
-                .padding(bottom = innerPadding.calculateBottomPadding())
+                .padding(topPadding),
+            contentPadding = PaddingValues(bottom = innerPadding.calculateBottomPadding() + 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            SummaryTopBar(
-                assets = state.assets,
-                liabilities = state.liabilities,
-                total = state.total
-            )
-            if (actionMode != AccountActionMode.None) {
-                ActionModeHint(actionMode)
+            item(key = "net-worth") {
+                NetWorthCard(state = state, onClick = onOpenOverallStats)
             }
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                if (visibleAssetGroups.isNotEmpty()) {
-                    item { SectionHeader("Assets") }
-                    visibleAssetGroups.forEach { (groupName, accounts) ->
-                        item { GroupHeader(groupName) }
-                        items(accounts.size) { index ->
-                            AccountRow(
-                                item = accounts[index],
-                                mode = actionMode,
-                                onOpen = onOpenAccountDetail,
-                                onToggleVisibility = vm::toggleAccountVisibility,
-                                onDelete = { accountId -> pendingPermanentDeleteAccountId = accountId },
-                                onMoveUp = vm::moveAccountUp,
-                                onMoveDown = vm::moveAccountDown
-                            )
-                        }
-                    }
+
+            if (state.isLoaded && state.groups.isEmpty() && state.hiddenAccounts.isEmpty()) {
+                item(key = "empty") {
+                    Text(
+                        text = "No accounts yet. Tap Add to create your first one.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
+                    )
+                }
+            }
+
+            if (editingOrder) {
+                item(key = "edit-order") {
+                    EditOrder(
+                        groups = state.groups,
+                        onMoveGroup = vm::moveGroup,
+                        onMoveAccount = vm::moveAccount
+                    )
+                }
+            } else {
+                items(state.groups, key = { "group-${it.name}" }) { group ->
+                    val expanded = group.name !in collapsedGroups
+                    GroupCard(
+                        group = group,
+                        expanded = expanded,
+                        onToggle = {
+                            collapsedGroups = if (expanded) collapsedGroups + group.name else collapsedGroups - group.name
+                        },
+                        onOpenAccount = onOpenAccountDetail
+                    )
                 }
 
-                if (visibleLiabilityGroups.isNotEmpty()) {
-                    item { SectionHeader("Liabilities") }
-                    visibleLiabilityGroups.forEach { (groupName, accounts) ->
-                        item { GroupHeader(groupName) }
-                        items(accounts.size) { index ->
-                            AccountRow(
-                                item = accounts[index],
-                                mode = actionMode,
-                                onOpen = onOpenAccountDetail,
-                                onToggleVisibility = vm::toggleAccountVisibility,
-                                onDelete = { accountId -> pendingPermanentDeleteAccountId = accountId },
-                                onMoveUp = vm::moveAccountUp,
-                                onMoveDown = vm::moveAccountDown
-                            )
-                        }
-                    }
-                }
-
-                if (hiddenCount > 0) {
-                    item {
-                        TextButton(
+                if (state.hiddenAccounts.isNotEmpty()) {
+                    item(key = "hidden-toggle") {
+                        OutlinedButton(
                             onClick = { showHidden = !showHidden },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .padding(horizontal = 16.dp)
+                                .heightIn(min = 48.dp)
                         ) {
-                            Text(if (showHidden) "Hide Hidden Accounts" else "Show Hidden Accounts")
+                            Icon(
+                                if (showHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (showHidden) "Hide hidden accounts" else "Show hidden (${state.hiddenAccounts.size})")
                         }
                     }
-                }
-
-                if (showHidden && hiddenAssetGroups.isNotEmpty()) {
-                    item { SectionHeader("Hidden Assets") }
-                    hiddenAssetGroups.forEach { (groupName, accounts) ->
-                        item { GroupHeader(groupName) }
-                        items(accounts.size) { index ->
-                            AccountRow(
-                                item = accounts[index],
-                                mode = actionMode,
-                                onOpen = onOpenAccountDetail,
-                                onToggleVisibility = vm::toggleAccountVisibility,
-                                onDelete = { accountId -> pendingPermanentDeleteAccountId = accountId },
-                                onMoveUp = vm::moveAccountUp,
-                                onMoveDown = vm::moveAccountDown
-                            )
-                        }
-                    }
-                }
-
-                if (showHidden && hiddenLiabilityGroups.isNotEmpty()) {
-                    item { SectionHeader("Hidden Liabilities") }
-                    hiddenLiabilityGroups.forEach { (groupName, accounts) ->
-                        item { GroupHeader(groupName) }
-                        items(accounts.size) { index ->
-                            AccountRow(
-                                item = accounts[index],
-                                mode = actionMode,
-                                onOpen = onOpenAccountDetail,
-                                onToggleVisibility = vm::toggleAccountVisibility,
-                                onDelete = { accountId -> pendingPermanentDeleteAccountId = accountId },
-                                onMoveUp = vm::moveAccountUp,
-                                onMoveDown = vm::moveAccountDown
-                            )
+                    if (showHidden) {
+                        item(key = "hidden-accounts") {
+                            AccountsCard {
+                                state.hiddenAccounts.forEachIndexed { index, row ->
+                                    if (index > 0) RowDivider()
+                                    AccountRow(row = row, subtitle = "${row.groupName} · Hidden", onClick = { onOpenAccountDetail(row.id) })
+                                }
+                            }
                         }
                     }
                 }
@@ -337,9 +228,7 @@ fun AccountsScreen(
             onHiddenChange = formVm::updateHidden,
             onSave = formVm::save,
             onDelete = formVm::deleteIfAllowed,
-            onDeletePermanently = {
-                pendingPermanentDeleteAccountId = formState.accountId
-            }
+            onDeletePermanently = { pendingPermanentDeleteAccountId = formState.accountId }
         )
     }
 
@@ -353,10 +242,7 @@ fun AccountsScreen(
                 .map { ReassignAccountOption(id = it.id, label = "${it.accountName} (${it.groupName})") },
             onDismiss = { pendingPermanentDeleteAccountId = null },
             onConfirm = { reassignToAccountId ->
-                vm.deleteAccountPermanently(
-                    accountId = pendingDeleteAccountId,
-                    reassignToAccountId = reassignToAccountId
-                )
+                vm.deleteAccountPermanently(accountId = pendingDeleteAccountId, reassignToAccountId = reassignToAccountId)
                 pendingPermanentDeleteAccountId = null
             }
         )
@@ -364,187 +250,288 @@ fun AccountsScreen(
 }
 
 @Composable
-private fun ActionModeHint(mode: AccountActionMode) {
-    val text = when (mode) {
-        AccountActionMode.ShowHide -> "Show/Hide mode: tap the eye icon on any account."
-        AccountActionMode.Delete -> "Delete mode: tap the delete icon on an account to remove it."
-        AccountActionMode.ModifyOrders -> "Modify Orders mode: use arrows to move accounts up or down."
-        AccountActionMode.None -> ""
-    }
-    if (text.isBlank()) return
-
-    Text(
-        text = text,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        style = MaterialTheme.typography.bodySmall,
+private fun NetWorthCard(state: AccountsTabUiState, onClick: () -> Unit) {
+    val onContainer = MaterialTheme.colorScheme.onPrimaryContainer
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    )
-}
-
-@Composable
-private fun SectionHeader(title: String) {
-    Text(
-        text = title,
-        color = MaterialTheme.colorScheme.onBackground,
-        style = MaterialTheme.typography.titleMedium.copy(
-            fontSize = responsiveTextSize(baseSp = 16f, minSp = 15f, maxSp = 18f)
-        ),
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        softWrap = false,
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-    )
-}
-
-@Composable
-private fun SummaryTopBar(assets: Double, liabilities: Double, total: Double) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .padding(horizontal = 16.dp)
+            .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(20.dp))
+            .clickable(onClickLabel = "Open Net worth", onClick = onClick)
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        SummaryCol("Assets", assets, IncomeBlue, Modifier.weight(1f))
-        SummaryCol("Liabilities", liabilities, ExpenseRed, Modifier.weight(1f))
-        SummaryCol("Total", total, MaterialTheme.colorScheme.onBackground, Modifier.weight(1f))
-    }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
-}
-
-@Composable
-private fun SummaryCol(label: String, amount: Double, color: androidx.compose.ui.graphics.Color, modifier: Modifier) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Net worth", style = MaterialTheme.typography.titleSmall, color = onContainer, modifier = Modifier.weight(1f))
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = onContainer)
+        }
         Text(
-            text = label,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.labelLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            softWrap = false
+            text = state.netWorth,
+            style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.SemiBold),
+            color = onContainer
         )
-        Text(
-            text = "₹ ${money(amount)}",
-            color = color,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            softWrap = false
-        )
+        if (state.monthChange.isNotBlank()) {
+            Text(text = state.monthChange, style = MaterialTheme.typography.bodyMedium, color = onContainer)
+        }
+        HorizontalDivider(color = onContainer.copy(alpha = 0.2f), modifier = Modifier.padding(vertical = 6.dp))
+        Row {
+            HeaderFigure("Assets", state.assets, Modifier.weight(1f))
+            HeaderFigure("Liabilities", state.liabilities, Modifier.weight(1f))
+        }
     }
 }
 
 @Composable
-private fun GroupHeader(title: String) {
-    Text(
-        text = title,
-        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-        style = MaterialTheme.typography.labelLarge,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        softWrap = false,
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-    )
+private fun HeaderFigure(label: String, value: String, modifier: Modifier) {
+    val onContainer = MaterialTheme.colorScheme.onPrimaryContainer
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = onContainer.copy(alpha = 0.85f))
+        Text(value, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold), color = onContainer)
+    }
 }
 
 @Composable
-private fun AccountRow(
-    item: AccountListItemUi,
-    mode: AccountActionMode,
-    onOpen: (Long) -> Unit,
-    onToggleVisibility: (Long) -> Unit,
-    onDelete: (Long) -> Unit,
-    onMoveUp: (Long) -> Unit,
-    onMoveDown: (Long) -> Unit
-) {
-    val rowAlpha = if (item.isHidden) 0.6f else 1f
-
-    Row(
+private fun AccountsCard(content: @Composable () -> Unit) {
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
-            .clickable(enabled = mode == AccountActionMode.None) { onOpen(item.id) }
-            .alpha(rowAlpha)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 16.dp)
+            .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(16.dp))
     ) {
+        content()
+    }
+}
+
+@Composable
+private fun RowDivider() {
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
+}
+
+@Composable
+private fun GroupCard(group: AccountGroupUi, expanded: Boolean, onToggle: () -> Unit, onOpenAccount: (Long) -> Unit) {
+    AccountsCard {
         Row(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClickLabel = if (expanded) "Collapse" else "Expand", onClick = onToggle)
+                .heightIn(min = 52.dp)
+                .padding(horizontal = 16.dp)
+                .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                item.accountName,
-                color = MaterialTheme.colorScheme.onBackground,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
+                text = group.name,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                modifier = Modifier.semantics { heading() }
             )
-            if (item.isHidden) {
-                Icon(
-                    imageVector = Icons.Filled.VisibilityOff,
-                    contentDescription = "Hidden account",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+            if (group.isLiability) AccountTag("Liability")
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = group.subtotal,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = if (group.isSubtotalNegative) ExpenseOrange else MaterialTheme.colorScheme.onSurface
+            )
+            Icon(
+                if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (expanded) {
+            group.rows.forEach { row ->
+                RowDivider()
+                AccountRow(row = row, subtitle = null, onClick = { onOpenAccount(row.id) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountRow(row: AccountRowUi, subtitle: String?, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .heightIn(min = 56.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = row.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
                 )
+                if (!row.isIncludedInTotals) AccountTag("Not in totals")
+            }
+            if (subtitle != null) {
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Text(
-            text = "₹ ${money(item.balance)}",
-            color = if (item.balance < 0) ExpenseRed else MaterialTheme.colorScheme.onBackground,
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.End,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            softWrap = false,
-            modifier = Modifier
-                .widthIn(min = 84.dp, max = 128.dp)
-                .padding(end = if (mode == AccountActionMode.None) 0.dp else 8.dp)
+            text = row.balance,
+            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+            color = if (row.isNegative) ExpenseOrange else MaterialTheme.colorScheme.onSurface,
+            maxLines = 1
         )
+    }
+}
 
-        when (mode) {
-            AccountActionMode.ShowHide -> {
-                IconButton(onClick = { onToggleVisibility(item.id) }) {
-                    Icon(
-                        imageVector = if (item.isHidden) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                        contentDescription = if (item.isHidden) "Show account" else "Hide account"
+@Composable
+private fun AccountTag(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        modifier = Modifier
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(8.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    )
+}
+
+@Composable
+private fun EditOrder(
+    groups: List<AccountGroupUi>,
+    onMoveGroup: (from: Int, to: Int) -> Unit,
+    onMoveAccount: (groupName: String, from: Int, to: Int) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = "Drag the handles to reorder. Asset groups always come before Liability groups.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 20.dp)
+        )
+        EditOrderTitle("Groups")
+        AccountsCard {
+            DraggableRows(items = groups, keyOf = { it.name }, onMove = onMoveGroup) { group, handle ->
+                EditOrderRow(label = group.name, detail = if (group.isLiability) "Liability" else null, handle = handle)
+            }
+        }
+        groups.forEach { group ->
+            EditOrderTitle(group.name)
+            AccountsCard {
+                DraggableRows(
+                    items = group.allRows,
+                    keyOf = { it.id },
+                    onMove = { from, to -> onMoveAccount(group.name, from, to) }
+                ) { row, handle ->
+                    EditOrderRow(label = row.name, detail = if (row.isHidden) "Hidden" else null, handle = handle)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditOrderTitle(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .padding(horizontal = 20.dp)
+            .semantics { heading() }
+    )
+}
+
+@Composable
+private fun EditOrderRow(label: String, detail: String?, handle: Modifier) {
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .padding(start = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        if (detail != null) AccountTag(detail)
+        Box(modifier = handle.size(48.dp), contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.DragHandle, contentDescription = "Drag $label", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** Fixed-height rows reordered by dragging their handle; TalkBack gets Move up and Move down actions instead. */
+@Composable
+private fun <T> DraggableRows(
+    items: List<T>,
+    keyOf: (T) -> Any,
+    onMove: (from: Int, to: Int) -> Unit,
+    row: @Composable (item: T, handle: Modifier) -> Unit
+) {
+    val rowHeight = 56.dp
+    val rowHeightPx = with(LocalDensity.current) { rowHeight.toPx() }
+    var draggingIndex by remember(items) { mutableStateOf<Int?>(null) }
+    var dragOffset by remember(items) { mutableFloatStateOf(0f) }
+
+    fun targetOf(from: Int): Int = (from + (dragOffset / rowHeightPx).roundToInt()).coerceIn(0, items.lastIndex)
+
+    Column {
+        items.forEachIndexed { index, item ->
+            key(keyOf(item)) {
+                val from = draggingIndex
+                val target = from?.let(::targetOf)
+                val translation = when {
+                    from == null || target == null -> 0f
+                    index == from -> dragOffset
+                    index in (from + 1)..target -> -rowHeightPx
+                    index in target until from -> rowHeightPx
+                    else -> 0f
+                }
+                if (index > 0) RowDivider()
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(rowHeight)
+                        .zIndex(if (index == from) 1f else 0f)
+                        .graphicsLayer { translationY = translation }
+                        .semantics {
+                            customActions = listOf(
+                                CustomAccessibilityAction("Move up") {
+                                    if (index > 0) onMove(index, index - 1)
+                                    index > 0
+                                },
+                                CustomAccessibilityAction("Move down") {
+                                    if (index < items.lastIndex) onMove(index, index + 1)
+                                    index < items.lastIndex
+                                }
+                            )
+                        }
+                ) {
+                    row(
+                        item,
+                        Modifier.pointerInput(items, index) {
+                            detectDragGestures(
+                                onDragStart = {
+                                    draggingIndex = index
+                                    dragOffset = 0f
+                                },
+                                onDrag = { change, amount ->
+                                    change.consume()
+                                    dragOffset += amount.y
+                                },
+                                onDragEnd = {
+                                    val start = draggingIndex
+                                    if (start != null) onMove(start, targetOf(start))
+                                    draggingIndex = null
+                                    dragOffset = 0f
+                                },
+                                onDragCancel = {
+                                    draggingIndex = null
+                                    dragOffset = 0f
+                                }
+                            )
+                        }
                     )
                 }
             }
-
-            AccountActionMode.Delete -> {
-                IconButton(onClick = { onDelete(item.id) }) {
-                    Icon(Icons.Filled.Delete, contentDescription = "Delete account")
-                }
-            }
-
-            AccountActionMode.ModifyOrders -> {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { onMoveUp(item.id) }, enabled = item.canMoveUp) {
-                        Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Move up")
-                    }
-                    IconButton(onClick = { onMoveDown(item.id) }, enabled = item.canMoveDown) {
-                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Move down")
-                    }
-                }
-            }
-
-            AccountActionMode.None -> Unit
         }
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
-}
-
-private fun money(value: Double): String {
-    val sign = if (value < 0) "-" else ""
-    return sign + "%,.2f".format(kotlin.math.abs(value))
 }

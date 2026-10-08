@@ -70,8 +70,8 @@ class AccountRepositoryImpl @Inject constructor(
         dao.updateHiddenStatus(accountId = accountId, isHidden = !account.isHidden)
     }
 
-    override suspend fun swapDisplayOrder(firstAccountId: Long, secondAccountId: Long) {
-        dao.swapDisplayOrder(firstAccountId = firstAccountId, secondAccountId = secondAccountId)
+    override suspend fun setDisplayOrder(accountIds: List<Long>) {
+        dao.setDisplayOrder(accountIds)
     }
 
     override suspend fun hasTransactions(accountId: Long): Boolean =

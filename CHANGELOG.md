@@ -22,6 +22,8 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Income and expense amounts are lighter on dark backgrounds, so they're easier to read
 - Account page: Balance today, Transfer and Add buttons, and one scrolling statement in place of the chart
 - Account page: each month shows Opening, In, Out and Closing that add up, and rows show the balance after
+- Accounts: a Net worth card with this month's change, and collapsible groups with their subtotals
+- Accounts: drag Accounts and groups in Edit order; Show/Hide and Delete live in an Account's edit form
 
 ### Fixed
 
@@ -34,6 +36,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Room 23 → 24: reconciledAt, Liability roles from the old keywords, and Transfers linked to their destination
 - Adjustment Transaction type (ADR-0009): syncs with its sign, moves only Account balances, never Stats or Buckets
 - formatMoney: exact ₹ amounts with Indian grouping, a true minus and an optional +, with tests
+- Accounts tab and Account page state come from Android-free AccountsTab and AccountPage, with tests
 
 ## [1.3.2] - 2026-10-05
 

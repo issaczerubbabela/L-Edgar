@@ -30,7 +30,8 @@ interface AccountRepository {
     suspend fun getAccountById(accountId: Long): AccountRecord?
     suspend fun save(record: AccountRecord): Long
     suspend fun toggleHidden(accountId: Long)
-    suspend fun swapDisplayOrder(firstAccountId: Long, secondAccountId: Long)
+    /** Puts the Accounts in [accountIds]' order, first to last, in one Room transaction. */
+    suspend fun setDisplayOrder(accountIds: List<Long>)
     suspend fun hasTransactions(accountId: Long): Boolean
     suspend fun delete(record: AccountRecord)
     suspend fun permanentlyDeleteAccount(
