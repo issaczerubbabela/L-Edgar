@@ -146,7 +146,7 @@ class LogViewModel @Inject constructor(
                 selectedType = if (isAdjustment) TransactionType.EXPENSE else source.type
                 selectedCategory = if (isAdjustment) "" else source.category
                 selectedAccountId = when (source.type) {
-                    TransactionType.EXPENSE, TransactionType.INCOME -> source.accountId
+                    TransactionType.EXPENSE, TransactionType.INCOME, TransactionType.ADJUSTMENT -> source.accountId
                     else -> null
                 }
                 selectedFromAccountId = source.fromAccountId

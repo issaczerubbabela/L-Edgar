@@ -32,15 +32,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.ui.components.isAdjustment
+import com.issaczerubbabel.ledgar.ui.components.listAmount
+import com.issaczerubbabel.ledgar.ui.components.listDetails
+import com.issaczerubbabel.ledgar.ui.components.listTitle
 import com.issaczerubbabel.ledgar.viewmodel.SearchUiState
 import com.issaczerubbabel.ledgar.viewmodel.SearchViewModel
 
@@ -251,7 +256,7 @@ private fun SearchResultRow(record: ExpenseRecord, onClick: () -> Unit) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = record.description.ifBlank { record.category.ifBlank { TransactionType.label(record.type) } },
+                text = record.listTitle(),
                 style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -259,15 +264,16 @@ private fun SearchResultRow(record: ExpenseRecord, onClick: () -> Unit) {
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "₹ %,.2f".format(record.amount),
+                text = record.listAmount(),
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                fontStyle = if (record.isAdjustment) FontStyle.Italic else null,
+                color = if (record.isAdjustment) MaterialTheme.colorScheme.tertiary else Color.Unspecified
             )
         }
 
         Text(
-            text = listOf(record.date, TransactionType.label(record.type), record.category)
-                .filter { it.isNotBlank() }.joinToString(" • "),
+            text = record.listDetails(),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

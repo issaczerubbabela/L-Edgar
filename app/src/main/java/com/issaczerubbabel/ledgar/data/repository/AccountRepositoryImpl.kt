@@ -32,10 +32,7 @@ class AccountRepositoryImpl @Inject constructor(
         )
 
     override fun getAccountBalances(): Flow<List<AccountBalance>> =
-        getAccountBook().map { book ->
-            val balances = AccountMath.balances(book.accounts, book.transactions)
-            book.records.map { AccountBalance(accountId = it.id, balance = balances.getValue(it.id)) }
-        }
+        getAccountsWithBalances().map { list -> list.map { AccountBalance(it.account.id, it.balance) } }
 
     override fun getAccountsWithBalances(): Flow<List<AccountWithBalance>> =
         getAccountBook().map { book ->

@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,7 +43,6 @@ import com.issaczerubbabel.ledgar.ui.components.DropdownField
 import com.issaczerubbabel.ledgar.ui.components.SingleDatePickerDialog
 import com.issaczerubbabel.ledgar.ui.theme.*
 import com.issaczerubbabel.ledgar.util.TransactionType
-import androidx.compose.ui.text.font.FontStyle
 import com.issaczerubbabel.ledgar.viewmodel.CalendarCell
 import com.issaczerubbabel.ledgar.viewmodel.DayGroup
 import com.issaczerubbabel.ledgar.viewmodel.HistoryViewModel

@@ -122,7 +122,7 @@ class ExportViewModel @Inject constructor(
                 writer.appendLine("Date,Type,Category/Account,Amount,Note")
                 records.forEach { record ->
                     val categoryOrAccount = when (record.type) {
-                        "Transfer" -> {
+                        TransactionType.TRANSFER -> {
                             val from = record.fromAccountId?.let { accountMap[it]?.accountName } ?: "Unknown"
                             val to = record.toAccountId?.let { accountMap[it]?.accountName } ?: "Unknown"
                             "Transfer: $from -> $to"

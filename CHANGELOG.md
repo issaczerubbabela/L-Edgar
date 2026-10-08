@@ -29,7 +29,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - AccountMath: one pure module for balances, totals, statements, net worth, cash flow and movers, with tests
 - Room 23 → 24: reconciledAt, Liability roles from the old keywords, and Transfers linked to their destination
-- Adjustment Transaction type (ADR-0009): syncs with its sign, and stays out of Stats, Buckets and totals
+- Adjustment Transaction type (ADR-0009): syncs with its sign, moves only Account balances, never Stats or Buckets
 
 ## [1.3.2] - 2026-10-05
 

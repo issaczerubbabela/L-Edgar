@@ -86,13 +86,6 @@ class ExpenseRepositoryImpl @Inject constructor(
     override fun getTransactionsForAccountInMonth(accountId: Long, startOfMonth: String, endOfMonth: String): Flow<List<ExpenseRecord>> =
         dao.getTransactionsForAccountInMonth(accountId = accountId, startDate = startOfMonth, endDate = endOfMonth)
 
-    override fun getHistoricalSumForAccount(accountId: Long, beforeDate: String): Flow<Double?> =
-        dao.getHistoricalSumForAccount(accountId = accountId, beforeDate = beforeDate)
-
-    override fun getAccountBalanceUntilDate(accountId: Long, endDate: String): Flow<Double> =
-        dao.getAccountBalanceUntilDate(accountId = accountId, endDate = endDate)
-
-    override fun getAccountBalance(accountId: Long): Flow<Double> = dao.getAccountBalance(accountId)
 
     override fun getRecordsByDateRange(startDate: String, endDate: String): Flow<List<ExpenseRecord>> =
         dao.getRecordsByDateRange(startDate, endDate)
