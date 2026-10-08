@@ -2,7 +2,9 @@ package com.issaczerubbabel.ledgar.viewmodel
 
 import com.issaczerubbabel.ledgar.account.AccountMath
 import com.issaczerubbabel.ledgar.account.Reconcile
+import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountBook
+import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.util.formatMoney
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import java.time.LocalDate
@@ -38,6 +40,13 @@ data class AccountGroupUi(
     val allRows: List<AccountRowUi>
 )
 
+/** A Transfer whose account was only ever saved by name, and no Account has that name: the user picks one. */
+data class UnlinkedTransferUi(
+    val transactionId: Long,
+    /** "5 Oct · ₹2,000.00 → Axis Old". */
+    val summary: String
+)
+
 data class AccountsTabUiState(
     val netWorth: String = formatMoney(0.0),
     val assets: String = formatMoney(0.0),
@@ -48,10 +57,13 @@ data class AccountsTabUiState(
     /** Asset groups first, then Liability groups, each in display order. */
     val groups: List<AccountGroupUi> = emptyList(),
     val hiddenAccounts: List<AccountRowUi> = emptyList(),
+    /** Newest first. Until linked, a Transfer doesn't count on its unlinked side. */
+    val unlinkedTransfers: List<UnlinkedTransferUi> = emptyList(),
     val isLoaded: Boolean = false
 )
 
 private val sinceLabel = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
+private val unlinkedDateLabel = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
 
 /** The Accounts tab for [book] on [today]: every figure comes from [AccountMath]. */
 fun accountsTab(book: AccountBook, today: LocalDate): AccountsTabUiState {
@@ -102,9 +114,29 @@ fun accountsTab(book: AccountBook, today: LocalDate): AccountsTabUiState {
         isMonthChangeNegative = AccountMath.paise(change) < 0,
         groups = groups,
         hiddenAccounts = groups.flatMap { group -> group.allRows.filter { it.isHidden } },
+        unlinkedTransfers = unlinkedTransfers(book),
         isLoaded = true
     )
 }
+
+/**
+ * Transfers that name an account on a side with no Account linked, typically from an old Sheet row
+ * whose name matched no Account when Room 24 linked Transfers by name.
+ */
+private fun unlinkedTransfers(book: AccountBook): List<UnlinkedTransferUi> =
+    book.transactionRecords
+        .filter { record ->
+            record.type == TransactionType.TRANSFER &&
+                ((record.toAccountId == null && !record.toAccountName.isNullOrBlank()) ||
+                    (record.fromAccountId == null && !record.fromAccountName.isNullOrBlank()))
+        }
+        .sortedWith(compareByDescending<ExpenseRecord> { it.date }.thenByDescending { it.id })
+        .map { record ->
+            val date = parseFlexibleDate(record.date)?.format(unlinkedDateLabel) ?: record.date
+            val from = record.fromAccountName?.takeIf { it.isNotBlank() } ?: "?"
+            val to = record.toAccountName?.takeIf { it.isNotBlank() } ?: "?"
+            UnlinkedTransferUi(record.id, "$date · ${formatMoney(record.amount)} · $from → $to")
+        }
 
 /** Every Account id in display order after moving one Account from [from] to [to] within [groupName]. */
 fun orderAfterMovingAccount(groups: List<AccountGroupUi>, groupName: String, from: Int, to: Int): List<Long> =

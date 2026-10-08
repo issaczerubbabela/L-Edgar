@@ -169,7 +169,8 @@ class ExpenseRepositoryImpl @Inject constructor(
                     isHidden = dto.isHidden,
                     displayOrder = dto.displayOrder ?: index,
                     description = dto.description,
-                    includeInTotals = dto.includeInTotals
+                    includeInTotals = dto.includeInTotals,
+                    reconciledAt = dto.reconciledAt?.takeIf { it.isNotBlank() }
                 )
             }
             accountDao.overwriteAll(mapped)

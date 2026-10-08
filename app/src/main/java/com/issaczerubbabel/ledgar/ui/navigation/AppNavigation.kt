@@ -701,6 +701,9 @@ fun AppNavigation() {
                         }
                     },
                     onAddAccount = { navController.navigate("account_form") { launchSingleTop = true } },
+                    onOpenTransaction = { transactionId ->
+                        navController.navigate(logRoute(transactionId = transactionId)) { launchSingleTop = true }
+                    },
                 )
             }
             composable(

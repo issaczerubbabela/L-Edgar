@@ -70,6 +70,7 @@ import com.issaczerubbabel.ledgar.viewmodel.AccountGroupUi
 import com.issaczerubbabel.ledgar.viewmodel.AccountRowUi
 import com.issaczerubbabel.ledgar.viewmodel.AccountsTabUiState
 import com.issaczerubbabel.ledgar.viewmodel.AccountsViewModel
+import com.issaczerubbabel.ledgar.viewmodel.UnlinkedTransferUi
 import kotlin.math.roundToInt
 
 /**
@@ -83,6 +84,7 @@ fun AccountsScreen(
     onOpenAccountDetail: (Long) -> Unit,
     onOpenOverallStats: () -> Unit,
     onAddAccount: () -> Unit,
+    onOpenTransaction: (Long) -> Unit,
     vm: AccountsViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -159,6 +161,12 @@ fun AccountsScreen(
                     )
                 }
 
+                if (state.unlinkedTransfers.isNotEmpty()) {
+                    item(key = "unlinked-transfers") {
+                        UnlinkedTransfersCard(transfers = state.unlinkedTransfers, onOpen = onOpenTransaction)
+                    }
+                }
+
                 if (state.hiddenAccounts.isNotEmpty()) {
                     item(key = "hidden-toggle") {
                         OutlinedButton(
@@ -188,6 +196,41 @@ fun AccountsScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UnlinkedTransfersCard(transfers: List<UnlinkedTransferUi>, onOpen: (Long) -> Unit) {
+    AccountsCard {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = if (transfers.size == 1) "1 transfer to link" else "${transfers.size} transfers to link",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                modifier = Modifier.semantics { heading() }
+            )
+            Text(
+                text = "These name an account you don't have, so they don't count on that side. Tap one to pick the account.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        transfers.forEach { transfer ->
+            RowDivider()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpen(transfer.transactionId) }
+                    .heightIn(min = 48.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(transfer.summary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

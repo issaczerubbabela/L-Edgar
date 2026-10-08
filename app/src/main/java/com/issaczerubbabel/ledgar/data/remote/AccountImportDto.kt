@@ -9,5 +9,7 @@ data class AccountImportDto(
     val isHidden: Boolean = false,
     val displayOrder: Int? = null,
     val description: String? = null,
-    val includeInTotals: Boolean = true
+    val includeInTotals: Boolean = true,
+    /** yyyy-MM-dd; blank or missing when never reconciled or backed up by an older script. */
+    val reconciledAt: String? = null
 )

@@ -116,6 +116,18 @@ class AccountsTabTest {
     }
 
     @Test
+    fun transfersNamingAnAccountYouDontHaveAreListedToLink() {
+        val unlinked = ExpenseRecord(id = 90, date = "2026-10-05", type = "Transfer", category = "Transfer", description = "",
+            amount = 2000.0, remarks = "", fromAccountId = 1, fromAccountName = "HDFC Savings", toAccountName = "Axis Old")
+        val linked = ExpenseRecord(id = 91, date = "2026-10-06", type = "Transfer", category = "Transfer", description = "",
+            amount = 500.0, remarks = "", fromAccountId = 1, toAccountId = 2, toAccountName = "SBI Salary")
+        val state = accountsTab(AccountBook.of(records, roles, october + unlinked + linked), LocalDate.of(2026, 10, 8))
+        assertEquals(listOf(90L), state.unlinkedTransfers.map { it.transactionId })
+        assertEquals("5 Oct 2026 · ₹2,000.00 · HDFC Savings → Axis Old", state.unlinkedTransfers.single().summary)
+        assertTrue(this.state.unlinkedTransfers.isEmpty())
+    }
+
+    @Test
     fun movingAnAccountReordersOnlyItsGroup() {
         val order = orderAfterMovingAccount(state.groups, "Bank", from = 2, to = 0)
         assertEquals(listOf(10L, 1L, 2L, 3L, 4L, 6L, 7L, 5L, 8L, 9L), order)

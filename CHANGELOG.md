@@ -14,6 +14,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Reconcile: type what your bank shows and a Balance adjustment closes the gap without rewriting history
 - Reconcile: Start fresh from today sets a new starting balance after a long break
 - Accounts: each Account says when you last reconciled it, with a dot after 30 days
+- Accounts: transfers naming an account you don't have are listed, so you can pick the right one
 
 ### Changed
 
@@ -34,6 +35,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - Accounts: old transfers that only saved the destination's name count on that Account everywhere
 - Accounts: totals and balances add up to the paisa, with no stray digits or −₹0.00
+- Backups keep when each Account was last reconciled, so an Import no longer forgets it
 
 ### Developer
 
@@ -44,6 +46,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Accounts tab and Account page state come from Android-free AccountsTab and AccountPage, with tests
 - AccountForm: the form's validation, signs and delete rule are Android-free, with tests; AddAccountScreen is gone
 - Reconcile: pure outcome and sheet logic, written by AccountRepository in one Room transaction, with tests
+- Apps Script: _accounts gains Reconciled At after Last Backed Up; an older Sheet reads it as blank
 
 ## [1.3.2] - 2026-10-05
 

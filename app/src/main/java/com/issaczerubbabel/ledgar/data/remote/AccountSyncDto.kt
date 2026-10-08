@@ -10,5 +10,7 @@ data class AccountSyncDto(
     val isHidden: Boolean,
     val displayOrder: Int = 0,
     val description: String? = null,
-    val includeInTotals: Boolean = true
+    val includeInTotals: Boolean = true,
+    /** yyyy-MM-dd, or null if never reconciled. */
+    val reconciledAt: String? = null
 )
