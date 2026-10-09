@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import com.issaczerubbabel.ledgar.util.TransactionType
+import java.time.LocalDate
 import javax.inject.Inject
 
 data class SearchUiState(
@@ -35,7 +37,10 @@ data class SearchUiState(
     val incomeTotal: Double = 0.0,
     val expenseTotal: Double = 0.0,
     val transferTotal: Double = 0.0
-)
+) {
+    val rangeStart: LocalDate? get() = startDate.takeIf { it.isNotBlank() }?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    val rangeEnd: LocalDate? get() = endDate.takeIf { it.isNotBlank() }?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+}
 
 private data class SearchParams(
     val query: String?,
@@ -158,9 +163,9 @@ class SearchViewModel @Inject constructor(
             categories = data.categories,
             results = data.results,
             hasActiveSearch = data.hasActiveSearch,
-            incomeTotal = data.results.filter { it.type == "Income" }.sumOf { it.amount },
-            expenseTotal = data.results.filter { it.type == "Expense" }.sumOf { it.amount },
-            transferTotal = data.results.filter { it.type == "Transfer" }.sumOf { it.amount }
+            incomeTotal = data.results.filter { it.type == TransactionType.INCOME }.sumOf { it.amount },
+            expenseTotal = data.results.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount },
+            transferTotal = data.results.filter { it.type == TransactionType.TRANSFER }.sumOf { it.amount }
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SearchUiState())
 
@@ -168,9 +173,9 @@ class SearchViewModel @Inject constructor(
 
     fun toggleFilters() = filtersExpanded.update { !it }
 
-    fun onStartDateChange(value: String) = filters.update { it.copy(startDate = value) }
-
-    fun onEndDateChange(value: String) = filters.update { it.copy(endDate = value) }
+    /** The picked range, or both null for any time; stored as yyyy-MM-dd for the query. */
+    fun onDateRangeChange(start: LocalDate?, end: LocalDate?) =
+        filters.update { it.copy(startDate = start?.toString().orEmpty(), endDate = end?.toString().orEmpty()) }
 
     fun onAccountSelected(accountId: Long?) = filters.update { it.copy(selectedAccountId = accountId) }
 

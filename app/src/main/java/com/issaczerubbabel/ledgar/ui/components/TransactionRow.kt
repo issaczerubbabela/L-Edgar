@@ -21,7 +21,12 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.remember
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import com.issaczerubbabel.ledgar.ledger.Ledger
 import com.issaczerubbabel.ledgar.ledger.LedgerRow
+import com.issaczerubbabel.ledgar.ledger.matchRanges
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseOrange
 import com.issaczerubbabel.ledgar.ui.theme.IncomeBlue
 import com.issaczerubbabel.ledgar.ui.theme.TransferGray
@@ -41,6 +46,7 @@ fun transactionAmountColor(type: String): Color = when (type) {
  * One Transaction, drawn the same on every screen that lists them: the Category, the description
  * over its Account, and the amount in full.
  *
+ * @param highlight text to pick out in the description, such as Search's query.
  * @param trailingLine a line under the amount, such as an Account page's running balance.
  * @param trailing a slot after the amount, such as Bookmarks' quick un-bookmark.
  */
@@ -52,6 +58,7 @@ fun TransactionRow(
     modifier: Modifier = Modifier,
     isSelected: Boolean = false,
     onLongClick: (() -> Unit)? = null,
+    highlight: String? = null,
     trailingLine: String? = null,
     trailing: (@Composable () -> Unit)? = null
 ) {
@@ -79,8 +86,16 @@ fun TransactionRow(
         )
         Spacer(Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f)) {
+            val highlightStyle = SpanStyle(background = MaterialTheme.colorScheme.primaryContainer, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            val description = remember(row.description, highlight, highlightStyle) {
+                buildAnnotatedString {
+                    append(row.description)
+                    highlight?.let { Ledger.matchRanges(row.description, it) }.orEmpty()
+                        .forEach { addStyle(highlightStyle, it.first, it.last + 1) }
+                }
+            }
             Text(
-                row.description,
+                description,
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 1,

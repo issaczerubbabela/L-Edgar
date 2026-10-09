@@ -13,9 +13,11 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Ledger: Undo a deleted transaction for 5 seconds; nothing reaches the Sheet until the delete is final
 - Ledger: ✕ or Back leaves selection, and Select all in <month> picks every row on screen
 - Ledger: filter the month on screen by category and account, shown as removable chips under the tabs
+- Search: pick a date range instead of typing dates, and see your words highlighted in the results
 
 ### Changed
 
+- Search: results are grouped by date, with the month in each header since they span all time
 - Ledger: Filter opens over the month you're looking at; the separate Filter and Filtered screens are gone
 - Ledger: the summary reads Income, Expenses and Net, and amounts use Indian grouping without ".00"
 - Ledger: transactions look the same here, in Search, Bookmarks and on Account pages, and a tap opens one sheet
@@ -39,6 +41,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Ledger: a pending delete lives only in the Ledger ViewModel until final, so Undo never races a Sync
 - Ledger: a pure batch plan decides which selected rows a change fits; the DAO guards category and account writes
 - Ledger: filter matching, options and chips live in the Ledger module, with tests; old filter screens deleted
+- Ledger: Search's date groups, range label and match highlighting come from the Ledger module, with tests
 
 ## [1.4.0] - 2026-10-09
 

@@ -37,6 +37,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.viewmodel.SearchUiState
 import com.issaczerubbabel.ledgar.ledger.Ledger
+import com.issaczerubbabel.ledgar.ledger.dateRangeLabel
+import com.issaczerubbabel.ledgar.ledger.searchDays
+import com.issaczerubbabel.ledgar.ui.components.DateRangePickerDialog
+import com.issaczerubbabel.ledgar.util.formatListMoney
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import java.time.LocalDate
 import com.issaczerubbabel.ledgar.ui.components.TransactionRow
 import com.issaczerubbabel.ledgar.ui.components.TransactionSheetHost
 import com.issaczerubbabel.ledgar.viewmodel.SearchViewModel
@@ -54,10 +65,7 @@ fun SearchScreen(
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
     val accounts by actionsVm.accounts.collectAsStateWithLifecycle()
-    // Each result's row, and its date until Ledger 6/10 (#75) groups results under dates instead.
-    val rows = remember(state.results, accounts) {
-        state.results.map { Ledger.row(it, accounts) to Ledger.details(it, accounts).date }
-    }
+    val days = remember(state.results, accounts) { Ledger.searchDays(state.results, accounts) }
     var sheetTransactionId by remember { mutableStateOf<Long?>(null) }
 
     Scaffold(
@@ -102,8 +110,7 @@ fun SearchScreen(
             ) {
                 SearchFilters(
                     state = state,
-                    onStartDateChange = vm::onStartDateChange,
-                    onEndDateChange = vm::onEndDateChange,
+                    onDateRangeChange = vm::onDateRangeChange,
                     onAccountSelected = vm::onAccountSelected,
                     onCategorySelected = vm::onCategorySelected,
                     onMinAmountChange = vm::onMinAmountChange,
@@ -131,16 +138,19 @@ fun SearchScreen(
                 }
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(rows, key = { it.first.id }) { (row, date) ->
-                        TransactionRow(
-                            row = row,
-                            onClick = { sheetTransactionId = row.id },
-                            trailingLine = date
-                        )
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant,
-                            thickness = 0.5.dp
-                        )
+                    days.forEach { day ->
+                        item(key = "day-${day.header}") { SearchDayHeader(day.header) }
+                        items(day.rows, key = { it.id }) { row ->
+                            TransactionRow(
+                                row = row,
+                                onClick = { sheetTransactionId = row.id },
+                                highlight = state.query
+                            )
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                                thickness = 0.5.dp
+                            )
+                        }
                     }
                 }
             }
@@ -161,8 +171,7 @@ fun SearchScreen(
 @Composable
 private fun SearchFilters(
     state: SearchUiState,
-    onStartDateChange: (String) -> Unit,
-    onEndDateChange: (String) -> Unit,
+    onDateRangeChange: (LocalDate?, LocalDate?) -> Unit,
     onAccountSelected: (Long?) -> Unit,
     onCategorySelected: (String) -> Unit,
     onMinAmountChange: (String) -> Unit,
@@ -177,22 +186,30 @@ private fun SearchFilters(
     ) {
         Text("Filters", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = state.startDate,
-                onValueChange = onStartDateChange,
-                label = { Text("Start Date") },
-                placeholder = { Text("yyyy-MM-dd") },
-                singleLine = true,
-                modifier = Modifier.weight(1f)
-            )
-            OutlinedTextField(
-                value = state.endDate,
-                onValueChange = onEndDateChange,
-                label = { Text("End Date") },
-                placeholder = { Text("yyyy-MM-dd") },
-                singleLine = true,
-                modifier = Modifier.weight(1f)
+        // A picker, not typed dates, so a date can't be mistyped.
+        var showRangePicker by remember { mutableStateOf(false) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = { showRangePicker = true }, modifier = Modifier.weight(1f)) {
+                Icon(Icons.Filled.DateRange, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(Ledger.dateRangeLabel(state.rangeStart, state.rangeEnd))
+            }
+            if (state.rangeStart != null || state.rangeEnd != null) {
+                IconButton(onClick = { onDateRangeChange(null, null) }) {
+                    Icon(Icons.Filled.Close, contentDescription = "Clear date range")
+                }
+            }
+        }
+        if (showRangePicker) {
+            val today = LocalDate.now()
+            DateRangePickerDialog(
+                initialStart = state.rangeStart ?: today.withDayOfMonth(1),
+                initialEnd = state.rangeEnd ?: today,
+                onDismiss = { showRangePicker = false },
+                onConfirm = { start, end ->
+                    onDateRangeChange(start, end)
+                    showRangePicker = false
+                }
             )
         }
 
@@ -232,6 +249,20 @@ private fun SearchFilters(
     }
 }
 
+/** "Fri, 9 Oct 2026": a date in Search's results, with its month since they span all time. */
+@Composable
+private fun SearchDayHeader(header: String) {
+    Text(
+        header,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    )
+}
+
 @Composable
 private fun SummaryRow(income: Double, expense: Double, transfer: Double) {
     Row(
@@ -250,7 +281,7 @@ private fun SummaryCell(label: String, value: Double, modifier: Modifier) {
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(text = label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
-            text = "₹ %,.2f".format(value),
+            text = formatListMoney(value),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold
         )

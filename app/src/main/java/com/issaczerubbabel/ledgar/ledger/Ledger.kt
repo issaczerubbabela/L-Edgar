@@ -107,8 +107,8 @@ data class LedgerMonth(
 
 private val monthLabelFormat = DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)
 private val weekdayFormat = DateTimeFormatter.ofPattern("EEE", Locale.ENGLISH)
-private val sheetDateFormat = DateTimeFormatter.ofPattern("EEE, d MMM yyyy", Locale.ENGLISH)
-private val shortDateFormat = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
+internal val sheetDateFormat = DateTimeFormatter.ofPattern("EEE, d MMM yyyy", Locale.ENGLISH)
+internal val shortDateFormat = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
 
 /**
  * The Ledger tab as pure functions: given the Transactions and the month on screen, what the tab
@@ -140,8 +140,7 @@ object Ledger {
                 weekday = date.format(weekdayFormat),
                 income = dayTotals.income.takeIf { dayTotals.hasIncome }?.let(::formatListMoney),
                 expense = dayTotals.expense.takeIf { dayTotals.hasExpense }?.let(::formatListMoney),
-                // Newest logged first; ids only grow, so the order never reshuffles on a Sync.
-                rows = onDay.sortedByDescending { it.id }.map { row(it, accountNames) }
+                rows = rowsNewestFirst(onDay, accountNames)
             )
         }
         return LedgerMonth(
@@ -264,6 +263,10 @@ object Ledger {
         }
     }
 
+    /** Newest logged first; ids only grow, so the order never reshuffles on a Sync. */
+    internal fun rowsNewestFirst(transactions: List<ExpenseRecord>, accountNames: Map<Long, String>): List<LedgerRow> =
+        transactions.sortedByDescending { it.id }.map { row(it, accountNames) }
+
     /** [month]'s Transactions, less those waiting on Undo. */
     internal fun monthTransactions(transactions: List<ExpenseRecord>, month: YearMonth, pendingDeleteIds: Set<Long>) =
         datedInMonth(transactions, month, pendingDeleteIds).map { it.transaction }
@@ -276,7 +279,7 @@ object Ledger {
             if (YearMonth.from(date) == month) Dated(date, record) else null
         }
 
-    private fun dateOf(record: ExpenseRecord): LocalDate? =
+    internal fun dateOf(record: ExpenseRecord): LocalDate? =
         parseFlexibleDate(record.date) ?: record.remoteTimestamp?.let(::parseFlexibleDate)
 }
 

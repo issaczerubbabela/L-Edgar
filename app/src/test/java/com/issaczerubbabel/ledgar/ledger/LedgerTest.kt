@@ -409,6 +409,44 @@ class LedgerTest {
     }
 
     @Test
+    fun searchResultsGroupByDateNewestFirstWithTheMonthInEachHeader() {
+        val days = Ledger.searchDays(listOf(
+            txn("2026-09-30", "Expense", 20.0, "Food", "Chai", id = 1),
+            txn("2026-10-02", "Expense", 30.0, "Food", "Chai", id = 2),
+            txn("2026-09-30", "Expense", 40.0, "Food", "Chai", id = 3)
+        ), accounts)
+
+        assertEquals(listOf("Fri, 2 Oct 2026", "Wed, 30 Sep 2026"), days.map { it.header })
+        assertEquals(listOf(3L, 1L), days[1].rows.map { it.id })
+    }
+
+    @Test
+    fun aResultWithNoReadableDateIsListedLastUnderNoDate() {
+        val days = Ledger.searchDays(listOf(
+            txn("garbled", "Expense", 20.0, "Food", "Chai", id = 1),
+            txn("2026-10-02", "Expense", 30.0, "Food", "Chai", id = 2)
+        ), accounts)
+
+        assertEquals(listOf("Fri, 2 Oct 2026", "No date"), days.map { it.header })
+        assertEquals(listOf(1L), days.last().rows.map { it.id })
+    }
+
+    @Test
+    fun theDateRangeReadsLikeASentence() {
+        assertEquals("Any time", Ledger.dateRangeLabel(null, null))
+        assertEquals("1 Sep – 9 Oct 2026", Ledger.dateRangeLabel(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 10, 9)))
+        assertEquals("28 Dec 2025 – 3 Jan 2026", Ledger.dateRangeLabel(LocalDate.of(2025, 12, 28), LocalDate.of(2026, 1, 3)))
+        assertEquals("9 Oct 2026", Ledger.dateRangeLabel(LocalDate.of(2026, 10, 9), LocalDate.of(2026, 10, 9)))
+    }
+
+    @Test
+    fun matchesAreFoundWhateverTheirCase() {
+        assertEquals(listOf(0..3, 13..16), Ledger.matchRanges("Uber to Mall uber", "UBER"))
+        assertEquals(emptyList<IntRange>(), Ledger.matchRanges("Uber", "  "))
+        assertEquals(emptyList<IntRange>(), Ledger.matchRanges("Uber", "taxi"))
+    }
+
+    @Test
     fun theLatestMonthIsTheNewestWithATransaction() {
         assertEquals(YearMonth.of(2026, 11), Ledger.latestMonth(listOf(
             txn("2026-09-30", "Expense", 1.0), txn("2026-11-02", "Income", 1.0), txn("not a date", "Expense", 1.0)
