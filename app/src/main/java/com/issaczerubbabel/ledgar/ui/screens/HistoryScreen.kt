@@ -10,11 +10,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -39,6 +35,17 @@ import com.issaczerubbabel.ledgar.ui.components.TransactionRow
 import com.issaczerubbabel.ledgar.ui.components.TransactionSheet
 import com.issaczerubbabel.ledgar.ui.components.TransactionSheetActions
 import com.issaczerubbabel.ledgar.ledger.Ledger
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.issaczerubbabel.ledgar.ui.components.DaySheet
 import com.issaczerubbabel.ledgar.ledger.FilterChipUi
@@ -245,7 +252,8 @@ fun HistoryScreen(
                     onClick = onNavigateToCaptureInbox,
                     label = { Text(label) },
                     leadingIcon = { Icon(Icons.Filled.Inbox, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                    modifier = Modifier.padding(horizontal = 12.dp)
+                    // Announced when the count changes, without moving focus.
+                    modifier = Modifier.padding(horizontal = 12.dp).semantics { liveRegion = LiveRegionMode.Polite }
                 )
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
@@ -333,7 +341,7 @@ fun HistoryScreen(
                             contentColor    = MaterialTheme.colorScheme.onPrimary,
                             elevation       = FloatingActionButtonDefaults.elevation(6.dp),
                             modifier        = Modifier.padding(end = 16.dp, bottom = 16.dp).size(58.dp)
-                        ) { Icon(Icons.Filled.Add, null, modifier = Modifier.size(28.dp)) }
+                        ) { Icon(Icons.Filled.Add, contentDescription = "Add transaction", modifier = Modifier.size(28.dp)) }
                     }
                     SnackbarHost(snackbarHostState)
                 }
@@ -603,18 +611,25 @@ private fun CalendarContent(
                 CircularProgressIndicator()
             }
         } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(7),
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 96.dp)
+            // Week by week, each week as tall as its tallest day, so large text never leaves gaps.
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = 96.dp)
             ) {
-                items(cells, key = { it.date.toString() }) { cell ->
-                    CalendarCellView(
-                        cell        = cell,
-                        isSelected  = cell.date == selectedDate,
-                        borderColor = borderColor,
-                        onTap       = { if (cell.isInMonth) onDaySelect(cell.date) }
-                    )
+                cells.chunked(7).forEach { week ->
+                    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+                        week.forEach { cell ->
+                            CalendarCellView(
+                                cell        = cell,
+                                isSelected  = cell.date == selectedDate,
+                                borderColor = borderColor,
+                                onTap       = { if (cell.isInMonth) onDaySelect(cell.date) },
+                                modifier    = Modifier.weight(1f).fillMaxHeight()
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -628,7 +643,8 @@ private fun CalendarCellView(
     cell: LedgerCalendarCell,
     isSelected: Boolean,
     borderColor: Color,
-    onTap: () -> Unit
+    onTap: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     // The chosen day takes the theme's container colour; weekends look like any other day.
     val selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -649,21 +665,30 @@ private fun CalendarCellView(
 
     val hasBoth = cell.incomeLabel != null && cell.expenseLabel != null
 
-    Box(
-        modifier = Modifier
-            .height(95.dp)
+    // A column, not layers: with large text the date, dots and amounts stack and the cell grows
+    // instead of overlapping or clipping.
+    Column(
+        modifier = modifier
+            .heightIn(min = 95.dp)
             .border(0.5.dp, borderColor)
             .background(cellBg)
-            // Days outside the month only fill the week: faded, and not tappable.
+            // Days outside the month only fill the week: faded, not tappable, and skipped by TalkBack.
             .clickable(enabled = cell.isInMonth, onClick = onTap)
+            .clearAndSetSemantics {
+                if (cell.isInMonth) {
+                    contentDescription = cell.spokenLabel
+                    if (isSelected) stateDescription = "Selected"
+                    role = Role.Button
+                    onClick(label = "Show this day") { onTap(); true }
+                }
+            }
             .padding(2.dp)
     ) {
-        // Date badge — centered text for selected/today indicators.
+        // Date badge: a circle that grows to fit "30" at any text size.
         Box(
             modifier = Modifier
-                .align(Alignment.TopStart)
                 .padding(start = 3.dp, top = 3.dp)
-                .size(20.dp)
+                .sizeIn(minWidth = 22.dp, minHeight = 22.dp)
                 .then(
                     when {
                         isSelected -> Modifier
@@ -674,7 +699,8 @@ private fun CalendarCellView(
                             .border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
                         else -> Modifier
                     }
-                ),
+                )
+                .padding(horizontal = 3.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -683,17 +709,17 @@ private fun CalendarCellView(
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
+                softWrap = false,
                 textAlign = TextAlign.Center
             )
         }
 
-        // ── Category dots — centre ────────────────────────────────────────────
+        // ── Category dots ─────────────────────────────────────────────────────
         if (cell.isInMonth && cell.categories.isNotEmpty()) {
             val visibleCats = cell.categories.take(4)
             val extra       = cell.categories.size - visibleCats.size
             Row(
-                // Under the date, clear of up to three stacked amounts.
-                modifier = Modifier.align(Alignment.TopStart).padding(start = 5.dp, top = 28.dp),
+                modifier = Modifier.padding(start = 5.dp, top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -706,13 +732,14 @@ private fun CalendarCellView(
             }
         }
 
-        // ── Stacked amounts — bottom end ──────────────────────────────────────
+        Spacer(Modifier.weight(1f, fill = true).heightIn(min = 2.dp))
+
+        // ── Stacked amounts, bottom end ───────────────────────────────────────
         if (cell.isInMonth && cell.transactionCount > 0) {
             Column(
                 horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.Bottom,
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
+                    .fillMaxWidth()
                     .padding(end = 3.dp, bottom = 3.dp)
             ) {
                 cell.incomeLabel?.let { CalendarAmount(it, incomeColor, FontWeight.SemiBold) }
@@ -748,6 +775,16 @@ private fun FilterChipsRow(chips: List<FilterChipUi>, onRemove: (FilterSection) 
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        // Says what the numbers are narrowed to, and announces it as one phrase when it changes.
+        Text(
+            "Filtered by",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.semantics {
+                liveRegion = LiveRegionMode.Polite
+                contentDescription = "Filtered by " + chips.joinToString(" and ") { it.label }
+            }
+        )
         chips.forEach { chip ->
             InputChip(
                 selected = true,
@@ -811,6 +848,7 @@ private fun DailyContent(
                     TransactionRow(
                         row = row,
                         isSelected = selectedIds.contains(row.id),
+                        selectionMode = selectedIds.isNotEmpty(),
                         onClick = { onTransactionClick(row.record) },
                         onLongClick = { onTransactionLongClick(row.record) }
                     )
@@ -862,7 +900,9 @@ private fun LedgerTopBar(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .clickable(enabled = periodClickable, onClickLabel = "Choose month", onClick = onPeriodClick)
-                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                        .heightIn(min = 48.dp)
+                        .wrapContentHeight(Alignment.CenterVertically)
+                        .padding(horizontal = 6.dp),
                     maxLines = 1
                 )
                 IconButton(onClick = onNextPeriod) {
@@ -965,7 +1005,7 @@ private fun ContextualSelectionAppBar(
             }
         },
         title = {
-            Column {
+            Column(Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
                 Text(text = "$selectedCount selected", fontWeight = FontWeight.SemiBold)
                 Text(
                     text = "Net ${formatListMoney(selectedNet, signed = true)}",
@@ -1057,7 +1097,8 @@ private fun SummaryBar(summary: LedgerSummary) {
 
 @Composable
 private fun SummaryColumn(label: String, amount: String, color: Color, modifier: Modifier) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+    // One stop per column: "Income ₹12,000".
+    Column(modifier = modifier.semantics(mergeDescendants = true) {}, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         // Never cut short: a big amount wraps rather than losing digits.
         Text(
@@ -1079,6 +1120,11 @@ private fun DayHeader(day: LedgerDay) {
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface)
+            // A heading TalkBack can jump between: "Friday 9 October, Expenses ₹212".
+            .clearAndSetSemantics {
+                heading()
+                contentDescription = day.spokenLabel
+            }
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

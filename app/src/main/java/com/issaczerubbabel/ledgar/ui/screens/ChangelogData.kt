@@ -34,6 +34,7 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Ledger: Change date, category, account or description say what they'll change and what they skip"
         ),
         added = listOf(
+            "Ledger: TalkBack reads each transaction, day and Calendar cell as one sentence that says Income or Expense",
             "Ledger: Undo a deleted transaction for 5 seconds; nothing reaches the Sheet until the delete is final",
             "Ledger: ✕ or Back leaves selection, and Select all in <month> picks every row on screen",
             "Ledger: filter the month on screen by category and account, shown as removable chips under the tabs",
@@ -45,6 +46,7 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Ledger: a day's transactions keep their order after a Sync",
             "Ledger: a Calendar day where you spent more than you earned shows a minus, in short readable amounts",
             "Ledger: Change category no longer gives a Transfer a category or an Expense an income one",
+            "Ledger: with large text, Calendar days and rows grow instead of cutting off dates and amounts",
             "Monthly: amounts are stacked so none are cut off, weeks run Sunday to Saturday, and a future year says so",
             "Ledger: Filter finds Food paid from HDFC, not every Food and every HDFC one, and finds renamed categories"
         ),
@@ -58,7 +60,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Ledger: Search's date groups, range label and match highlighting come from the Ledger module, with tests",
             "Ledger: Add transaction takes an optional prefillDate for one Transaction; a shared DaySheet hosts the day",
             "Ledger: Monthly's months and weeks come from the Ledger module, with tests; MonthlyViewModel merged away",
-            "Ledger: the month grid and capture chip text come from the Ledger module; hard-coded header colours removed"
+            "Ledger: the month grid and capture chip text come from the Ledger module; hard-coded header colours removed",
+            "Ledger: spoken labels for rows, days, cells and Monthly come from the Ledger module, with tests"
         )
     ),
     ChangelogRelease(

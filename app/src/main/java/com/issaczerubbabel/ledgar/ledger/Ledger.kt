@@ -29,7 +29,9 @@ data class LedgerRow(
     /** The Account, or "From → To" for a Transfer. */
     val accountLabel: String,
     /** In full: "₹1,25,000", or "−₹340" for a Balance adjustment, which carries its sign. */
-    val amount: String
+    val amount: String,
+    /** What TalkBack reads for the row: "Expense, ₹212, Transport, Uber to office, from HDFC Credit card". */
+    val spokenLabel: String
 ) {
     val id: Long get() = record.id
     val isAdjustment: Boolean get() = type == TransactionType.ADJUSTMENT
@@ -74,7 +76,9 @@ data class LedgerDay(
     val income: String?,
     /** Null when nothing went out that day. */
     val expense: String?,
-    val rows: List<LedgerRow>
+    val rows: List<LedgerRow>,
+    /** "Friday 9 October, Income ₹200, Expenses ₹1,500": the header as TalkBack reads it. */
+    val spokenLabel: String
 )
 
 /** One day on the Calendar. A day outside the month is there to fill the week and carries no figures. */
@@ -94,7 +98,9 @@ data class LedgerCalendarCell(
     val netLabel: String?,
     /** The day's distinct Categories, for its dots. */
     val categories: List<String>,
-    val transactionCount: Int
+    val transactionCount: Int,
+    /** "9 October, today, Income ₹200, Expenses ₹1,500, Net −₹1,300", or "1 October, no transactions". */
+    val spokenLabel: String
 )
 
 /** One month in the month title's grid. */
@@ -120,6 +126,8 @@ data class LedgerMonth(
 
 private val monthLabelFormat = DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)
 private val weekdayFormat = DateTimeFormatter.ofPattern("EEE", Locale.ENGLISH)
+private val spokenDayFormat = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.ENGLISH)
+private val spokenCellFormat = DateTimeFormatter.ofPattern("d MMMM", Locale.ENGLISH)
 internal val monthNameFormat = DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH)
 private val dayTitleFormat = DateTimeFormatter.ofPattern("EEE, d MMM", Locale.ENGLISH)
 internal val dayMonthFormat = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
@@ -196,7 +204,15 @@ object Ledger {
                 expenseLabel = totals.expense.takeIf { totals.hasExpense }?.let(::formatCalendarMoney),
                 netLabel = if (totals.hasIncome || totals.hasExpense) formatCalendarMoney(totals.net) else null,
                 categories = onDay.map { it.category }.filter { it.isNotBlank() }.distinct(),
-                transactionCount = onDay.size
+                transactionCount = onDay.size,
+                spokenLabel = listOfNotNull(
+                    date.format(spokenCellFormat),
+                    "today".takeIf { date == today },
+                    "no transactions".takeIf { onDay.isEmpty() },
+                    totals.income.takeIf { totals.hasIncome }?.let { "Income ${formatListMoney(it)}" },
+                    totals.expense.takeIf { totals.hasExpense }?.let { "Expenses ${formatListMoney(it)}" },
+                    totals.net.takeIf { totals.hasIncome && totals.hasExpense }?.let { "Net ${formatListMoney(it)}" }
+                ).joinToString(", ")
             )
         }
     }
@@ -213,7 +229,12 @@ object Ledger {
         shortDate = date.format(dayMonthFormat),
         income = income,
         expense = expense,
-        rows = rows
+        rows = rows,
+        spokenLabel = listOfNotNull(
+            date.format(spokenDayFormat),
+            income?.let { "Income $it" },
+            expense?.let { "Expenses $it" }
+        ).joinToString(", ")
     )
 
     /** The month title's 12-month grid for [year]: months after this one are greyed but can still be picked. */
@@ -275,18 +296,46 @@ object Ledger {
             TransactionType.TRANSFER -> ""
             else -> record.category
         }
+        val description = record.description.ifBlank { category.ifBlank { TransactionType.label(record.type) } }
+        val amount = formatListMoney(record.amount, signed = isAdjustment)
         return LedgerRow(
             record = record,
             type = record.type,
             category = category,
-            description = record.description.ifBlank { category.ifBlank { TransactionType.label(record.type) } },
+            description = description,
             accountLabel = accountLabel(record, accountNames),
-            amount = formatListMoney(record.amount, signed = isAdjustment)
+            amount = amount,
+            spokenLabel = spokenRow(record, category, description, amount, accountNames)
         )
     }
 
+    /** One sentence, so the way the money went never depends on seeing the amount's colour. */
+    private fun spokenRow(
+        record: ExpenseRecord,
+        category: String,
+        description: String,
+        amount: String,
+        names: Map<Long, String>
+    ): String {
+        fun name(id: Long?, fallback: String?) = accountName(names, id, fallback)
+        val accounts = when (record.type) {
+            TransactionType.EXPENSE -> name(record.fromAccountId ?: record.accountId, record.fromAccountName ?: record.accountName)
+                .takeIf { it.isNotBlank() }?.let { "from $it" }
+            TransactionType.INCOME -> name(record.toAccountId ?: record.accountId, record.toAccountName ?: record.accountName)
+                .takeIf { it.isNotBlank() }?.let { "to $it" }
+            TransactionType.TRANSFER -> listOfNotNull(
+                name(record.fromAccountId, record.fromAccountName).takeIf { it.isNotBlank() }?.let { "from $it" },
+                name(record.toAccountId, record.toAccountName).takeIf { it.isNotBlank() }?.let { "to $it" }
+            ).joinToString(" ").ifBlank { null }
+            else -> name(record.accountId, record.accountName).takeIf { it.isNotBlank() }
+        }
+        val categoryPart = category.takeIf { it.isNotBlank() && record.type != TransactionType.ADJUSTMENT }
+        val descriptionPart = description.takeIf { it != category && it != TransactionType.label(record.type) }
+        return listOfNotNull(TransactionType.label(record.type), amount, categoryPart, descriptionPart, accounts).joinToString(", ")
+    }
+
     private fun accountLabel(record: ExpenseRecord, names: Map<Long, String>): String {
-        fun name(id: Long?, fallback: String?) = id?.let(names::get) ?: fallback.orEmpty()
+        fun name(id: Long?, fallback: String?) = accountName(names, id, fallback)
         return when (record.type) {
             TransactionType.INCOME -> name(record.toAccountId ?: record.accountId, record.toAccountName ?: record.accountName)
             TransactionType.EXPENSE -> name(record.fromAccountId ?: record.accountId, record.fromAccountName ?: record.accountName)
@@ -317,6 +366,10 @@ object Ledger {
             val date = dateOf(record) ?: return@mapNotNull null
             if (YearMonth.from(date) == month) Dated(date, record) else null
         }
+
+    /** An Account's name by id, or the name saved on the Transaction when the id is gone or hidden. */
+    private fun accountName(names: Map<Long, String>, id: Long?, fallback: String?): String =
+        id?.let(names::get) ?: fallback.orEmpty()
 
     internal fun dateOf(record: ExpenseRecord): LocalDate? =
         parseFlexibleDate(record.date) ?: record.remoteTimestamp?.let(::parseFlexibleDate)

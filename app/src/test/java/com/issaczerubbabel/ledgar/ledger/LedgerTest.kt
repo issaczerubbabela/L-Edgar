@@ -505,6 +505,14 @@ class LedgerTest {
     }
 
     @Test
+    fun monthlyRowsAreSpokenWithWordsNotColours() {
+        val october = Ledger.year(yearOfTransactions, 2026, today).months.first()
+
+        assertEquals("October, Income ₹1,000, Expenses ₹400, Net ₹600", october.spokenLabel)
+        assertEquals("1 to 3 October, Income ₹1,000, Expenses ₹100, Net ₹900", october.weeks.first().spokenLabel)
+    }
+
+    @Test
     fun aWeekOpensDailyAtItsNewestDayWithTransactions() {
         val october = Ledger.year(yearOfTransactions, 2026, today).months.first()
 
@@ -538,6 +546,37 @@ class LedgerTest {
         assertEquals("3 captured to review", Ledger.captureChipLabel(3))
         assertEquals("1 captured to review", Ledger.captureChipLabel(1))
         assertEquals(null, Ledger.captureChipLabel(0))
+    }
+
+    @Test
+    fun aRowIsSpokenAsOneSentenceThatSaysWhichWayTheMoneyWent() {
+        val rows = build(listOf(
+            txn("2026-10-09", "Expense", 212.0, "Transport", "Uber to office", accountId = 2, id = 1),
+            txn("2026-10-09", "Income", 1200.0, "Refund", accountId = 1, id = 2),
+            txn("2026-10-09", "Transfer", 5000.0, from = 1, to = 3, id = 3),
+            txn("2026-10-09", "Adjustment", 340.0, accountId = 3, id = 4)
+        )).days.single().rows.associateBy { it.id }
+
+        assertEquals("Expense, ₹212, Transport, Uber to office, from HDFC Credit card", rows[1L]!!.spokenLabel)
+        assertEquals("Income, ₹1,200, Refund, to HDFC Savings", rows[2L]!!.spokenLabel)
+        assertEquals("Transfer, ₹5,000, from HDFC Savings to Wallet", rows[3L]!!.spokenLabel)
+        assertEquals("Balance adjustment, +₹340, Wallet", rows[4L]!!.spokenLabel)
+    }
+
+    @Test
+    fun aDayHeaderAndCalendarCellReadTheFullDateAndTotals() {
+        val ledger = build(listOf(
+            txn("2026-10-09", "Income", 200.0, "Refund"),
+            txn("2026-10-09", "Expense", 1500.0, "Food"),
+            txn("2026-10-08", "Expense", 250.0, "Food")
+        ))
+
+        assertEquals("Friday 9 October, Income ₹200, Expenses ₹1,500", ledger.days[0].spokenLabel)
+        assertEquals("Thursday 8 October, Expenses ₹250", ledger.days[1].spokenLabel)
+        val cells = ledger.calendar.associateBy { it.date }
+        assertEquals("9 October, today, Income ₹200, Expenses ₹1,500, Net −₹1,300", cells[LocalDate.of(2026, 10, 9)]!!.spokenLabel)
+        assertEquals("8 October, Expenses ₹250", cells[LocalDate.of(2026, 10, 8)]!!.spokenLabel)
+        assertEquals("1 October, no transactions", cells[LocalDate.of(2026, 10, 1)]!!.spokenLabel)
     }
 
     @Test

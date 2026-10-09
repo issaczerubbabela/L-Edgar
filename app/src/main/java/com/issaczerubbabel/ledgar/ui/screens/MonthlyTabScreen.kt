@@ -22,6 +22,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.issaczerubbabel.ledgar.ledger.LedgerMonthRow
@@ -81,15 +85,16 @@ private fun MonthRow(month: LedgerMonthRow, isExpanded: Boolean, onOpen: () -> U
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface)
-            .clickable(onClick = onOpen)
+            .clickable(onClickLabel = "Open on Daily", onClick = onOpen)
+            .semantics { contentDescription = month.spokenLabel }
             .padding(start = 16.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f).clearAndSetSemantics {}) {
             Text(month.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(month.range, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        StackedAmounts(month.income, month.expense, month.net)
+        StackedAmounts(month.income, month.expense, month.net, Modifier.clearAndSetSemantics {})
         // Apart from the row's own tap, so expanding and opening never fight over one tap.
         IconButton(onClick = onToggleExpand) {
             Icon(
@@ -106,7 +111,11 @@ private fun WeekRow(week: LedgerWeek, onOpen: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onOpen)
+            .clickable(onClickLabel = "Open on Daily", onClick = onOpen)
+            .clearAndSetSemantics {
+                contentDescription = week.spokenLabel
+                onClick(label = "Open on Daily") { onOpen(); true }
+            }
             .heightIn(min = 48.dp)
             .padding(start = 32.dp, end = 48.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -119,8 +128,8 @@ private fun WeekRow(week: LedgerWeek, onOpen: () -> Unit) {
 
 /** Income, expense and Net stacked on the right, so even ₹10,00,000 fits a 360dp phone uncut. */
 @Composable
-private fun StackedAmounts(income: String, expense: String, net: String) {
-    Column(horizontalAlignment = Alignment.End) {
+private fun StackedAmounts(income: String, expense: String, net: String, modifier: Modifier = Modifier) {
+    Column(horizontalAlignment = Alignment.End, modifier = modifier) {
         Text(income, style = MaterialTheme.typography.bodySmall, color = IncomeBlue, fontWeight = FontWeight.SemiBold)
         Text(expense, style = MaterialTheme.typography.bodySmall, color = ExpenseOrange, fontWeight = FontWeight.SemiBold)
         Text(net, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)

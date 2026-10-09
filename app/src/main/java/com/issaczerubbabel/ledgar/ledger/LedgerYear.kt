@@ -5,6 +5,8 @@ import com.issaczerubbabel.ledgar.util.formatListMoney
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.time.temporal.TemporalAdjusters
 
 /** One Sunday-to-Saturday week of a month on Monthly, clipped to the month, so a month's weeks add up to it. */
@@ -17,7 +19,9 @@ data class LedgerWeek(
     val expense: String,
     val net: String,
     /** Where Daily scrolls when the week is tapped: its newest day with Transactions, null when it has none. */
-    val scrollTo: LocalDate?
+    val scrollTo: LocalDate?,
+    /** "1 to 3 October, Income ₹1,000, Expenses ₹100, Net ₹900". */
+    val spokenLabel: String
 )
 
 /** One month on Monthly. */
@@ -31,7 +35,9 @@ data class LedgerMonthRow(
     val expense: String,
     val net: String,
     /** In calendar order. */
-    val weeks: List<LedgerWeek>
+    val weeks: List<LedgerWeek>,
+    /** "October, Income ₹1,000, Expenses ₹400, Net ₹600". */
+    val spokenLabel: String
 )
 
 /** Monthly for one year: the year's totals and its months, newest first. */
@@ -79,7 +85,8 @@ fun Ledger.year(
                     income = formatListMoney(totals.income),
                     expense = formatListMoney(totals.expense),
                     net = formatListMoney(totals.net),
-                    scrollTo = byDate.keys.filter { !it.isBefore(start) && !it.isAfter(end) }.maxOrNull()
+                    scrollTo = byDate.keys.filter { !it.isBefore(start) && !it.isAfter(end) }.maxOrNull(),
+                    spokenLabel = spokenTotals("${start.dayOfMonth} to ${end.format(spokenMonthDay)}", totals)
                 )
             }.toList()
         val totals = Totals.of(between(first, last))
@@ -90,7 +97,8 @@ fun Ledger.year(
             income = formatListMoney(totals.income),
             expense = formatListMoney(totals.expense),
             net = formatListMoney(totals.net),
-            weeks = weeks
+            weeks = weeks,
+            spokenLabel = spokenTotals(first.format(spokenMonthName), totals)
         )
     }
     val totals = Totals.of(byDate.values.flatten())
@@ -104,3 +112,10 @@ fun Ledger.year(
         months = months
     )
 }
+
+private val spokenMonthDay = DateTimeFormatter.ofPattern("d MMMM", Locale.ENGLISH)
+private val spokenMonthName = DateTimeFormatter.ofPattern("MMMM", Locale.ENGLISH)
+
+/** "October, Income ₹1,000, Expenses ₹400, Net ₹600": amounts named, never told apart by colour alone. */
+private fun spokenTotals(period: String, totals: Totals): String =
+    "$period, Income ${formatListMoney(totals.income)}, Expenses ${formatListMoney(totals.expense)}, Net ${formatListMoney(totals.net)}"

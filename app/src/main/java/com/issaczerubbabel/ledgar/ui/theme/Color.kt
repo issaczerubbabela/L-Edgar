@@ -35,13 +35,18 @@ val TealLight     = Color(0xFF4EBAAA)
  * Income and expense amounts. A dark background gets the lighter shade and a light one the darker,
  * so the amount text stays at 4.5:1 contrast or better in every theme.
  */
+internal val IncomeBlueOnDark = Color(0xFF64B5F6)
+internal val IncomeBlueOnLight = Color(0xFF1565C0)
+internal val ExpenseOrangeOnDark = Color(0xFFFFB74D)
+internal val ExpenseOrangeOnLight = Color(0xFFB35A00)
+
 val IncomeBlue: Color
     @Composable @ReadOnlyComposable
-    get() = if (isDarkBackground()) Color(0xFF64B5F6) else Color(0xFF1565C0)
+    get() = if (isDarkBackground()) IncomeBlueOnDark else IncomeBlueOnLight
 
 val ExpenseOrange: Color
     @Composable @ReadOnlyComposable
-    get() = if (isDarkBackground()) Color(0xFFFFB74D) else Color(0xFFB35A00)
+    get() = if (isDarkBackground()) ExpenseOrangeOnDark else ExpenseOrangeOnLight
 
 @Composable
 @ReadOnlyComposable

@@ -1,6 +1,8 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -115,9 +117,10 @@ private fun SectionHeader(title: String, isAny: Boolean, onAny: () -> Unit) {
         // "Any" turns every choice in the section off; it's ticked while none is on.
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.clickable(onClick = onAny).heightIn(min = 48.dp)
+            // One toggle for TalkBack: "Any, checked".
+            modifier = Modifier.toggleable(value = isAny, role = Role.Checkbox, onValueChange = { onAny() }).heightIn(min = 48.dp)
         ) {
-            Checkbox(checked = isAny, onCheckedChange = { onAny() })
+            Checkbox(checked = isAny, onCheckedChange = null)
             Text("Any", style = MaterialTheme.typography.bodyMedium)
         }
     }
@@ -152,9 +155,12 @@ private fun LazyListScope.optionList(key: String, section: FilterOptionsSection,
 private fun OptionRow(option: FilterOptionUi, onToggle: (FilterOptionUi) -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().clickable { onToggle(option) }.heightIn(min = 48.dp)
+        // One toggle for TalkBack: "Food, ₹1,400, checked".
+        modifier = Modifier.fillMaxWidth()
+            .toggleable(value = option.isSelected, role = Role.Checkbox, onValueChange = { onToggle(option) })
+            .heightIn(min = 48.dp)
     ) {
-        Checkbox(checked = option.isSelected, onCheckedChange = { onToggle(option) })
+        Checkbox(checked = option.isSelected, onCheckedChange = null)
         Column(Modifier.weight(1f)) {
             Text(option.label, style = MaterialTheme.typography.bodyLarge)
             if (option.isLeftover) {

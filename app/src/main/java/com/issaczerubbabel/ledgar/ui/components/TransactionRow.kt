@@ -22,6 +22,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.remember
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import com.issaczerubbabel.ledgar.ledger.Ledger
@@ -57,6 +62,8 @@ fun TransactionRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     isSelected: Boolean = false,
+    /** While selecting, a tap toggles the row and TalkBack says whether it's selected. */
+    selectionMode: Boolean = false,
     onLongClick: (() -> Unit)? = null,
     highlight: String? = null,
     trailingLine: String? = null,
@@ -70,7 +77,24 @@ fun TransactionRow(
         modifier = modifier
             .fillMaxWidth()
             .background(if (isSelected) selectedBg else MaterialTheme.colorScheme.background)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .combinedClickable(
+                onClick = onClick,
+                onClickLabel = if (selectionMode) "Toggle selection" else "Open",
+                onLongClick = onLongClick,
+                onLongClickLabel = onLongClick?.let { "Select" }
+            )
+            // Read as one sentence; the type is said, never left to the amount's colour.
+            .semantics {
+                contentDescription = listOfNotNull(
+                    row.spokenLabel,
+                    // "2 Oct · Bal ₹97,110" is read "2 Oct, balance ₹97,110", not as a second amount.
+                    trailingLine?.replace(" · ", ", ")?.replace("Bal ", "balance ")
+                ).joinToString(", ")
+                if (selectionMode) {
+                    selected = isSelected
+                    stateDescription = if (isSelected) "Selected" else "Not selected"
+                }
+            }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -80,12 +104,12 @@ fun TransactionRow(
             fontStyle = italic,
             color = if (row.isAdjustment) amountColor else MaterialTheme.colorScheme.onSurfaceVariant,
             // Wider on a tablet, where there's room for longer Category names.
-            modifier = Modifier.width(if (LocalConfiguration.current.screenWidthDp >= 600) 128.dp else 96.dp),
-            maxLines = 2,
+            modifier = Modifier.width(if (LocalConfiguration.current.screenWidthDp >= 600) 128.dp else 96.dp).clearAndSetSemantics {},
+            maxLines = 3,
             overflow = TextOverflow.Ellipsis
         )
         Spacer(Modifier.width(8.dp))
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f).clearAndSetSemantics {}) {
             val highlightStyle = SpanStyle(background = MaterialTheme.colorScheme.primaryContainer, color = MaterialTheme.colorScheme.onPrimaryContainer)
             val description = remember(row.description, highlight, highlightStyle) {
                 buildAnnotatedString {
@@ -98,7 +122,7 @@ fun TransactionRow(
                 description,
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
             if (row.accountLabel.isNotBlank()) {
@@ -112,7 +136,7 @@ fun TransactionRow(
             }
         }
         Spacer(Modifier.width(8.dp))
-        Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(min = 72.dp)) {
+        Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(min = 72.dp).clearAndSetSemantics {}) {
             // In full, never ellipsised: the description gives way instead.
             Text(
                 text = row.amount,
