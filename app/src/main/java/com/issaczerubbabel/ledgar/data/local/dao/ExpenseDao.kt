@@ -193,6 +193,11 @@ interface ExpenseDao {
     )
     suspend fun updateTransactionsDateByIds(ids: List<Long>, newDate: String)
 
+    /**
+     * Gives [newCategory], a Category of [type], to those of [ids] that are that type. A guard even if
+     * the caller is wrong: a Transfer or Balance adjustment never gets a Category, and an Expense never
+     * an income one.
+     */
     @Query(
         """
         UPDATE expense_records
@@ -200,10 +205,13 @@ interface ExpenseDao {
             isSynced = 0,
             syncAction = CASE WHEN syncAction IN ('INSERT', 'DELETE') THEN syncAction ELSE 'UPDATE' END
         WHERE id IN (:ids)
+          AND type = :type
+          AND type IN ('Expense', 'Income')
         """
     )
-    suspend fun updateTransactionsCategoryByIds(ids: List<Long>, newCategory: String)
+    suspend fun updateTransactionsCategoryByIds(ids: List<Long>, newCategory: String, type: String)
 
+    /** Moves those of [ids] that have one Account to [accountId]; a Transfer keeps its from and to Accounts. */
     @Query(
         """
         UPDATE expense_records
@@ -213,6 +221,7 @@ interface ExpenseDao {
             isSynced = 0,
             syncAction = CASE WHEN syncAction IN ('INSERT', 'DELETE') THEN syncAction ELSE 'UPDATE' END
         WHERE id IN (:ids)
+          AND type IN ('Expense', 'Income', 'Adjustment')
         """
     )
     suspend fun updateTransactionsAssetByIds(ids: List<Long>, accountId: Long)

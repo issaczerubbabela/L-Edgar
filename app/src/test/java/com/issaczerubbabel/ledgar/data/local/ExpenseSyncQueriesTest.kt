@@ -156,7 +156,7 @@ class ExpenseSyncQueriesTest {
 
         dao.updateBookmarkStatus(pendingInsert, true)
         dao.updateBookmarkStatus(synced, true)
-        dao.updateTransactionsCategoryByIds(listOf(pendingInsert), "Travel")
+        dao.updateTransactionsCategoryByIds(listOf(pendingInsert), "Travel", type = "Expense")
 
         assertEquals("INSERT", dao.getById(pendingInsert)!!.syncAction)
         assertEquals("UPDATE", dao.getById(synced)!!.syncAction)

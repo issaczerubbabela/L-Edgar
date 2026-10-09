@@ -11,7 +11,10 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
+import com.issaczerubbabel.ledgar.ledger.BatchAction
 import com.issaczerubbabel.ledgar.ledger.Ledger
+import com.issaczerubbabel.ledgar.ledger.batchPlan
+import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.ledger.LedgerMonth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineScope
@@ -52,12 +55,15 @@ class HistoryViewModel @Inject constructor(
         .getAllVisibleAccounts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val categories: StateFlow<List<String>> = combine(
-        dropdownOptionRepository.getOptionsByType("EXPENSE_CATEGORY"),
-        dropdownOptionRepository.getOptionsByType("INCOME_CATEGORY")
-    ) { expense, income ->
-        (expense + income).map { it.name }.distinct().sorted()
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    /** For Change category: the Expense categories, then the Income ones, kept apart. */
+    val expenseCategories: StateFlow<List<String>> = dropdownOptionRepository
+        .getOptionsByType(TransactionType.EXPENSE_CATEGORY_OPTION)
+        .map { options -> options.map { it.name } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val incomeCategories: StateFlow<List<String>> = dropdownOptionRepository
+        .getOptionsByType(TransactionType.INCOME_CATEGORY_OPTION)
+        .map { options -> options.map { it.name } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** The date the user has tapped in the Calendar grid. */
     var selectedDate: LocalDate? by mutableStateOf(null)
@@ -83,6 +89,7 @@ class HistoryViewModel @Inject constructor(
                 if (shouldAutoFocusLatestMonth && _month.value != latest) {
                     _month.value = latest
                     selectedDate = null
+                    clearSelection()
                 }
                 shouldAutoFocusLatestMonth = false
             }
@@ -211,40 +218,32 @@ class HistoryViewModel @Inject constructor(
         }
     }
 
-    fun updateSelectedDates(newDate: String) {
-        val ids = selectedTxIds.toList()
-        if (ids.isEmpty()) return
-        viewModelScope.launch {
-            repository.updateTransactionsDateByIds(ids = ids, newDate = newDate)
-            clearSelection()
-        }
+    private val _batchMessages = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    /** "Changed 4 Expenses · skipped 1 Transfer", once per batch change. */
+    val batchMessages: SharedFlow<String> = _batchMessages.asSharedFlow()
+
+    /** Selects every row the Ledger shows for its month. */
+    fun selectAllInMonth() {
+        val shown = uiState.value.days.flatMap { day -> day.rows.map { it.id } }
+        selectedTxIds.addAll(shown.filterNot { it in selectedTxIds })
     }
 
-    fun updateSelectedCategories(newCategory: String) {
-        val ids = selectedTxIds.toList()
-        if (ids.isEmpty() || newCategory.isBlank()) return
-        viewModelScope.launch {
-            repository.updateTransactionsCategoryByIds(ids = ids, newCategory = newCategory)
-            clearSelection()
+    /** Applies [action] to the selected rows it fits, as the batch plan says, and reports what it did. */
+    fun applyBatch(action: BatchAction) {
+        val plan = Ledger.batchPlan(selectedTransactions(), action)
+        clearSelection()
+        val ids = plan.changeIds
+        if (ids.isNotEmpty()) {
+            viewModelScope.launch {
+                when (action) {
+                    is BatchAction.ChangeDate -> repository.updateTransactionsDateByIds(ids, action.date)
+                    is BatchAction.ChangeCategory -> repository.updateTransactionsCategoryByIds(ids, action.category, action.type)
+                    is BatchAction.ChangeAccount -> repository.updateTransactionsAssetByIds(ids, action.accountId)
+                    is BatchAction.ChangeDescription -> repository.updateTransactionsDescriptionByIds(ids, action.description)
+                }
+            }
         }
-    }
-
-    fun updateSelectedAssets(accountId: Long) {
-        val ids = selectedTxIds.toList()
-        if (ids.isEmpty()) return
-        viewModelScope.launch {
-            repository.updateTransactionsAssetByIds(ids = ids, accountId = accountId)
-            clearSelection()
-        }
-    }
-
-    fun updateSelectedDescriptions(newDescription: String) {
-        val ids = selectedTxIds.toList()
-        if (ids.isEmpty() || newDescription.isBlank()) return
-        viewModelScope.launch {
-            repository.updateTransactionsDescriptionByIds(ids = ids, newDescription = newDescription)
-            clearSelection()
-        }
+        _batchMessages.tryEmit(plan.summary)
     }
 
     fun toggleBookmark(record: ExpenseRecord) {

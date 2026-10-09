@@ -42,6 +42,13 @@ import com.issaczerubbabel.ledgar.ui.components.TransactionRow
 import com.issaczerubbabel.ledgar.ui.components.TransactionSheet
 import com.issaczerubbabel.ledgar.ui.components.TransactionSheetActions
 import com.issaczerubbabel.ledgar.ledger.Ledger
+import com.issaczerubbabel.ledgar.ledger.BatchAction
+import com.issaczerubbabel.ledgar.ledger.accountPickerNote
+import com.issaczerubbabel.ledgar.ledger.categoryPickerNote
+import com.issaczerubbabel.ledgar.ledger.sharedDate
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -56,6 +63,7 @@ import com.issaczerubbabel.ledgar.ui.theme.*
 import com.issaczerubbabel.ledgar.ledger.LedgerCalendarCell
 import com.issaczerubbabel.ledgar.ledger.LedgerDay
 import com.issaczerubbabel.ledgar.ledger.LedgerSummary
+import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.util.formatListMoney
 import com.issaczerubbabel.ledgar.viewmodel.HistoryViewModel
 import com.issaczerubbabel.ledgar.viewmodel.MonthlyViewModel
@@ -75,12 +83,8 @@ private fun responsiveTextSize(baseSp: Float, minSp: Float = 12f, maxSp: Float =
         baseSp * (LocalConfiguration.current.screenWidthDp / 411f).coerceIn(0.9f, 1.08f)
     ).coerceIn(minSp, maxSp).sp
 
-private enum class BatchAction {
-    EDIT_DATES,
-    EDIT_CATEGORIES,
-    EDIT_ASSETS,
-    EDIT_DESCRIPTIONS
-}
+/** Which batch-change dialog is open. */
+private enum class BatchDialog { DATE, CATEGORY, ACCOUNT, DESCRIPTION }
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
@@ -104,7 +108,8 @@ fun HistoryScreen(
     val pendingCaptures by captureBadgeVm.pendingCount.collectAsStateWithLifecycle()
     val state by vm.uiState.collectAsStateWithLifecycle()
     val accounts by vm.accounts.collectAsStateWithLifecycle()
-    val categories by vm.categories.collectAsStateWithLifecycle()
+    val expenseCategories by vm.expenseCategories.collectAsStateWithLifecycle()
+    val incomeCategories by vm.incomeCategories.collectAsStateWithLifecycle()
     val monthlyState by monthlyVm.uiState.collectAsStateWithLifecycle()
     var selectedTab by remember { mutableIntStateOf(0) }
     val pagerState = rememberPagerState(pageCount = { TABS.size })
@@ -114,14 +119,10 @@ fun HistoryScreen(
     // The id, not a copy: the sheet follows the live Transaction and closes if it goes.
     var sheetTransactionId by remember { mutableStateOf<Long?>(null) }
     var showDeleteSelectedDialog by remember { mutableStateOf(false) }
-    var isBatchMenuExpanded by remember { mutableStateOf(false) }
-    var pendingBatchAction by remember { mutableStateOf<BatchAction?>(null) }
-    var selectedCategory by remember { mutableStateOf("") }
-    var selectedAssetId by remember { mutableStateOf<Long?>(null) }
-    var updatedDescription by remember { mutableStateOf("") }
+    var batchDialog by remember { mutableStateOf<BatchDialog?>(null) }
     val allVisibleRecords = remember(state.days) { state.days.flatMap { day -> day.rows.map { it.record } } }
     val selectedCount = vm.selectedTxIds.size
-    val selectedSum = Ledger.net(vm.selectedTransactions())
+    val selectedNet = Ledger.net(vm.selectedTransactions())
     val selectedIdSet = vm.selectedTxIds.toSet()
     val pendingDelete by vm.pendingDelete.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -132,6 +133,11 @@ fun HistoryScreen(
         val pending = pendingDelete ?: return@LaunchedEffect
         val result = snackbarHostState.showSnackbar(pending.message, actionLabel = "Undo", duration = SnackbarDuration.Indefinite)
         if (result == SnackbarResult.ActionPerformed) vm.undoDelete(pending)
+    }
+    // Back leaves selection before it leaves the tab.
+    BackHandler(enabled = selectedCount > 0) { vm.clearSelection() }
+    LaunchedEffect(Unit) {
+        vm.batchMessages.collect { snackbarHostState.showSnackbar(it) }
     }
     // A pending delete becomes final when the Ledger is left or the app goes to the background.
     // Rotating the phone isn't leaving: the ViewModel survives and the Undo stays open.
@@ -191,14 +197,12 @@ fun HistoryScreen(
             if (selectedCount > 0) {
                 ContextualSelectionAppBar(
                     selectedCount = selectedCount,
-                    selectedSum = selectedSum,
+                    selectedNet = selectedNet,
+                    monthLabel = state.monthLabel,
+                    onClose = vm::clearSelection,
                     onDeleteClick = { showDeleteSelectedDialog = true },
-                    isMenuExpanded = isBatchMenuExpanded,
-                    onMenuExpandedChange = { isBatchMenuExpanded = it },
-                    onSelectBatchAction = { action ->
-                        pendingBatchAction = action
-                        isBatchMenuExpanded = false
-                    }
+                    onSelectAll = vm::selectAllInMonth,
+                    onOpenDialog = { batchDialog = it }
                 )
             } else {
                 MoneyManagerAppBar(
@@ -376,117 +380,142 @@ fun HistoryScreen(
         )
     }
 
-    if (pendingBatchAction == BatchAction.EDIT_DATES) {
+    if (batchDialog == BatchDialog.DATE) {
         SingleDatePickerDialog(
-            initialDate = LocalDate.now(),
-            confirmText = "Update",
-            onDismiss = { pendingBatchAction = null },
+            // Starts where the selection is when it all shares one date.
+            initialDate = Ledger.sharedDate(vm.selectedTransactions()) ?: LocalDate.now(),
+            confirmText = "Change",
+            onDismiss = { batchDialog = null },
             onConfirm = {
-                vm.updateSelectedDates(it.toString())
-                pendingBatchAction = null
+                vm.applyBatch(BatchAction.ChangeDate(it.toString()))
+                batchDialog = null
             }
         )
     }
 
-    if (pendingBatchAction == BatchAction.EDIT_CATEGORIES) {
+    if (batchDialog == BatchDialog.CATEGORY) {
+        val selected = vm.selectedTransactions()
+        val hasExpenses = selected.any { it.type == TransactionType.EXPENSE }
+        val hasIncomes = selected.any { it.type == TransactionType.INCOME }
         AlertDialog(
-            onDismissRequest = { pendingBatchAction = null },
-            title = { Text("Edit All Categories") },
+            onDismissRequest = { batchDialog = null },
+            title = { Text("Change category") },
             text = {
-                DropdownField(
-                    label = "Category",
-                    options = categories,
-                    selected = selectedCategory,
-                    onSelect = { selectedCategory = it }
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.updateSelectedCategories(selectedCategory)
-                    selectedCategory = ""
-                    pendingBatchAction = null
-                }) {
-                    Text("Update")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    selectedCategory = ""
-                    pendingBatchAction = null
-                }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
-    if (pendingBatchAction == BatchAction.EDIT_ASSETS) {
-        val accountNames = accounts.map { it.accountName }
-        val selectedAssetName = accounts.firstOrNull { it.id == selectedAssetId }?.accountName.orEmpty()
-        AlertDialog(
-            onDismissRequest = { pendingBatchAction = null },
-            title = { Text("Edit All Assets") },
-            text = {
-                DropdownField(
-                    label = "Asset Account",
-                    options = accountNames,
-                    selected = selectedAssetName,
-                    onSelect = { selectedName ->
-                        selectedAssetId = accounts.firstOrNull { it.accountName == selectedName }?.id
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        Ledger.categoryPickerNote(selected),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    // Only the kinds the selection has; picking one changes the rows of that type.
+                    if (hasExpenses) {
+                        CategorySection("Expense categories", expenseCategories) { category ->
+                            vm.applyBatch(BatchAction.ChangeCategory(TransactionType.EXPENSE, category))
+                            batchDialog = null
+                        }
                     }
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    selectedAssetId?.let(vm::updateSelectedAssets)
-                    selectedAssetId = null
-                    pendingBatchAction = null
-                }) {
-                    Text("Update")
+                    if (hasIncomes) {
+                        CategorySection("Income categories", incomeCategories) { category ->
+                            vm.applyBatch(BatchAction.ChangeCategory(TransactionType.INCOME, category))
+                            batchDialog = null
+                        }
+                    }
                 }
             },
+            confirmButton = {},
             dismissButton = {
-                TextButton(onClick = {
-                    selectedAssetId = null
-                    pendingBatchAction = null
-                }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { batchDialog = null }) { Text("Cancel") }
             }
         )
     }
 
-    if (pendingBatchAction == BatchAction.EDIT_DESCRIPTIONS) {
+    if (batchDialog == BatchDialog.ACCOUNT) {
+        var chosenAccountId by remember { mutableStateOf<Long?>(null) }
         AlertDialog(
-            onDismissRequest = { pendingBatchAction = null },
-            title = { Text("Edit All Descriptions") },
+            onDismissRequest = { batchDialog = null },
+            title = { Text("Change account") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        Ledger.accountPickerNote(vm.selectedTransactions()),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    DropdownField(
+                        label = "Account",
+                        options = accounts.map { it.accountName },
+                        selected = accounts.firstOrNull { it.id == chosenAccountId }?.accountName.orEmpty(),
+                        onSelect = { name -> chosenAccountId = accounts.firstOrNull { it.accountName == name }?.id }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = chosenAccountId != null,
+                    onClick = {
+                        chosenAccountId?.let { vm.applyBatch(BatchAction.ChangeAccount(it)) }
+                        batchDialog = null
+                    }
+                ) { Text("Change") }
+            },
+            dismissButton = {
+                TextButton(onClick = { batchDialog = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (batchDialog == BatchDialog.DESCRIPTION) {
+        var description by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { batchDialog = null },
+            title = { Text("Change description") },
             text = {
                 OutlinedTextField(
-                    value = updatedDescription,
-                    onValueChange = { updatedDescription = it },
+                    value = description,
+                    onValueChange = { description = it },
                     label = { Text("Description") },
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = false,
                     minLines = 2
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    vm.updateSelectedDescriptions(updatedDescription)
-                    updatedDescription = ""
-                    pendingBatchAction = null
-                }) {
-                    Text("Update")
-                }
+                TextButton(
+                    enabled = description.isNotBlank(),
+                    onClick = {
+                        vm.applyBatch(BatchAction.ChangeDescription(description.trim()))
+                        batchDialog = null
+                    }
+                ) { Text("Change") }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    updatedDescription = ""
-                    pendingBatchAction = null
-                }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { batchDialog = null }) { Text("Cancel") }
             }
+        )
+    }
+}
+
+/** One kind of Category in the Change category picker; tapping one applies it. */
+@Composable
+private fun CategorySection(title: String, categories: List<String>, onPick: (String) -> Unit) {
+    Text(
+        title,
+        style = MaterialTheme.typography.titleSmall,
+        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+    )
+    categories.forEach { category ->
+        Text(
+            category,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onPick(category) }
+                .heightIn(min = 48.dp)
+                .wrapContentHeight(Alignment.CenterVertically)
+                .padding(horizontal = 8.dp)
         )
     }
 }
@@ -783,53 +812,55 @@ private fun MoneyManagerAppBar(
 @Composable
 private fun ContextualSelectionAppBar(
     selectedCount: Int,
-    selectedSum: Double,
+    selectedNet: Double,
+    monthLabel: String,
+    onClose: () -> Unit,
     onDeleteClick: () -> Unit,
-    isMenuExpanded: Boolean,
-    onMenuExpandedChange: (Boolean) -> Unit,
-    onSelectBatchAction: (BatchAction) -> Unit
+    onSelectAll: () -> Unit,
+    onOpenDialog: (BatchDialog) -> Unit
 ) {
+    var isMenuExpanded by remember { mutableStateOf(false) }
     TopAppBar(
+        navigationIcon = {
+            IconButton(onClick = onClose) {
+                Icon(Icons.Filled.Close, contentDescription = "Leave selection")
+            }
+        },
         title = {
-            Text(
-                text = "$selectedCount selected",
-                fontWeight = FontWeight.SemiBold
-            )
+            Column {
+                Text(text = "$selectedCount selected", fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = "Net ${formatListMoney(selectedNet, signed = true)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         },
         actions = {
-            Text(
-                text = formatListMoney(selectedSum, signed = true),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(end = 6.dp)
-            )
             IconButton(onClick = onDeleteClick) {
                 Icon(Icons.Filled.Delete, contentDescription = "Delete selected")
             }
             Box {
-                IconButton(onClick = { onMenuExpandedChange(true) }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = "Batch actions")
+                IconButton(onClick = { isMenuExpanded = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "More for the selection")
                 }
-                DropdownMenu(
-                    expanded = isMenuExpanded,
-                    onDismissRequest = { onMenuExpandedChange(false) }
-                ) {
+                DropdownMenu(expanded = isMenuExpanded, onDismissRequest = { isMenuExpanded = false }) {
                     DropdownMenuItem(
-                        text = { Text("Edit All Dates") },
-                        onClick = { onSelectBatchAction(BatchAction.EDIT_DATES) }
+                        text = { Text("Select all in $monthLabel") },
+                        onClick = { isMenuExpanded = false; onSelectAll() }
                     )
-                    DropdownMenuItem(
-                        text = { Text("Edit All Categories") },
-                        onClick = { onSelectBatchAction(BatchAction.EDIT_CATEGORIES) }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Edit All Assets") },
-                        onClick = { onSelectBatchAction(BatchAction.EDIT_ASSETS) }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Edit All Descriptions") },
-                        onClick = { onSelectBatchAction(BatchAction.EDIT_DESCRIPTIONS) }
-                    )
+                    HorizontalDivider()
+                    listOf(
+                        "Change date…" to BatchDialog.DATE,
+                        "Change category…" to BatchDialog.CATEGORY,
+                        "Change account…" to BatchDialog.ACCOUNT,
+                        "Change description…" to BatchDialog.DESCRIPTION
+                    ).forEach { (label, dialog) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = { isMenuExpanded = false; onOpenDialog(dialog) }
+                        )
+                    }
                 }
             }
         }

@@ -253,6 +253,81 @@ class LedgerTest {
         assertEquals("Delete 1 transaction (₹1,000)?", Ledger.deleteConfirm(selected.subList(1, 2)))
     }
 
+    // A mixed selection: two Expenses, an Income, a Transfer and a Balance adjustment.
+    private val mixed = listOf(
+        txn("2026-10-09", "Expense", 212.0, "Transport", accountId = 2, id = 101),
+        txn("2026-10-09", "Expense", 4038.0, "Food", accountId = 3, id = 102),
+        txn("2026-10-08", "Income", 1200.0, "Refund", accountId = 1, id = 103),
+        txn("2026-10-08", "Transfer", 5000.0, from = 1, to = 3, id = 104),
+        txn("2026-10-07", "Adjustment", -340.0, accountId = 3, id = 105)
+    )
+
+    @Test
+    fun anExpenseCategoryChangesOnlyTheExpenses() {
+        val plan = Ledger.batchPlan(mixed, BatchAction.ChangeCategory(type = "Expense", category = "Shopping"))
+
+        assertEquals(listOf(101L, 102L), plan.changeIds)
+        assertEquals(
+            mapOf(103L to "An Income keeps an income Category", 104L to "A Transfer has no Category",
+                105L to "A Balance adjustment has no Category"),
+            plan.skipped.associate { it.id to it.reason }
+        )
+        assertEquals("Changed 2 Expenses · skipped 1 Income, 1 Transfer, 1 Balance adjustment", plan.summary)
+    }
+
+    @Test
+    fun anIncomeCategoryChangesOnlyTheIncomes() {
+        val plan = Ledger.batchPlan(mixed, BatchAction.ChangeCategory(type = "Income", category = "Salary"))
+
+        assertEquals(listOf(103L), plan.changeIds)
+        assertEquals("Changed 1 Income · skipped 2 Expenses, 1 Transfer, 1 Balance adjustment", plan.summary)
+    }
+
+    @Test
+    fun theCategoryPickerSaysWhatEachKindWillChange() {
+        assertEquals(
+            "An expense category changes the 2 Expenses, an income category the 1 Income. " +
+                "The 1 Transfer and 1 Balance adjustment have no category and stay as they are.",
+            Ledger.categoryPickerNote(mixed)
+        )
+        assertEquals("An expense category changes the 2 Expenses.", Ledger.categoryPickerNote(mixed.take(2)))
+    }
+
+    @Test
+    fun anAccountChangeSkipsTransfersWhichKeepTheirAccounts() {
+        val plan = Ledger.batchPlan(mixed, BatchAction.ChangeAccount(accountId = 1))
+
+        assertEquals(listOf(101L, 102L, 103L, 105L), plan.changeIds)
+        assertEquals(mapOf(104L to "A Transfer keeps its from and to Accounts"), plan.skipped.associate { it.id to it.reason })
+        assertEquals("Changed 4 transactions · skipped 1 Transfer", plan.summary)
+        assertEquals("Changes 4 transactions. The 1 Transfer keeps its Accounts.", Ledger.accountPickerNote(mixed))
+    }
+
+    @Test
+    fun aDateOrDescriptionChangesEveryRow() {
+        val date = Ledger.batchPlan(mixed, BatchAction.ChangeDate("2026-10-01"))
+        val description = Ledger.batchPlan(mixed.take(2), BatchAction.ChangeDescription("Trip"))
+
+        assertEquals(mixed.map { it.id }, date.changeIds)
+        assertEquals(emptyList<BatchSkip>(), date.skipped)
+        assertEquals("Changed 5 transactions", date.summary)
+        assertEquals("Changed 2 Expenses", description.summary)
+    }
+
+    @Test
+    fun aChangeThatFitsNoRowSaysNothingChanged() {
+        val plan = Ledger.batchPlan(mixed.drop(3), BatchAction.ChangeCategory(type = "Income", category = "Salary"))
+
+        assertEquals(emptyList<Long>(), plan.changeIds)
+        assertEquals("Nothing changed · skipped 1 Transfer, 1 Balance adjustment", plan.summary)
+    }
+
+    @Test
+    fun changeDateStartsOnTheSharedDateWhenThereIsOne() {
+        assertEquals(LocalDate.of(2026, 10, 9), Ledger.sharedDate(mixed.take(2)))
+        assertEquals(null, Ledger.sharedDate(mixed))
+    }
+
     @Test
     fun theLatestMonthIsTheNewestWithATransaction() {
         assertEquals(YearMonth.of(2026, 11), Ledger.latestMonth(listOf(

@@ -98,8 +98,8 @@ class ExpenseRepositoryImpl @Inject constructor(
     override suspend fun updateTransactionsDateByIds(ids: List<Long>, newDate: String) =
         dao.updateTransactionsDateByIds(ids = ids, newDate = newDate)
 
-    override suspend fun updateTransactionsCategoryByIds(ids: List<Long>, newCategory: String) =
-        dao.updateTransactionsCategoryByIds(ids = ids, newCategory = newCategory)
+    override suspend fun updateTransactionsCategoryByIds(ids: List<Long>, newCategory: String, type: String) =
+        dao.updateTransactionsCategoryByIds(ids = ids, newCategory = newCategory, type = type)
 
     override suspend fun updateTransactionsAssetByIds(ids: List<Long>, accountId: Long) =
         dao.updateTransactionsAssetByIds(ids = ids, accountId = accountId)
