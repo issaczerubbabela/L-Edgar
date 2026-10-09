@@ -43,7 +43,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
         fixed = listOf(
             "Accounts: old transfers that only saved the destination's name count on that Account everywhere",
             "Accounts: totals and balances add up to the paisa, with no stray digits or −₹0.00",
-            "Backups keep when each Account was last reconciled, so an Import no longer forgets it"
+            "Backups keep when each Account was last reconciled, so an Import no longer forgets it",
+            "Accounts: a group whose Accounts are all archived or hidden no longer shows an empty ₹0.00 card"
         ),
         developer = listOf(
             "AccountMath: one pure module for balances, totals, statements, net worth, cash flow and movers, with tests",

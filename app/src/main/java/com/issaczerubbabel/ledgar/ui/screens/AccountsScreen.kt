@@ -149,7 +149,7 @@ fun AccountsScreen(
                     )
                 }
             } else {
-                items(state.groups, key = { "group-${it.name}" }) { group ->
+                items(state.listedGroups, key = { "group-${it.name}" }) { group ->
                     val expanded = group.name !in collapsedGroups
                     GroupCard(
                         group = group,

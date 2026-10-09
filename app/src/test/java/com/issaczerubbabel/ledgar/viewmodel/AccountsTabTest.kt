@@ -95,6 +95,14 @@ class AccountsTabTest {
     }
 
     @Test
+    fun aGroupWhoseAccountsAreAllHiddenIsOnlyInEditOrder() {
+        val archived = records + account(11, "Savings", "Test A", 0.0, included = false, hidden = true)
+        val withArchived = accountsTab(AccountBook.of(archived, roles, october), LocalDate.of(2026, 10, 8))
+        assertTrue("Savings" in withArchived.groups.map { it.name })
+        assertEquals(listOf("Bank", "Cash", "Investments", "Credit card", "Loan"), withArchived.listedGroups.map { it.name })
+    }
+
+    @Test
     fun rowsSayWhenTheyWereLastCheckedAndFlagStaleOnes() {
         val checked = records.map {
             when (it.id) {

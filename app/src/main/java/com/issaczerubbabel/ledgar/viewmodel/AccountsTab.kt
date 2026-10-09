@@ -60,7 +60,10 @@ data class AccountsTabUiState(
     /** Newest first. Until linked, a Transfer doesn't count on its unlinked side. */
     val unlinkedTransfers: List<UnlinkedTransferUi> = emptyList(),
     val isLoaded: Boolean = false
-)
+) {
+    /** The groups the list shows: a group whose Accounts are all Hidden only appears in Edit order. */
+    val listedGroups: List<AccountGroupUi> get() = groups.filter { it.rows.isNotEmpty() }
+}
 
 private val sinceLabel = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
 private val unlinkedDateLabel = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
