@@ -27,6 +27,23 @@ fun formatRupeesExact(amount: Double): String {
     return if (fraction == 0L) sign + base else sign + base + "." + fraction.toString().padStart(2, '0')
 }
 
+/**
+ * An exact amount for statements and totals: always two decimals (₹2,47,980.50), a true minus sign
+ * (−₹18,640.00) and, with [signed], a + on positive amounts (+₹340.00). Rounds to paise first, so a
+ * sum that is zero to the paisa is ₹0.00, never −₹0.00.
+ */
+fun formatMoney(amount: Double, signed: Boolean = false): String {
+    val paise = (amount * 100).roundToLong()
+    val digits = groupIndian((abs(paise) / 100).toString())
+    val fraction = (abs(paise) % 100).toString().padStart(2, '0')
+    val sign = when {
+        paise < 0 -> "−"
+        signed && paise > 0 -> "+"
+        else -> ""
+    }
+    return "$sign₹$digits.$fraction"
+}
+
 private fun groupIndian(digits: String): String {
     if (digits.length <= 3) return digits
     val lastThree = digits.takeLast(3)

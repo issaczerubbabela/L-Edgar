@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -41,6 +42,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.ui.components.DropdownField
 import com.issaczerubbabel.ledgar.ui.components.SingleDatePickerDialog
 import com.issaczerubbabel.ledgar.ui.theme.*
+import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.viewmodel.CalendarCell
 import com.issaczerubbabel.ledgar.viewmodel.DayGroup
 import com.issaczerubbabel.ledgar.viewmodel.HistoryViewModel
@@ -73,6 +75,7 @@ private fun accountLabelForTransaction(record: ExpenseRecord, accountsById: Map<
                 ?: record.accountName
                 ?: ""
         }
+        TransactionType.ADJUSTMENT -> record.accountId?.let { accountsById[it] } ?: record.accountName ?: ""
         "Transfer" -> {
             val from = record.fromAccountId?.let { accountsById[it] }
                 ?: record.fromAccountName
@@ -1154,9 +1157,12 @@ private fun TransactionRow(
     val isIncome  = record.type == "Income"
     val isExpense = record.type == "Expense"
     val isTransfer = record.type == "Transfer"
+    // A Balance adjustment only corrects a balance, so it reads apart from money in and out.
+    val isAdjustment = record.type == TransactionType.ADJUSTMENT
     val amountColor = when {
         isIncome -> IncomeBlue
         isExpense -> ExpenseOrange
+        isAdjustment -> MaterialTheme.colorScheme.tertiary
         else -> TransferGray
     }
     val selectedBg = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.32f)
@@ -1169,9 +1175,10 @@ private fun TransactionRow(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(record.category,
+        Text(if (isAdjustment) TransactionType.label(record.type) else record.category,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontStyle = if (isAdjustment) FontStyle.Italic else null,
+            color = if (isAdjustment) amountColor else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(categoryColumnWidth),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
@@ -1179,7 +1186,7 @@ private fun TransactionRow(
             lineHeight = responsiveTextSize(baseSp = 14f, minSp = 13f, maxSp = 15f))
         Spacer(Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(record.description.ifBlank { record.category },
+            Text(record.description.ifBlank { if (isAdjustment) TransactionType.label(record.type) else record.category },
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -1193,8 +1200,9 @@ private fun TransactionRow(
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(min = 72.dp, max = 96.dp)) {
             Text(
-                text = formatMoney(record.amount),
+                text = if (isAdjustment) formatSignedMoney(record.amount) else formatMoney(record.amount),
                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                fontStyle = if (isAdjustment) FontStyle.Italic else null,
                 color = amountColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

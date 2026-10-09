@@ -56,12 +56,12 @@ import com.issaczerubbabel.ledgar.ui.screens.InsightsScreen
 import com.issaczerubbabel.ledgar.ui.screens.LogScreen
 import com.issaczerubbabel.ledgar.ui.screens.AccountDetailScreen
 import com.issaczerubbabel.ledgar.ui.screens.AccountsScreen
-import com.issaczerubbabel.ledgar.ui.screens.AddAccountScreen
+import com.issaczerubbabel.ledgar.ui.screens.AccountFormScreen
 import com.issaczerubbabel.ledgar.ui.screens.BookmarksScreen
 import com.issaczerubbabel.ledgar.ui.screens.DropdownManagementScreen
 import com.issaczerubbabel.ledgar.ui.screens.FilterSelectionScreen
 import com.issaczerubbabel.ledgar.ui.screens.FilteredTransactionsScreen
-import com.issaczerubbabel.ledgar.ui.screens.OverallAccountStatsScreen
+import com.issaczerubbabel.ledgar.ui.screens.NetWorthScreen
 import com.issaczerubbabel.ledgar.ui.screens.SearchScreen
 import com.issaczerubbabel.ledgar.ui.screens.MoreScreen
 import com.issaczerubbabel.ledgar.ui.screens.SettingsScreen
@@ -73,13 +73,14 @@ import com.issaczerubbabel.ledgar.ui.screens.CaptureSettingsScreen
 import com.issaczerubbabel.ledgar.ui.screens.UnparsedAlertsScreen
 import com.issaczerubbabel.ledgar.viewmodel.CaptureBadgeViewModel
 import com.issaczerubbabel.ledgar.data.preferences.AppLockAuthMode
+import com.issaczerubbabel.ledgar.viewmodel.AccountFormResult
 import com.issaczerubbabel.ledgar.viewmodel.AppLockViewModel
-import com.issaczerubbabel.ledgar.viewmodel.ACCOUNT_ROUTE_ADD
 import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
     object Log : Screen(
-        "log?transactionId={transactionId}&copyTransactionId={copyTransactionId}&copyDateMode={copyDateMode}",
+        "log?transactionId={transactionId}&copyTransactionId={copyTransactionId}&copyDateMode={copyDateMode}" +
+            "&prefillType={prefillType}&prefillAccountId={prefillAccountId}",
         "Log",
         Icons.Filled.AddCircle
     )
@@ -99,8 +100,8 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object BucketDetail : Screen("bucket/{bucketId}", "BucketDetail", Icons.Filled.AccountBalanceWallet)
     object Accounts : Screen("accounts", "Accounts", Icons.Filled.Paid)
     object AccountDetail : Screen("account_detail/{accountId}", "AccountDetail", Icons.Filled.Paid)
-    object OverallAccountStats : Screen("overall_account_stats", "OverallAccountStats", Icons.Filled.BarChart)
-    object AddAccount : Screen(ACCOUNT_ROUTE_ADD, "AddAccount", Icons.Filled.Paid)
+    object NetWorth : Screen("net_worth", "NetWorth", Icons.Filled.BarChart)
+    object AccountForm : Screen("account_form?accountId={accountId}", "AccountForm", Icons.Filled.Paid)
     object More : Screen("more", "More", Icons.Filled.MoreHoriz)
     object Settings : Screen("settings", "Settings", Icons.Filled.Settings)
     object DropdownManagement : Screen("dropdown_management", "DropdownManagement", Icons.Filled.Settings)
@@ -191,7 +192,9 @@ private fun Context.openSystemSecuritySettings() {
 private fun logRoute(
     transactionId: Long? = null,
     copyTransactionId: Long? = null,
-    useTodayDateForCopy: Boolean = false
+    useTodayDateForCopy: Boolean = false,
+    prefillType: String? = null,
+    prefillAccountId: Long? = null
 ): String {
     val params = mutableListOf<String>()
     transactionId?.let { params += "transactionId=$it" }
@@ -199,6 +202,8 @@ private fun logRoute(
         params += "copyTransactionId=$it"
         params += "copyDateMode=${if (useTodayDateForCopy) "today" else "original"}"
     }
+    prefillType?.let { params += "prefillType=$it" }
+    prefillAccountId?.let { params += "prefillAccountId=$it" }
     return if (params.isEmpty()) LOG_BASE_ROUTE else "$LOG_BASE_ROUTE?${params.joinToString("&")}" 
 }
 
@@ -245,7 +250,8 @@ fun AppNavigation() {
 
     val showBottomBar =
         currentDest?.route != Screen.FilteredTransactions.route &&
-            currentDest?.route != Screen.Log.route
+            currentDest?.route != Screen.Log.route &&
+            currentDest?.route != Screen.AccountForm.route
 
     val navigateToTransactionsAfterUnlock = {
         appLockViewModel.markUnlocked()
@@ -557,6 +563,14 @@ fun AppNavigation() {
                     navArgument("copyDateMode") {
                         type = NavType.StringType
                         defaultValue = "original"
+                    },
+                    navArgument("prefillType") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    },
+                    navArgument("prefillAccountId") {
+                        type = NavType.LongType
+                        defaultValue = -1L
                     }
                 )
             ) {
@@ -681,18 +695,34 @@ fun AppNavigation() {
                     onOpenAccountDetail = { accountId ->
                         navController.navigate("account_detail/$accountId")
                     },
-                    onOpenOverallStats = {
-                        navController.navigate(Screen.OverallAccountStats.route) {
+                    onOpenNetWorth = {
+                        navController.navigate(Screen.NetWorth.route) {
                             launchSingleTop = true
                         }
                     },
+                    onAddAccount = { navController.navigate("account_form") { launchSingleTop = true } },
+                    onOpenTransaction = { transactionId ->
+                        navController.navigate(logRoute(transactionId = transactionId)) { launchSingleTop = true }
+                    },
                 )
             }
-            composable(Screen.AddAccount.route) {
-                AddAccountScreen(
-                    innerPadding = innerPadding,
-                    onBack = { navController.popBackStack() },
-                    onSaved = { navController.popBackStack() }
+            composable(
+                route = Screen.AccountForm.route,
+                arguments = listOf(
+                    navArgument("accountId") {
+                        type = NavType.LongType
+                        defaultValue = -1L
+                    }
+                )
+            ) {
+                AccountFormScreen(
+                    onClose = { navController.popBackStack() },
+                    onFinished = { result ->
+                        // An archived or deleted Account's page is gone too: go back to the Accounts tab.
+                        val backToAccounts = result != AccountFormResult.Saved &&
+                            navController.popBackStack(Screen.Accounts.route, inclusive = false)
+                        if (!backToAccounts) navController.popBackStack()
+                    }
                 )
             }
             composable(Screen.More.route) {
@@ -890,11 +920,22 @@ fun AppNavigation() {
             composable("account_detail/{accountId}") {
                 AccountDetailScreen(
                     innerPadding = innerPadding,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onOpenTransaction = { transactionId ->
+                        navController.navigate(logRoute(transactionId = transactionId)) { launchSingleTop = true }
+                    },
+                    onAddTransaction = { type, accountId ->
+                        navController.navigate(logRoute(prefillType = type, prefillAccountId = accountId)) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onEditAccount = { accountId ->
+                        navController.navigate("account_form?accountId=$accountId") { launchSingleTop = true }
+                    }
                 )
             }
-            composable(Screen.OverallAccountStats.route) {
-                OverallAccountStatsScreen(
+            composable(Screen.NetWorth.route) {
+                NetWorthScreen(
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() },
                 )

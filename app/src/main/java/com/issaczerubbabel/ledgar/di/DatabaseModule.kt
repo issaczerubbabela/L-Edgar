@@ -13,6 +13,7 @@ import com.issaczerubbabel.ledgar.data.local.dao.AccountDao
 import com.issaczerubbabel.ledgar.data.local.dao.BucketBudgetDao
 import com.issaczerubbabel.ledgar.data.local.dao.BudgetDao
 import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
+import com.issaczerubbabel.ledgar.data.local.migration.AccountMigration
 import com.issaczerubbabel.ledgar.data.local.migration.BucketBudgetMigration
 import com.issaczerubbabel.ledgar.data.local.migration.CaptureMigration
 import com.issaczerubbabel.ledgar.data.local.migration.TripMigration
@@ -143,8 +144,15 @@ object DatabaseModule {
         }
     }
 
-    /** Adds the `recurring_rules` table and the column linking a Transaction back to the rule that created it. */
+    /** Accounts revamp: Liability roles, "reconciled on" dates and linked Transfer destinations. */
     internal val MIGRATION_23_24 = object : Migration(23, 24) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            AccountMigration.upgradeTo24(db)
+        }
+    }
+
+    /** Adds the `recurring_rules` table and the column linking a Transaction back to the rule that created it. */
+    internal val MIGRATION_24_25 = object : Migration(24, 25) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL(
                 "CREATE TABLE IF NOT EXISTS `recurring_rules` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
@@ -316,6 +324,7 @@ object DatabaseModule {
             .addMigrations(MIGRATION_21_22)
             .addMigrations(MIGRATION_22_23)
             .addMigrations(MIGRATION_23_24)
+            .addMigrations(MIGRATION_24_25)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .addCallback(callback)
             .build()

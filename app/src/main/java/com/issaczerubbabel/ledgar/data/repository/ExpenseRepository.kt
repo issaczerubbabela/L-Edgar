@@ -39,9 +39,6 @@ interface ExpenseRepository {
     ): Flow<List<ExpenseRecord>>
     fun getRecordsForAccountInMonth(accountId: Long, startDate: String, endDate: String): Flow<List<ExpenseRecord>>
     fun getTransactionsForAccountInMonth(accountId: Long, startOfMonth: String, endOfMonth: String): Flow<List<ExpenseRecord>>
-    fun getHistoricalSumForAccount(accountId: Long, beforeDate: String): Flow<Double?>
-    fun getAccountBalanceUntilDate(accountId: Long, endDate: String): Flow<Double>
-    fun getAccountBalance(accountId: Long): Flow<Double>
     fun getRecordsByDateRange(startDate: String, endDate: String): Flow<List<ExpenseRecord>>
     suspend fun setBookmarked(id: Long, isBookmarked: Boolean)
     suspend fun deleteTransactionsByIds(ids: List<Long>)

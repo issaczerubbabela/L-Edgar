@@ -26,11 +26,22 @@ object DropdownRole {
     /** An Account group whose incoming Transfers count as Saved. */
     const val SAVINGS = "SAVINGS"
 
+    /** An Account group whose Accounts hold money owed, such as credit cards and loans. */
+    const val LIABILITY = "LIABILITY"
+
+    /**
+     * Words that made an Account group a liability before the role existed. Used once, by the
+     * 23 -> 24 upgrade, to give those groups the [LIABILITY] role; nothing guesses from names after.
+     */
+    val LEGACY_LIABILITY_KEYWORDS = listOf("credit card", "loan", "owed", "overdraft", "debt", "payable")
+
     /** Roles given once, when the column is added or a fresh install seeds its options. */
     val DEFAULTS: List<Triple<String, String, String>> = listOf(
         Triple("EXPENSE_CATEGORY", "Investments/Savings", SAVING),
         Triple("INCOME_CATEGORY", "Return", REFUND),
         Triple("ACCOUNT_GROUP", "Savings", SAVINGS),
-        Triple("ACCOUNT_GROUP", "Investments", SAVINGS)
+        Triple("ACCOUNT_GROUP", "Investments", SAVINGS),
+        Triple("ACCOUNT_GROUP", "Overdrafts", LIABILITY),
+        Triple("ACCOUNT_GROUP", "Loan", LIABILITY)
     )
 }

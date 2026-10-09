@@ -988,6 +988,7 @@ function handlePost(e) {
           "Include In Totals",
           "Display Order",
           "Last Backed Up",
+          "Reconciled At",
         ],
       ];
 
@@ -1010,6 +1011,7 @@ function handlePost(e) {
           toBool(incTotals),
           Number(r.displayOrder) || 0,
           backupTime,
+          r.reconciledAt || "",
         ]);
       });
 
@@ -1239,6 +1241,8 @@ function handleGet(e) {
           includeInTotals:
             accountData[i][8] === "" ? true : toBool(accountData[i][8]), // Shifted 7 -> 8
           displayOrder: Number(accountData[i][9]) || 0, // Shifted 8 -> 9
+          // Added after Last Backed Up (10), so older sheets read as never reconciled.
+          reconciledAt: formatDate(accountData[i][11]),
         });
       }
       return jsonOut({ status: "ok", data: accounts });

@@ -284,6 +284,30 @@ class TransactionSyncerTest {
     }
 
     @Test
+    fun `a negative Balance adjustment keeps its sign and Account through Push and Pull`() = runBlocking {
+        val id = phone.addNew(amount = -45.5, type = "Adjustment", category = "")
+
+        push()
+        val row = sheet.rows.values.single()
+        assertEquals("Adjustment", row.type)
+        assertEquals(-45.5, row.amount, 0.0)
+        assertEquals("Wallet", row.accountName)
+        assertEquals("", row.expCategory)
+        assertEquals("", row.incCategory)
+
+        fullSync()
+        assertTrue("the round trip settles without a conflict", phone.pending().isEmpty())
+        assertNull(phone.get(id)!!.sheetConflictJson)
+
+        val reinstalled = FakeStore()
+        TransactionSyncer(reinstalled, sheet).sync(URL, pull = true)
+        val pulled = reinstalled.all().single()
+        assertEquals("Adjustment", pulled.type)
+        assertEquals(-45.5, pulled.amount, 0.0)
+        assertEquals("Wallet", pulled.accountName)
+    }
+
+    @Test
     fun `pulling twice changes nothing the second time`() = runBlocking {
         repeat(3) { phone.addNew(amount = it.toDouble()) }
         sheet.typeRow(description = "typed", amount = 9.0)
@@ -345,8 +369,8 @@ private class FakeStore : TransactionSyncStore {
     private val rows = linkedMapOf<Long, ExpenseRecord>()
     private var nextId = 1L
 
-    fun addNew(amount: Double = 50.0, description: String = "Lunch"): Long =
-        insert(record(amount, description).copy(syncId = UUID.randomUUID().toString()))
+    fun addNew(amount: Double = 50.0, description: String = "Lunch", type: String = "Expense", category: String = "Food"): Long =
+        insert(record(amount, description).copy(type = type, category = category, syncId = UUID.randomUUID().toString()))
 
     fun addLegacy(description: String, amount: Double, remoteTimestamp: String?, synced: Boolean): Long =
         insert(record(amount, description).copy(

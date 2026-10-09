@@ -289,6 +289,20 @@ test("transfers keep their from and to accounts", () => {
   assert.deepEqual([row.fromAccountName, row.toAccountName], ["Bank", "Cash"]);
 });
 
+test("a negative Balance adjustment comes back with its sign, type and account", () => {
+  const app = loadScript(SCRIPT);
+  app.post({
+    target: "transactions",
+    action: "upsert",
+    transactions: [transaction("adj", { type: "Adjustment", expCategory: "", amount: -45.5, accountName: "SBI Salary" })],
+  });
+  const [row] = app.get().data;
+  assert.deepEqual(
+    [row.type, row.amount, row.accountName, row.expCategory, row.incCategory],
+    ["Adjustment", -45.5, "SBI Salary", "", ""],
+  );
+});
+
 test("text fields are stored as text, not turned into dates or formulas", () => {
   const app = loadScript(SCRIPT);
   app.post({ target: "transactions", action: "upsert", transactions: [transaction("a")] });
@@ -421,4 +435,17 @@ test("a version-1 script ignores version-2 requests instead of writing rows", ()
   assert.equal(remove.scriptVersion, undefined);
   assert.equal(read.scriptVersion, undefined);
   assert.equal(read.data.length, 0);
+});
+
+test("an account's reconciled date survives a backup and comes back blank when never set", () => {
+  const app = loadScript(SCRIPT);
+  const account = (id, overrides = {}) => ({
+    id, groupName: "Bank", accountName: `Account ${id}`, initialBalance: 100, initialBalanceDate: "2026-09-30",
+    currentBalance: 100, isHidden: false, displayOrder: id, description: "", includeInTotals: true, ...overrides,
+  });
+  app.post({ target: "accounts", action: "backup", records: [account(1, { reconciledAt: "2026-10-08" }), account(2)] });
+  const accounts = app.get("accounts").data;
+  assert.equal(accounts[0].reconciledAt, "2026-10-08");
+  assert.equal(accounts[1].reconciledAt, "");
+  assert.equal(accounts[0].displayOrder, 1);
 });

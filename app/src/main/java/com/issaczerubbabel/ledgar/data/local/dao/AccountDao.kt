@@ -43,21 +43,12 @@ interface AccountDao {
     @Query("UPDATE account_records SET isHidden = :isHidden WHERE id = :accountId")
     suspend fun updateHiddenStatus(accountId: Long, isHidden: Boolean)
 
-    @Query("SELECT displayOrder FROM account_records WHERE id = :accountId LIMIT 1")
-    suspend fun getDisplayOrder(accountId: Long): Int?
-
     @Query("UPDATE account_records SET displayOrder = :displayOrder WHERE id = :accountId")
     suspend fun updateDisplayOrder(accountId: Long, displayOrder: Int)
 
     @Transaction
-    suspend fun swapDisplayOrder(firstAccountId: Long, secondAccountId: Long) {
-        if (firstAccountId == secondAccountId) return
-
-        val firstOrder = getDisplayOrder(firstAccountId) ?: return
-        val secondOrder = getDisplayOrder(secondAccountId) ?: return
-
-        updateDisplayOrder(firstAccountId, secondOrder)
-        updateDisplayOrder(secondAccountId, firstOrder)
+    suspend fun setDisplayOrder(accountIds: List<Long>) {
+        accountIds.forEachIndexed { index, accountId -> updateDisplayOrder(accountId, index) }
     }
 
     @Transaction

@@ -147,7 +147,15 @@ fun LogScreen(
 
             BucketPreviewSlot(preview = vm.bucketPreview(bucketContext))
 
-            TypeRow(
+            val isAdjustment = vm.selectedType == TransactionType.ADJUSTMENT
+            if (isAdjustment) {
+                Text(
+                    text = TransactionType.label(TransactionType.ADJUSTMENT),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            } else TypeRow(
                 selectedType = vm.selectedType,
                 onSelect = { type ->
                     vm.selectedType = type
@@ -186,6 +194,12 @@ fun LogScreen(
                         },
                         ChipSpec(toName ?: "To account", toName != null) {
                             activeSheet = LogSheet.Account(AccountTarget.To)
+                        }
+                    )
+                } else if (isAdjustment) {
+                    listOf(
+                        ChipSpec(accountName ?: "Account", accountName != null) {
+                            activeSheet = LogSheet.Account(AccountTarget.Account)
                         }
                     )
                 } else {

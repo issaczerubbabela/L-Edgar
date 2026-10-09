@@ -69,6 +69,7 @@ class SheetListsMergerTest {
         merger.mergeOnce(URL)
 
         assertEquals(listOf("Cash", "Wallet"), db.accountDao().getAllAccountsSnapshot().map { it.accountName })
+        assertEquals(listOf(null, "2026-10-06"), db.accountDao().getAllAccountsSnapshot().map { it.reconciledAt })
         assertEquals(
             listOf("Food", "Side hustle"),
             db.dropdownOptionDao().getAllOptionsSnapshot().map { it.name }
@@ -100,7 +101,7 @@ private class FakeSheetLists : ApiService {
     override suspend fun importAccounts(url: String, target: String) = reply(
         AccountImportResponse(status = "ok", data = listOf(
             AccountImportDto(groupName = "Cash", accountName = "cash", initialBalance = 0.0),
-            AccountImportDto(groupName = "Cash", accountName = "Wallet", initialBalance = 1000.0)
+            AccountImportDto(groupName = "Cash", accountName = "Wallet", initialBalance = 1000.0, reconciledAt = "2026-10-06")
         ))
     )
 

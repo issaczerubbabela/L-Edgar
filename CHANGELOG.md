@@ -6,7 +6,7 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `app/src/main/java/com/issaczerubbabel/ledgar/ui/screens/ChangelogData.kt`,
 which is also what the app shows under More > Changelog. Developer notes appear here only.
 
-## [1.3.3] - 2026-10-07
+## [1.4.1] - 2026-10-09
 
 ### Added
 
@@ -15,7 +15,53 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 ### Developer
 
-- Recurring transactions: local-only Room table (migration 23 → 24), a pure RecurrenceCalculator and RecurringRepository, with tests
+- Recurring transactions: local-only Room table (migration 24 → 25), a pure RecurrenceCalculator and RecurringRepository, with tests
+
+## [1.4.0] - 2026-10-09
+
+### Added
+
+- Dropdowns: an Account group can count as Liability, such as a credit card or loan
+- Reconcile: type what your bank shows and a Balance adjustment closes the gap without rewriting history
+- Reconcile: Start fresh from today sets a new starting balance after a long break
+- Accounts: each Account says when you last reconciled it, with a dot after 30 days
+- Accounts: transfers naming an account you don't have are listed, so you can pick the right one
+- Net worth: the trend over 6M, 1Y or All, where your money is, and this month's biggest movers
+
+### Changed
+
+- Accounts: the list, an Account's page and Net worth all show the same balance for an Account
+- Accounts: a Transaction changes a balance only when dated after its As-of date, however late you log it
+- Accounts: Liabilities come from the Liability role, and an overpaid card lowers them
+- Accounts: Assets, Liabilities and Total leave out Accounts that aren't included in totals
+- Net worth (was Overall Stats): cash flow leaves out money moved between your own Accounts
+- Income and expense amounts are lighter on dark backgrounds, so they're easier to read
+- Account page: Balance today, Transfer and Add buttons, and one scrolling statement in place of the chart
+- Account page: each month shows Opening, In, Out and Closing that add up, and rows show the balance after
+- Accounts: a Net worth card with this month's change, and collapsible groups with their subtotals
+- Accounts: drag Accounts and groups in Edit order; Show/Hide and Delete live in an Account's edit form
+- Accounts: one Add/Edit form; a Liability asks for the Amount owed, and the Initial balance is set once
+- Accounts: Archive or Delete… in the edit form; Delete… moves an Account's transactions or deletes them
+
+### Fixed
+
+- Accounts: old transfers that only saved the destination's name count on that Account everywhere
+- Accounts: totals and balances add up to the paisa, with no stray digits or −₹0.00
+- Backups keep when each Account was last reconciled, so an Import no longer forgets it
+- Accounts: a group whose Accounts are all archived or hidden no longer shows an empty ₹0.00 card
+
+### Developer
+
+- AccountMath: one pure module for balances, totals, statements, net worth, cash flow and movers, with tests
+- Room 23 → 24: reconciledAt, Liability roles from the old keywords, and Transfers linked to their destination
+- Adjustment Transaction type (ADR-0009): syncs with its sign, moves only Account balances, never Stats or Buckets
+- formatMoney: exact ₹ amounts with Indian grouping, a true minus and an optional +, with tests
+- Accounts tab and Account page state come from Android-free AccountsTab and AccountPage, with tests
+- AccountForm: the form's validation, signs and delete rule are Android-free, with tests; AddAccountScreen is gone
+- Reconcile: pure outcome and sheet logic, written by AccountRepository in one Room transaction, with tests
+- Apps Script: _accounts gains Reconciled At after Last Backed Up; an older Sheet reads it as blank
+- NetWorthScreen: Android-free state for the Net worth screen, with tests; the Overall Stats files are gone
+- Net worth charts set In/Out and line colours explicitly, and groups below zero stay listed so shares add up
 
 ## [1.3.2] - 2026-10-05
 
@@ -174,7 +220,8 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - Room database, Vico charts and date-parsing tests
 
-[1.3.3]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.3.3
+[1.4.1]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.4.1
+[1.4.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.4.0
 [1.3.2]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.3.2
 [1.3.1]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.3.1
 [1.3.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.3.0
