@@ -6,7 +6,7 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `app/src/main/java/com/issaczerubbabel/ledgar/ui/screens/ChangelogData.kt`,
 which is also what the app shows under More > Changelog. Developer notes appear here only.
 
-## [1.4.0] - 2026-10-08
+## [1.4.0] - 2026-10-09
 
 ### Added
 

@@ -17,7 +17,7 @@ data class ChangelogRelease(
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
         version = "v1.4.0",
-        date = "2026-10-08",
+        date = "2026-10-09",
         added = listOf(
             "Dropdowns: an Account group can count as Liability, such as a credit card or loan",
             "Reconcile: type what your bank shows and a Balance adjustment closes the gap without rewriting history",
