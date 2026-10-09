@@ -225,6 +225,13 @@ val bottomNavItems = listOf(Screen.Trans, Screen.Stats, Screen.Budget, Screen.Ac
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
+    // What a transaction sheet's Edit and Copy buttons open, wherever the sheet is.
+    val editTransaction: (Long) -> Unit = { id ->
+        navController.navigate(logRoute(transactionId = id)) { launchSingleTop = true }
+    }
+    val copyTransaction: (Long, Boolean) -> Unit = { id, useToday ->
+        navController.navigate(logRoute(copyTransactionId = id, useTodayDateForCopy = useToday)) { launchSingleTop = true }
+    }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
@@ -605,18 +612,8 @@ fun AppNavigation() {
                             launchSingleTop = true; restoreState = true
                         }
                     },
-                    onNavigateToEditTransaction = { transactionId ->
-                        navController.navigate(logRoute(transactionId)) {
-                            launchSingleTop = true
-                        }
-                    },
-                    onNavigateToCopyTransaction = { transactionId, useToday ->
-                        navController.navigate(
-                            logRoute(copyTransactionId = transactionId, useTodayDateForCopy = useToday)
-                        ) {
-                            launchSingleTop = true
-                        }
-                    },
+                    onNavigateToEditTransaction = editTransaction,
+                    onNavigateToCopyTransaction = copyTransaction,
                     onNavigateToBookmarks = {
                         navController.navigate(Screen.Bookmarks.route) {
                             launchSingleTop = true
@@ -860,22 +857,16 @@ fun AppNavigation() {
                 BookmarksScreen(
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() },
-                    onTransactionClick = { transactionId ->
-                        navController.navigate(logRoute(transactionId = transactionId)) {
-                            launchSingleTop = true
-                        }
-                    }
+                    onEditTransaction = editTransaction,
+                    onCopyTransaction = copyTransaction
                 )
             }
             composable(Screen.Search.route) {
                 SearchScreen(
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() },
-                    onTransactionClick = { transactionId ->
-                        navController.navigate(logRoute(transactionId = transactionId)) {
-                            launchSingleTop = true
-                        }
-                    }
+                    onEditTransaction = editTransaction,
+                    onCopyTransaction = copyTransaction
                 )
             }
             composable(Screen.FilterSelection.route) {
@@ -910,20 +901,15 @@ fun AppNavigation() {
                 FilteredTransactionsScreen(
                     navInsets = innerPadding,
                     onBack = { navController.popBackStack() },
-                    onNavigateToEditTransaction = { transactionId ->
-                        navController.navigate(logRoute(transactionId = transactionId)) {
-                            launchSingleTop = true
-                        }
-                    }
+                    onNavigateToEditTransaction = editTransaction
                 )
             }
             composable("account_detail/{accountId}") {
                 AccountDetailScreen(
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() },
-                    onOpenTransaction = { transactionId ->
-                        navController.navigate(logRoute(transactionId = transactionId)) { launchSingleTop = true }
-                    },
+                    onEditTransaction = editTransaction,
+                    onCopyTransaction = copyTransaction,
                     onAddTransaction = { type, accountId ->
                         navController.navigate(logRoute(prefillType = type, prefillAccountId = accountId)) {
                             launchSingleTop = true

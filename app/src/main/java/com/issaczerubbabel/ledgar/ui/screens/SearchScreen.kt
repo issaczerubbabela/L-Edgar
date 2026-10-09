@@ -8,17 +8,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -32,32 +29,36 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
-import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
-import com.issaczerubbabel.ledgar.ui.components.isAdjustment
-import com.issaczerubbabel.ledgar.ui.components.listAmount
-import com.issaczerubbabel.ledgar.ui.components.listDetails
-import com.issaczerubbabel.ledgar.ui.components.listTitle
 import com.issaczerubbabel.ledgar.viewmodel.SearchUiState
+import com.issaczerubbabel.ledgar.ledger.Ledger
+import com.issaczerubbabel.ledgar.ui.components.TransactionRow
+import com.issaczerubbabel.ledgar.ui.components.TransactionSheetHost
 import com.issaczerubbabel.ledgar.viewmodel.SearchViewModel
+import com.issaczerubbabel.ledgar.viewmodel.TransactionActionsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
     innerPadding: PaddingValues,
     onBack: () -> Unit,
-    onTransactionClick: (Long) -> Unit,
-    vm: SearchViewModel = hiltViewModel()
+    onEditTransaction: (Long) -> Unit,
+    onCopyTransaction: (id: Long, useToday: Boolean) -> Unit,
+    vm: SearchViewModel = hiltViewModel(),
+    actionsVm: TransactionActionsViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
+    val accounts by actionsVm.accounts.collectAsStateWithLifecycle()
+    // Each result's row, and its date until Ledger 6/10 (#75) groups results under dates instead.
+    val rows = remember(state.results, accounts) {
+        state.results.map { Ledger.row(it, accounts) to Ledger.details(it, accounts).date }
+    }
+    var sheetTransactionId by remember { mutableStateOf<Long?>(null) }
 
     Scaffold(
         topBar = {
@@ -130,10 +131,11 @@ fun SearchScreen(
                 }
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(state.results, key = { it.id }) { record ->
-                        SearchResultRow(
-                            record = record,
-                            onClick = { onTransactionClick(record.id) }
+                    items(rows, key = { it.first.id }) { (row, date) ->
+                        TransactionRow(
+                            row = row,
+                            onClick = { sheetTransactionId = row.id },
+                            trailingLine = date
                         )
                         HorizontalDivider(
                             color = MaterialTheme.colorScheme.outlineVariant,
@@ -143,6 +145,16 @@ fun SearchScreen(
                 }
             }
         }
+    }
+
+    state.results.firstOrNull { it.id == sheetTransactionId }?.let { record ->
+        TransactionSheetHost(
+            transaction = record,
+            onDismiss = { sheetTransactionId = null },
+            onEdit = onEditTransaction,
+            onCopy = onCopyTransaction,
+            vm = actionsVm
+        )
     }
 }
 
@@ -241,43 +253,6 @@ private fun SummaryCell(label: String, value: Double, modifier: Modifier) {
             text = "₹ %,.2f".format(value),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold
-        )
-    }
-}
-
-@Composable
-private fun SearchResultRow(record: ExpenseRecord, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = record.listTitle(),
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = record.listAmount(),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                fontStyle = if (record.isAdjustment) FontStyle.Italic else null,
-                color = if (record.isAdjustment) MaterialTheme.colorScheme.tertiary else Color.Unspecified
-            )
-        }
-
-        Text(
-            text = record.listDetails(),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
         )
     }
 }

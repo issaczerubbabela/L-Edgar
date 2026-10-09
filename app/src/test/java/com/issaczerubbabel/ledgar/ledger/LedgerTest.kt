@@ -20,9 +20,9 @@ class LedgerTest {
     private var nextId = 1L
     private fun txn(
         date: String, type: String, amount: Double, category: String = "", description: String = "",
-        accountId: Long? = null, from: Long? = null, to: Long? = null, id: Long = nextId++
+        accountId: Long? = null, from: Long? = null, to: Long? = null, id: Long = nextId++, note: String = ""
     ) = ExpenseRecord(id = id, date = date, type = type, category = category, description = description,
-        amount = amount, accountId = accountId, remarks = "", fromAccountId = from, toAccountId = to)
+        amount = amount, accountId = accountId, remarks = note, fromAccountId = from, toAccountId = to)
 
     private fun build(transactions: List<ExpenseRecord>, month: YearMonth = october, pending: Set<Long> = emptySet()) =
         Ledger.build(transactions, accounts, month, today, pending)
@@ -187,6 +187,46 @@ class LedgerTest {
         assertEquals("212", friday.expenseLabel)
         assertEquals(1, friday.transactionCount)
         assertEquals(null, ledger.calendar.single { it.date == LocalDate.of(2026, 10, 8) }.netLabel)
+    }
+
+    @Test
+    fun aRowOutsideTheLedgerLooksTheSameAsOnIt() {
+        val transfer = txn("2026-03-14", "Transfer", 5000.0, from = 1, to = 3)
+
+        val row = Ledger.row(transfer, accounts)
+
+        assertEquals(build(listOf(transfer), month = YearMonth.of(2026, 3)).days.single().rows.single(), row)
+    }
+
+    @Test
+    fun theSheetShowsEverythingAboutAnExpense() {
+        val details = Ledger.details(
+            txn("2026-10-09", "Expense", 1212.5, "Transport", "Uber to office", accountId = 2, note = "Client visit"),
+            accounts
+        )
+
+        assertEquals("₹1,212.50", details.amount)
+        assertEquals("Expense", details.typeLabel)
+        assertEquals("Uber to office", details.description)
+        assertEquals("Fri, 9 Oct 2026", details.date)
+        assertEquals("9 Oct 2026", details.shortDate)
+        assertEquals("HDFC Credit card", details.accounts)
+        assertEquals("Transport", details.category)
+        assertEquals("Client visit", details.note)
+    }
+
+    @Test
+    fun aTransferOrBalanceAdjustmentHasNoCategoryInTheSheet() {
+        val transfer = Ledger.details(txn("2026-10-09", "Transfer", 5000.0, "Food", from = 1, to = 3), accounts)
+        val adjustment = Ledger.details(txn("2026-10-09", "Adjustment", -340.0, accountId = 3), accounts)
+
+        assertEquals(null, transfer.category)
+        assertEquals("HDFC Savings → Wallet", transfer.accounts)
+        assertEquals("Transfer", transfer.description)
+        assertEquals(null, adjustment.category)
+        assertEquals("Balance adjustment", adjustment.typeLabel)
+        assertEquals("−₹340", adjustment.amount)
+        assertEquals(null, adjustment.note)
     }
 
     @Test

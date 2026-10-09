@@ -2,35 +2,24 @@ package com.issaczerubbabel.ledgar.ui.screens
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.CallMade
-import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DoneAll
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -56,20 +45,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.issaczerubbabel.ledgar.account.StatementRowKind
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseOrange
 import com.issaczerubbabel.ledgar.ui.theme.IncomeBlue
 import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.viewmodel.AccountDetailViewModel
 import com.issaczerubbabel.ledgar.viewmodel.ReconcileViewModel
 import com.issaczerubbabel.ledgar.viewmodel.StatementMonthUi
-import com.issaczerubbabel.ledgar.viewmodel.StatementRowUi
+import com.issaczerubbabel.ledgar.ui.components.TransactionRow
+import com.issaczerubbabel.ledgar.ui.components.TransactionSheetHost
 
 /**
  * An Account's page: its balance today, quick Transfer and Add, and one continuous statement,
@@ -80,7 +68,8 @@ import com.issaczerubbabel.ledgar.viewmodel.StatementRowUi
 fun AccountDetailScreen(
     innerPadding: PaddingValues,
     onBack: () -> Unit,
-    onOpenTransaction: (Long) -> Unit,
+    onEditTransaction: (Long) -> Unit,
+    onCopyTransaction: (id: Long, useToday: Boolean) -> Unit,
     onAddTransaction: (type: String, accountId: Long) -> Unit,
     onEditAccount: (Long) -> Unit,
     vm: AccountDetailViewModel = hiltViewModel(),
@@ -88,6 +77,7 @@ fun AccountDetailScreen(
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
     var showReconcile by remember { mutableStateOf(false) }
+    var sheetTransactionId by remember { mutableStateOf<Long?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) {
@@ -193,11 +183,17 @@ fun AccountDetailScreen(
                     MonthHeader(month)
                 }
                 items(month.rows, key = { "row-${it.transactionId}" }) { row ->
-                    StatementRowItem(row = row, onClick = { onOpenTransaction(row.transactionId) })
+                    TransactionRow(
+                        row = row.row,
+                        onClick = { sheetTransactionId = row.transactionId },
+                        // A row before the As-of date is listed but doesn't count.
+                        modifier = Modifier.alpha(if (row.counts) 1f else 0.6f),
+                        trailingLine = row.trailingLine
+                    )
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant,
                         thickness = 0.5.dp,
-                        modifier = Modifier.padding(start = 68.dp)
+                        modifier = Modifier.padding(start = 80.dp)
                     )
                 }
             }
@@ -206,6 +202,16 @@ fun AccountDetailScreen(
 
     if (showReconcile) {
         ReconcileSheet(vm = reconcileVm, onDismiss = { showReconcile = false })
+    }
+
+    val sheetRow = state.months.firstNotNullOfOrNull { month -> month.rows.firstOrNull { it.transactionId == sheetTransactionId } }
+    sheetRow?.let { row ->
+        TransactionSheetHost(
+            transaction = row.transaction,
+            onDismiss = { sheetTransactionId = null },
+            onEdit = onEditTransaction,
+            onCopy = onCopyTransaction
+        )
     }
 }
 
@@ -304,74 +310,5 @@ private fun MonthFigure(label: String, value: String, color: Color, modifier: Mo
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-    }
-}
-
-@Composable
-private fun StatementRowItem(row: StatementRowUi, onClick: () -> Unit) {
-    val isTransfer = row.kind == StatementRowKind.TRANSFER_IN || row.kind == StatementRowKind.TRANSFER_OUT
-    val isAdjustment = row.kind == StatementRowKind.ADJUSTMENT
-    val amountColor = when {
-        isTransfer || isAdjustment -> MaterialTheme.colorScheme.onBackground
-        row.isMoneyIn -> IncomeBlue
-        else -> ExpenseOrange
-    }
-    val icon = when (row.kind) {
-        StatementRowKind.INCOME -> Icons.Filled.ArrowDownward
-        StatementRowKind.EXPENSE -> Icons.Filled.ArrowUpward
-        StatementRowKind.TRANSFER_IN -> Icons.AutoMirrored.Filled.CallReceived
-        StatementRowKind.TRANSFER_OUT -> Icons.AutoMirrored.Filled.CallMade
-        StatementRowKind.ADJUSTMENT -> Icons.Filled.Tune
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .heightIn(min = 64.dp)
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-            .alpha(if (row.counts) 1f else 0.6f),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .then(
-                    if (isAdjustment) Modifier.border(1.5.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                    else Modifier.background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(icon, contentDescription = null, tint = if (isTransfer || isAdjustment) MaterialTheme.colorScheme.onSurfaceVariant else amountColor)
-        }
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                text = row.title,
-                style = MaterialTheme.typography.bodyLarge.copy(fontStyle = if (isAdjustment) FontStyle.Italic else FontStyle.Normal),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = row.subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                text = row.amount,
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-                color = amountColor
-            )
-            if (row.balanceAfter.isNotBlank()) {
-                Text(
-                    text = row.balanceAfter,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
     }
 }

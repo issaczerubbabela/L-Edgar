@@ -35,6 +35,30 @@ data class LedgerRow(
     val isAdjustment: Boolean get() = type == TransactionType.ADJUSTMENT
 }
 
+/** What the transaction sheet shows. */
+data class TransactionDetails(
+    /** The raw type, for colour: [TransactionType]'s values. */
+    val type: String,
+    /** "Expense", "Balance adjustment". */
+    val typeLabel: String,
+    /** "₹1,212.50", signed for a Balance adjustment. */
+    val amount: String,
+    val description: String,
+    /** "Fri, 9 Oct 2026". */
+    val date: String,
+    /** "9 Oct 2026", for "Copy for 9 Oct 2026". */
+    val shortDate: String,
+    /** The Account, or "From → To" for a Transfer. */
+    val accounts: String,
+    /** Null for a Transfer or Balance adjustment, which never have one. */
+    val category: String?,
+    val note: String?,
+    val isBookmarked: Boolean
+) {
+    val isAdjustment: Boolean get() = type == TransactionType.ADJUSTMENT
+    val isTransfer: Boolean get() = type == TransactionType.TRANSFER
+}
+
 /** One day on Daily: its rows newest logged first, and only the sides that moved. */
 data class LedgerDay(
     val date: LocalDate,
@@ -83,6 +107,8 @@ data class LedgerMonth(
 
 private val monthLabelFormat = DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)
 private val weekdayFormat = DateTimeFormatter.ofPattern("EEE", Locale.ENGLISH)
+private val sheetDateFormat = DateTimeFormatter.ofPattern("EEE, d MMM yyyy", Locale.ENGLISH)
+private val shortDateFormat = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
 
 /**
  * The Ledger tab as pure functions: given the Transactions and the month on screen, what the tab
@@ -169,6 +195,29 @@ object Ledger {
     /** The newest month with a Transaction in it, or null when there are none. */
     fun latestMonth(transactions: List<ExpenseRecord>): YearMonth? =
         transactions.mapNotNull(::dateOf).maxOrNull()?.let(YearMonth::from)
+
+    /** [transaction] as a row anywhere else it's listed (Search, Bookmarks, an Account's page). */
+    fun row(transaction: ExpenseRecord, accounts: List<AccountRecord>): LedgerRow =
+        row(transaction, accounts.associate { it.id to it.accountName })
+
+    /** What the transaction sheet shows for [transaction]. */
+    fun details(transaction: ExpenseRecord, accounts: List<AccountRecord>): TransactionDetails {
+        val row = row(transaction, accounts)
+        val date = dateOf(transaction)
+        return TransactionDetails(
+            type = transaction.type,
+            typeLabel = TransactionType.label(transaction.type),
+            amount = row.amount,
+            description = row.description,
+            date = date?.format(sheetDateFormat) ?: transaction.date,
+            shortDate = date?.format(shortDateFormat) ?: transaction.date,
+            accounts = row.accountLabel,
+            // The row already blanks a Transfer's Category; a Balance adjustment's names its type.
+            category = row.category.takeIf { !row.isAdjustment && it.isNotBlank() },
+            note = transaction.remarks.takeIf { it.isNotBlank() },
+            isBookmarked = transaction.isBookmarked
+        )
+    }
 
     private fun row(record: ExpenseRecord, accountNames: Map<Long, String>): LedgerRow {
         val isAdjustment = record.type == TransactionType.ADJUSTMENT

@@ -5,28 +5,28 @@ import com.issaczerubbabel.ledgar.account.Reconcile
 import com.issaczerubbabel.ledgar.account.StatementMonth
 import com.issaczerubbabel.ledgar.account.StatementRow
 import com.issaczerubbabel.ledgar.account.StatementRowKind
+import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountBook
+import com.issaczerubbabel.ledgar.ledger.Ledger
+import com.issaczerubbabel.ledgar.ledger.LedgerRow
+import com.issaczerubbabel.ledgar.util.formatListMoney
 import com.issaczerubbabel.ledgar.util.formatMoney
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** One row of an Account's statement, ready to show. */
+/** One row of an Account's statement: the shared Transaction row, plus its date and the balance after it. */
 data class StatementRowUi(
-    val transactionId: Long,
+    val transaction: ExpenseRecord,
     val kind: StatementRowKind,
-    /** "Rent", "→ HDFC Millennia", "Balance adjustment". */
-    val title: String,
-    /** "2 Oct · October rent", or why the row doesn't count. */
-    val subtitle: String,
-    /** Signed, e.g. "−₹22,000.00". */
-    val amount: String,
-    val isMoneyIn: Boolean,
-    /** "Bal ₹97,110.00"; blank when the row doesn't count. */
-    val balanceAfter: String,
+    val row: LedgerRow,
+    /** "2 Oct · Bal ₹97,110", or "30 Sep · Not counted" before the As-of date. */
+    val trailingLine: String,
     val counts: Boolean
-)
+) {
+    val transactionId: Long get() = transaction.id
+}
 
 /** One month of the statement, where Opening + In − Out = Closing. */
 data class StatementMonthUi(
@@ -66,29 +66,18 @@ private val longDateLabel = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENG
 internal fun accountPage(book: AccountBook, accountId: Long, today: LocalDate = LocalDate.now()): AccountPageUiState? {
     val account = book.accounts.firstOrNull { it.id == accountId } ?: return null
     val record = book.records.firstOrNull { it.id == accountId }
-    val namesById = book.accounts.associate { it.id to it.name }
     val recordsById = book.transactionRecords.associateBy { it.id }
     val balance = AccountMath.balances(book.accounts, book.transactions)[accountId] ?: account.initialBalance
 
-    fun rowUi(row: StatementRow): StatementRowUi {
-        val txn = recordsById[row.transactionId]
-        val other = row.otherAccountId?.let(namesById::get) ?: txn?.toAccountName?.takeIf { it.isNotBlank() }
-        val title = when (row.kind) {
-            StatementRowKind.TRANSFER_IN -> "← ${other ?: "Another account"}"
-            StatementRowKind.TRANSFER_OUT -> "→ ${other ?: "Another account"}"
-            StatementRowKind.ADJUSTMENT -> "Balance adjustment"
-            StatementRowKind.INCOME, StatementRowKind.EXPENSE ->
-                txn?.category?.takeIf { it.isNotBlank() } ?: if (row.kind == StatementRowKind.INCOME) "Income" else "Expense"
-        }
-        val detail = if (row.counts) txn?.description?.takeIf { it.isNotBlank() } else "Before the As-of date, not counted"
+    fun rowUi(row: StatementRow): StatementRowUi? {
+        // Every statement row comes from one of the book's Transactions.
+        val txn = recordsById[row.transactionId] ?: return null
+        val balance = if (row.counts) "Bal ${formatListMoney(row.balanceAfter)}" else "Not counted"
         return StatementRowUi(
-            transactionId = row.transactionId,
+            transaction = txn,
             kind = row.kind,
-            title = title,
-            subtitle = listOfNotNull(row.date.format(dayLabel), detail).joinToString(" · "),
-            amount = formatMoney(row.amount, signed = true),
-            isMoneyIn = row.amount > 0,
-            balanceAfter = if (row.counts) "Bal ${formatMoney(row.balanceAfter)}" else "",
+            row = Ledger.row(txn, book.records),
+            trailingLine = "${row.date.format(dayLabel)} · $balance",
             counts = row.counts
         )
     }
@@ -106,7 +95,7 @@ internal fun accountPage(book: AccountBook, accountId: Long, today: LocalDate = 
         closing = formatMoney(month.closing),
         inSplit = split("Income" to month.income, "Transfers" to month.transfersIn, "Adjustments" to month.adjustmentsIn),
         outSplit = split("Expenses" to month.expenses, "Transfers" to month.transfersOut, "Adjustments" to month.adjustmentsOut),
-        rows = month.rows.map(::rowUi)
+        rows = month.rows.mapNotNull(::rowUi)
     )
 
     return AccountPageUiState(

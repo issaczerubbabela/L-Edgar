@@ -1,17 +1,10 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -27,27 +20,32 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
-import com.issaczerubbabel.ledgar.ui.components.isAdjustment
-import com.issaczerubbabel.ledgar.ui.components.listAmount
-import com.issaczerubbabel.ledgar.ui.components.listDetails
-import com.issaczerubbabel.ledgar.ui.components.listTitle
+import com.issaczerubbabel.ledgar.ledger.Ledger
+import com.issaczerubbabel.ledgar.ui.components.TransactionRow
+import com.issaczerubbabel.ledgar.ui.components.TransactionSheetHost
 import com.issaczerubbabel.ledgar.viewmodel.BookmarksViewModel
+import com.issaczerubbabel.ledgar.viewmodel.TransactionActionsViewModel
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun BookmarksScreen(
     innerPadding: PaddingValues,
     onBack: () -> Unit,
-    onTransactionClick: (Long) -> Unit,
-    vm: BookmarksViewModel = hiltViewModel()
+    onEditTransaction: (Long) -> Unit,
+    onCopyTransaction: (id: Long, useToday: Boolean) -> Unit,
+    vm: BookmarksViewModel = hiltViewModel(),
+    actionsVm: TransactionActionsViewModel = hiltViewModel()
 ) {
     val transactions by vm.bookmarkedTransactions.collectAsStateWithLifecycle()
+    val accounts by actionsVm.accounts.collectAsStateWithLifecycle()
+    val rows = remember(transactions, accounts) { transactions.map { Ledger.row(it, accounts) } }
+    var sheetTransactionId by remember { mutableStateOf<Long?>(null) }
 
     Scaffold(
         topBar = {
@@ -87,60 +85,29 @@ fun BookmarksScreen(
                     .fillMaxSize()
                     .padding(combinedPadding)
             ) {
-                items(transactions, key = { it.id }) { record ->
-                    BookmarkedTransactionRow(
-                        record = record,
-                        onClick = { onTransactionClick(record.id) },
-                        onRemoveBookmark = { vm.removeBookmark(record.id) }
+                items(rows, key = { it.id }) { row ->
+                    TransactionRow(
+                        row = row,
+                        onClick = { sheetTransactionId = row.id },
+                        trailing = {
+                            IconButton(onClick = { vm.removeBookmark(row.id) }) {
+                                Icon(Icons.Filled.Star, contentDescription = "Remove bookmark")
+                            }
+                        }
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
                 }
             }
         }
     }
-}
 
-@Composable
-private fun BookmarkedTransactionRow(
-    record: ExpenseRecord,
-    onClick: () -> Unit,
-    onRemoveBookmark: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = record.listTitle(),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            IconButton(onClick = onRemoveBookmark) {
-                Icon(Icons.Filled.Star, contentDescription = "Remove bookmark")
-            }
-        }
-
-        Text(
-            text = record.listDetails(),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-
-        Text(
-            text = record.listAmount(),
-            style = MaterialTheme.typography.titleSmall,
-            fontStyle = if (record.isAdjustment) FontStyle.Italic else null,
-            color = if (record.isAdjustment) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onBackground
+    transactions.firstOrNull { it.id == sheetTransactionId }?.let { record ->
+        TransactionSheetHost(
+            transaction = record,
+            onDismiss = { sheetTransactionId = null },
+            onEdit = onEditTransaction,
+            onCopy = onCopyTransaction,
+            vm = actionsVm
         )
     }
 }

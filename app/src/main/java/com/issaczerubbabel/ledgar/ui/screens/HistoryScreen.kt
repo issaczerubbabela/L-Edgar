@@ -6,7 +6,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.*
@@ -29,7 +28,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,14 +36,15 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
-import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.ui.components.DropdownField
 import com.issaczerubbabel.ledgar.ui.components.SingleDatePickerDialog
+import com.issaczerubbabel.ledgar.ui.components.TransactionRow
+import com.issaczerubbabel.ledgar.ui.components.TransactionSheet
+import com.issaczerubbabel.ledgar.ui.components.TransactionSheetActions
+import com.issaczerubbabel.ledgar.ledger.Ledger
 import com.issaczerubbabel.ledgar.ui.theme.*
-import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.ledger.LedgerCalendarCell
 import com.issaczerubbabel.ledgar.ledger.LedgerDay
-import com.issaczerubbabel.ledgar.ledger.LedgerRow
 import com.issaczerubbabel.ledgar.ledger.LedgerSummary
 import com.issaczerubbabel.ledgar.util.formatListMoney
 import com.issaczerubbabel.ledgar.viewmodel.HistoryViewModel
@@ -53,7 +52,6 @@ import com.issaczerubbabel.ledgar.viewmodel.MonthlyViewModel
 import com.issaczerubbabel.ledgar.viewmodel.PeriodSummary
 import java.time.DayOfWeek
 import java.time.LocalDate
-import kotlinx.coroutines.launch
 
 private val TABS = listOf("Daily", "Calendar", "Monthly")
 private val monthNames = listOf(
@@ -103,11 +101,8 @@ fun HistoryScreen(
     var showMonthPicker by remember { mutableStateOf(false) }
     var pickerMonth by remember(state.month) { mutableIntStateOf(state.month.monthValue) }
     var pickerYear by remember(state.month) { mutableIntStateOf(state.month.year) }
-    val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val sheetScope = rememberCoroutineScope()
-    var selectedTransaction by remember { mutableStateOf<ExpenseRecord?>(null) }
-    var pendingCopyTransaction by remember { mutableStateOf<ExpenseRecord?>(null) }
-    var showCopyDateDialog by remember { mutableStateOf(false) }
+    // The id, not a copy: the sheet follows the live Transaction and closes if it goes.
+    var sheetTransactionId by remember { mutableStateOf<Long?>(null) }
     var showDeleteSelectedDialog by remember { mutableStateOf(false) }
     var isBatchMenuExpanded by remember { mutableStateOf(false) }
     var pendingBatchAction by remember { mutableStateOf<BatchAction?>(null) }
@@ -235,7 +230,7 @@ fun HistoryScreen(
                                 if (vm.isSelectionMode()) {
                                     vm.toggleTransactionSelection(record.id)
                                 } else {
-                                    selectedTransaction = record
+                                    sheetTransactionId = record.id
                                 }
                             },
                             onTransactionLongClick = { record ->
@@ -315,118 +310,16 @@ fun HistoryScreen(
         )
     }
 
-    selectedTransaction?.let { record ->
-        ModalBottomSheet(
-            onDismissRequest = { selectedTransaction = null },
-            sheetState = bottomSheetState
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(
-                    text = record.description.ifBlank { record.category },
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                TextButton(
-                    onClick = {
-                        selectedTransaction = null
-                        onNavigateToEditTransaction(record.id)
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Edit", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
-                }
-
-                TextButton(
-                    onClick = {
-                        vm.toggleBookmark(record)
-                        selectedTransaction = null
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "Toggle Bookmark",
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Start
-                    )
-                }
-
-                TextButton(
-                    onClick = {
-                        selectedTransaction = null
-                        pendingCopyTransaction = record
-                        showCopyDateDialog = true
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Copy", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
-                }
-
-                TextButton(
-                    onClick = {
-                        vm.delete(record)
-                        sheetScope.launch {
-                            bottomSheetState.hide()
-                            selectedTransaction = null
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Delete", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-            }
-        }
-    }
-
-    if (showCopyDateDialog) {
-        val record = pendingCopyTransaction
-        AlertDialog(
-            onDismissRequest = {
-                showCopyDateDialog = false
-                pendingCopyTransaction = null
-            },
-            title = { Text("Which date to use?") },
-            text = { Text("Choose whether the copied transaction keeps its original date or uses today.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        record?.let { onNavigateToCopyTransaction(it.id, false) }
-                        showCopyDateDialog = false
-                        pendingCopyTransaction = null
-                    }
-                ) {
-                    Text("Original Date")
-                }
-            },
-            dismissButton = {
-                Row {
-                    TextButton(
-                        onClick = {
-                            record?.let { onNavigateToCopyTransaction(it.id, true) }
-                            showCopyDateDialog = false
-                            pendingCopyTransaction = null
-                        }
-                    ) {
-                        Text("Today")
-                    }
-                    TextButton(
-                        onClick = {
-                            showCopyDateDialog = false
-                            pendingCopyTransaction = null
-                        }
-                    ) {
-                        Text("Cancel")
-                    }
-                }
-            }
+    allVisibleRecords.firstOrNull { it.id == sheetTransactionId }?.let { record ->
+        TransactionSheet(
+            details = Ledger.details(record, accounts),
+            actions = TransactionSheetActions(
+                onEdit = { onNavigateToEditTransaction(record.id) },
+                onToggleBookmark = { vm.toggleBookmark(record) },
+                onCopy = { useToday -> onNavigateToCopyTransaction(record.id, useToday) },
+                onDelete = { vm.delete(record) }
+            ),
+            onDismiss = { sheetTransactionId = null }
         )
     }
 
@@ -1064,75 +957,6 @@ private fun DayHeader(day: LedgerDay) {
         color = MaterialTheme.colorScheme.outlineVariant,
         thickness = 0.5.dp
     )
-}
-
-// ── Transaction Row ───────────────────────────────────────────────────────────
-
-@Composable
-@OptIn(ExperimentalFoundationApi::class)
-private fun TransactionRow(
-    row: LedgerRow,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit
-) {
-    val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val categoryColumnWidth = if (screenWidthDp >= 600) 128.dp else 96.dp
-    val isIncome  = row.type == TransactionType.INCOME
-    val isExpense = row.type == TransactionType.EXPENSE
-    // A Balance adjustment only corrects a balance, so it reads apart from money in and out.
-    val isAdjustment = row.isAdjustment
-    val amountColor = when {
-        isIncome -> IncomeBlue
-        isExpense -> ExpenseOrange
-        isAdjustment -> MaterialTheme.colorScheme.tertiary
-        else -> TransferGray
-    }
-    val selectedBg = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.32f)
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(if (isSelected) selectedBg else MaterialTheme.colorScheme.background)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(row.category,
-            style = MaterialTheme.typography.bodySmall,
-            fontStyle = if (isAdjustment) FontStyle.Italic else null,
-            color = if (isAdjustment) amountColor else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(categoryColumnWidth),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            softWrap = true,
-            lineHeight = responsiveTextSize(baseSp = 14f, minSp = 13f, maxSp = 15f))
-        Spacer(Modifier.width(8.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(row.description,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(row.accountLabel,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                softWrap = false)
-        }
-        Spacer(Modifier.width(8.dp))
-        Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(min = 72.dp)) {
-            // In full, never ellipsised: the description gives way instead.
-            Text(
-                text = row.amount,
-                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                fontStyle = if (isAdjustment) FontStyle.Italic else null,
-                color = amountColor,
-                maxLines = 1,
-                softWrap = false
-            )
-        }
-    }
 }
 
 @Composable
