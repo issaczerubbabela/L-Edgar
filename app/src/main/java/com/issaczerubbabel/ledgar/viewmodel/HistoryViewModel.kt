@@ -14,13 +14,24 @@ import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
 import com.issaczerubbabel.ledgar.ledger.Ledger
 import com.issaczerubbabel.ledgar.ledger.LedgerMonth
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.YearMonth
 import javax.inject.Inject
+
+/** A delete still offering Undo: hidden from the Ledger, written only once it's final. */
+data class PendingDelete(
+    val transaction: ExpenseRecord,
+    /** "Deleted “Uber to office” · ₹212". */
+    val message: String
+)
 
 // ── ViewModel ─────────────────────────────────────────────────────────────────
 
@@ -110,10 +121,59 @@ class HistoryViewModel @Inject constructor(
         clearSelection()
     }
 
+    // ── Delete with Undo ──────────────────────────────────────────────────────
+
+    private val _pendingDelete = MutableStateFlow<PendingDelete?>(null)
+    /** The delete the Undo snackbar is offering, if any. */
+    val pendingDelete: StateFlow<PendingDelete?> = _pendingDelete.asStateFlow()
+    private var undoTimer: Job? = null
+    // A final delete must land even if the ViewModel is cleared mid-write.
+    private val commitScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * Hides [record] at once and offers Undo, writing nothing yet: SyncTriggers asks for a Sync the
+     * moment a row turns unsynced, so marking it now and clearing it on Undo would race that Sync.
+     * Another delete finalises this one first.
+     */
     fun delete(record: ExpenseRecord) {
-        viewModelScope.launch {
-            repository.delete(record)
+        commitPendingDelete()
+        _pendingDelete.value = PendingDelete(record, Ledger.deletedMessage(record, accounts.value))
+        pendingDeleteIds.update { it + record.id }
+        undoTimer = viewModelScope.launch {
+            delay(UNDO_WINDOW_MS)
+            undoTimer = null
+            commitPendingDelete()
         }
+    }
+
+    /** Brings [pending] back untouched (Room never saw it), unless a newer delete has replaced it. */
+    fun undoDelete(pending: PendingDelete) {
+        if (_pendingDelete.value != pending) return
+        undoTimer?.cancel()
+        undoTimer = null
+        _pendingDelete.value = null
+        pendingDeleteIds.update { it - pending.transaction.id }
+    }
+
+    /** Makes the pending delete final with the usual soft delete, so it syncs as any delete does. */
+    fun commitPendingDelete() {
+        val pending = _pendingDelete.value ?: return
+        undoTimer?.cancel()
+        undoTimer = null
+        _pendingDelete.value = null
+        commitScope.launch {
+            try {
+                repository.delete(pending.transaction)
+            } finally {
+                // Hidden until the soft delete lands, so the row never flashes back; shown again
+                // if the write failed, since it's still there.
+                pendingDeleteIds.update { it - pending.transaction.id }
+            }
+        }
+    }
+
+    override fun onCleared() {
+        commitPendingDelete()
     }
 
     fun onTransactionLongPress(id: Long) {
@@ -134,23 +194,17 @@ class HistoryViewModel @Inject constructor(
 
     fun isSelectionMode(): Boolean = selectedTxIds.isNotEmpty()
 
-    fun selectedSum(records: List<ExpenseRecord>): Double {
+    /** The selected Transactions among those the Ledger shows. */
+    fun selectedTransactions(): List<ExpenseRecord> {
         val selected = selectedTxIds.toSet()
-        return records
-            .asSequence()
-            .filter { selected.contains(it.id) }
-            .sumOf { record ->
-                when (record.type) {
-                    "Income" -> record.amount
-                    "Expense" -> -record.amount
-                    else -> 0.0
-                }
-            }
+        return uiState.value.days.flatMap { day -> day.rows.map { it.record } }.filter { it.id in selected }
     }
 
+    /** Deletes the selection at once, with no Undo: the confirm before it is the safety. */
     fun deleteSelectedTransactions() {
         val ids = selectedTxIds.toList()
         if (ids.isEmpty()) return
+        commitPendingDelete()
         viewModelScope.launch {
             repository.deleteTransactionsByIds(ids)
             clearSelection()
@@ -197,5 +251,9 @@ class HistoryViewModel @Inject constructor(
         viewModelScope.launch {
             repository.setBookmarked(id = record.id, isBookmarked = !record.isBookmarked)
         }
+    }
+
+    private companion object {
+        const val UNDO_WINDOW_MS = 5_000L
     }
 }

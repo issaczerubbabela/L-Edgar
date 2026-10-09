@@ -8,11 +8,16 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 ## [1.5.0] - 2026-10-09
 
+### Added
+
+- Ledger: Undo a deleted transaction for 5 seconds; nothing reaches the Sheet until the delete is final
+
 ### Changed
 
 - Ledger: the summary reads Income, Expenses and Net, and amounts use Indian grouping without ".00"
 - Ledger: transactions look the same here, in Search, Bookmarks and on Account pages, and a tap opens one sheet
 - Ledger: a transaction's sheet has Copy for today and Copy for its date, and Bookmark says what it'll do
+- Ledger: the confirm before deleting several transactions names how many and their Net
 
 ### Fixed
 
@@ -25,6 +30,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Glossary: Net (the Ledger's raw Income minus Expenses) and Ledger (the tab that lists every Transaction)
 - Ledger: a pure Ledger module builds the summary, day groups and Calendar cells off the main thread, with tests
 - Ledger: one shared Transaction row and transaction sheet in ui/components; the Ledger module builds their contents
+- Ledger: a pending delete lives only in the Ledger ViewModel until final, so Undo never races a Sync
 
 ## [1.4.0] - 2026-10-09
 

@@ -230,6 +230,30 @@ class LedgerTest {
     }
 
     @Test
+    fun theUndoMessageNamesWhatWasDeleted() {
+        assertEquals("Deleted “Uber to office” · ₹212",
+            Ledger.deletedMessage(txn("2026-10-09", "Expense", 212.0, "Transport", "Uber to office"), accounts))
+        assertEquals("Deleted “Transport” · ₹1,250.50",
+            Ledger.deletedMessage(txn("2026-10-09", "Expense", 1250.5, "Transport"), accounts))
+    }
+
+    @Test
+    fun aBatchDeleteAsksWithTheCountAndTheNetOfTheSelection() {
+        val selected = listOf(
+            txn("2026-10-09", "Expense", 5000.0, "Rent"),
+            txn("2026-10-08", "Income", 1000.0, "Refund"),
+            txn("2026-10-08", "Expense", 250.0, "Food"),
+            txn("2026-10-07", "Transfer", 9000.0, from = 1, to = 3),
+            txn("2026-10-07", "Adjustment", -340.0, accountId = 3),
+            txn("2026-10-06", "Expense", 0.0, "Food")
+        )
+
+        assertEquals(-4250.0, Ledger.net(selected), 0.0)
+        assertEquals("Delete 6 transactions (−₹4,250)?", Ledger.deleteConfirm(selected))
+        assertEquals("Delete 1 transaction (₹1,000)?", Ledger.deleteConfirm(selected.subList(1, 2)))
+    }
+
+    @Test
     fun theLatestMonthIsTheNewestWithATransaction() {
         assertEquals(YearMonth.of(2026, 11), Ledger.latestMonth(listOf(
             txn("2026-09-30", "Expense", 1.0), txn("2026-11-02", "Income", 1.0), txn("not a date", "Expense", 1.0)

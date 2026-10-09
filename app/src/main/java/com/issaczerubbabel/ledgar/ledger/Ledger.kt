@@ -196,6 +196,21 @@ object Ledger {
     fun latestMonth(transactions: List<ExpenseRecord>): YearMonth? =
         transactions.mapNotNull(::dateOf).maxOrNull()?.let(YearMonth::from)
 
+    /** Income − Expenses of [transactions], as the Ledger counts it: Transfers and Balance adjustments add nothing. */
+    fun net(transactions: List<ExpenseRecord>): Double = Totals.of(transactions).net
+
+    /** "Delete 6 transactions (−₹4,250)?": what a batch delete asks before it happens. */
+    fun deleteConfirm(selected: List<ExpenseRecord>): String {
+        val noun = if (selected.size == 1) "transaction" else "transactions"
+        return "Delete ${selected.size} $noun (${formatListMoney(net(selected))})?"
+    }
+
+    /** "Deleted “Uber to office” · ₹212": the Undo snackbar's text. */
+    fun deletedMessage(transaction: ExpenseRecord, accounts: List<AccountRecord>): String {
+        val row = row(transaction, accounts)
+        return "Deleted “${row.description}” · ${row.amount}"
+    }
+
     /** [transaction] as a row anywhere else it's listed (Search, Bookmarks, an Account's page). */
     fun row(transaction: ExpenseRecord, accounts: List<AccountRecord>): LedgerRow =
         row(transaction, accounts.associate { it.id to it.accountName })
