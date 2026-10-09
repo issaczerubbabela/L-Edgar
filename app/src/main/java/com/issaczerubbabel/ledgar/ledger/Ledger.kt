@@ -117,22 +117,18 @@ private val shortDateFormat = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.E
 object Ledger {
 
     /**
-     * The Ledger for [month]. Transactions in [pendingDeleteIds] are waiting on Undo: they are left
-     * out of every figure, so the screen updates before the delete is written.
+     * The Ledger for [month], narrowed to [filter]. Transactions in [pendingDeleteIds] are waiting on
+     * Undo: they are left out of every figure, so the screen updates before the delete is written.
      */
     fun build(
         transactions: List<ExpenseRecord>,
         accounts: List<AccountRecord>,
         month: YearMonth,
         today: LocalDate,
-        pendingDeleteIds: Set<Long> = emptySet()
+        pendingDeleteIds: Set<Long> = emptySet(),
+        filter: LedgerFilter = LedgerFilter()
     ): LedgerMonth {
-        // Each date is parsed once per build.
-        val inMonth = transactions.mapNotNull { record ->
-            if (record.id in pendingDeleteIds) return@mapNotNull null
-            val date = dateOf(record) ?: return@mapNotNull null
-            if (YearMonth.from(date) == month) Dated(date, record) else null
-        }
+        val inMonth = datedInMonth(transactions, month, pendingDeleteIds).filter { filter.matches(it.transaction) }
         val totals = Totals.of(inMonth.map { it.transaction })
         val byDate = inMonth.groupBy({ it.date }, { it.transaction })
         val accountNames = accounts.associate { it.id to it.accountName }
@@ -267,6 +263,18 @@ object Ledger {
             else -> name(record.accountId, record.accountName)
         }
     }
+
+    /** [month]'s Transactions, less those waiting on Undo. */
+    internal fun monthTransactions(transactions: List<ExpenseRecord>, month: YearMonth, pendingDeleteIds: Set<Long>) =
+        datedInMonth(transactions, month, pendingDeleteIds).map { it.transaction }
+
+    // Each date is parsed once per build.
+    private fun datedInMonth(transactions: List<ExpenseRecord>, month: YearMonth, pendingDeleteIds: Set<Long>): List<Dated> =
+        transactions.mapNotNull { record ->
+            if (record.id in pendingDeleteIds) return@mapNotNull null
+            val date = dateOf(record) ?: return@mapNotNull null
+            if (YearMonth.from(date) == month) Dated(date, record) else null
+        }
 
     private fun dateOf(record: ExpenseRecord): LocalDate? =
         parseFlexibleDate(record.date) ?: record.remoteTimestamp?.let(::parseFlexibleDate)

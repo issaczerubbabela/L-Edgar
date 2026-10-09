@@ -328,6 +328,86 @@ class LedgerTest {
         assertEquals(null, Ledger.sharedDate(mixed))
     }
 
+    // October for filtering: HDFC Savings (1), HDFC Credit card (2), Wallet (3).
+    private val filterMonth = listOf(
+        txn("2026-10-02", "Expense", 400.0, "Food", accountId = 2, id = 201),
+        txn("2026-10-03", "Expense", 212.0, "Transport", accountId = 2, id = 202),
+        txn("2026-10-04", "Expense", 1000.0, "Food", accountId = 3, id = 203),
+        txn("2026-10-01", "Income", 50000.0, "Salary", accountId = 1, id = 204),
+        txn("2026-10-05", "Transfer", 5000.0, from = 1, to = 3, id = 205),
+        txn("2026-10-06", "Adjustment", -340.0, accountId = 3, id = 206),
+        txn("2026-10-07", "Expense", 50.0, "Snacks", accountId = 3, id = 207)
+    )
+    private val expenseList = listOf("Food", "Transport", "Rent", "Shopping")
+    private val incomeList = listOf("Salary", "Refund")
+
+    private fun filtered(filter: LedgerFilter) =
+        Ledger.build(filterMonth, accounts, october, today, filter = filter)
+
+    private fun ids(ledger: LedgerMonth) = ledger.days.flatMap { day -> day.rows.map { it.id } }.sorted()
+
+    @Test
+    fun choicesInASectionAreOrAndSectionsAreAnd() {
+        val ledger = filtered(LedgerFilter(expenseCategories = setOf("Food", "Transport"), accountIds = setOf(2)))
+
+        assertEquals(listOf(201L, 202L), ids(ledger))
+        assertEquals("₹612", ledger.summary.expenses)
+        assertEquals("₹0", ledger.summary.income)
+    }
+
+    @Test
+    fun aCategoryOnlyMatchesTransactionsOfItsOwnType() {
+        assertEquals(emptyList<Long>(), ids(filtered(LedgerFilter(incomeCategories = setOf("Food")))))
+        assertEquals(listOf(201L, 203L, 204L), ids(filtered(LedgerFilter(expenseCategories = setOf("Food"), incomeCategories = setOf("Salary")))))
+    }
+
+    @Test
+    fun anAccountMatchesOnItsOwnFromOrToSide() {
+        assertEquals(listOf(203L, 205L, 206L, 207L), ids(filtered(LedgerFilter(accountIds = setOf(3)))))
+    }
+
+    @Test
+    fun anEmptyFilterMatchesEverythingAndTheCalendarFollowsTheFilter() {
+        assertEquals(filterMonth.map { it.id }.sorted(), ids(filtered(LedgerFilter())))
+        val food = filtered(LedgerFilter(expenseCategories = setOf("Food")))
+        assertEquals(null, food.calendar.single { it.date == LocalDate.of(2026, 10, 3) }.expenseLabel)
+        assertEquals("400", food.calendar.single { it.date == LocalDate.of(2026, 10, 2) }.expenseLabel)
+    }
+
+    @Test
+    fun filterOptionsAreSortedByThisMonthsAmountWithLeftoversFlaggedAndUnusedFolded() {
+        val options = Ledger.filterOptions(filterMonth, accounts, expenseList, incomeList, october, draft = LedgerFilter())
+
+        assertEquals(listOf("Food", "Transport", "Snacks"), options.expense.used.map { it.label })
+        assertEquals(listOf("₹1,400", "₹212", "₹50"), options.expense.used.map { it.amount })
+        assertEquals(listOf(false, false, true), options.expense.used.map { it.isLeftover })
+        assertEquals(listOf("Rent", "Shopping"), options.expense.unused.map { it.label })
+        assertEquals(listOf("Salary"), options.income.used.map { it.label })
+        assertEquals(1, options.income.unused.size)
+        assertEquals(listOf("HDFC Savings", "Wallet", "HDFC Credit card"), options.accounts.used.map { it.label })
+        assertEquals(7, options.matchCount)
+    }
+
+    @Test
+    fun theSheetCountsWhatTheDraftMatchesAndTicksItsChoices() {
+        val draft = LedgerFilter(expenseCategories = setOf("Food"))
+        val options = Ledger.filterOptions(filterMonth, accounts, expenseList, incomeList, october, draft = draft)
+
+        assertEquals(2, options.matchCount)
+        assertEquals(listOf(true, false, false), options.expense.used.map { it.isSelected })
+    }
+
+    @Test
+    fun anActiveFilterShowsOneChipPerSection() {
+        val filter = LedgerFilter(expenseCategories = setOf("Food", "Transport"), accountIds = setOf(2))
+
+        assertEquals(
+            listOf(FilterChipUi(FilterSection.CATEGORIES, "Food or Transport"), FilterChipUi(FilterSection.ACCOUNTS, "HDFC Credit card")),
+            Ledger.filterChips(filter, accounts)
+        )
+        assertEquals(emptyList<FilterChipUi>(), Ledger.filterChips(LedgerFilter(), accounts))
+    }
+
     @Test
     fun theLatestMonthIsTheNewestWithATransaction() {
         assertEquals(YearMonth.of(2026, 11), Ledger.latestMonth(listOf(

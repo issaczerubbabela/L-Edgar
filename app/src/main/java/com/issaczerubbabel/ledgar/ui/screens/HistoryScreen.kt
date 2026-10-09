@@ -42,6 +42,12 @@ import com.issaczerubbabel.ledgar.ui.components.TransactionRow
 import com.issaczerubbabel.ledgar.ui.components.TransactionSheet
 import com.issaczerubbabel.ledgar.ui.components.TransactionSheetActions
 import com.issaczerubbabel.ledgar.ledger.Ledger
+import com.issaczerubbabel.ledgar.ledger.FilterChipUi
+import com.issaczerubbabel.ledgar.ledger.FilterSection
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.InputChip
 import com.issaczerubbabel.ledgar.ledger.BatchAction
 import com.issaczerubbabel.ledgar.ledger.accountPickerNote
 import com.issaczerubbabel.ledgar.ledger.categoryPickerNote
@@ -54,6 +60,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
 import android.app.Activity
 import androidx.lifecycle.Lifecycle
@@ -97,7 +104,6 @@ fun HistoryScreen(
     onNavigateToCopyTransaction: (Long, Boolean) -> Unit,
     onNavigateToBookmarks: () -> Unit,
     onNavigateToSearch: () -> Unit,
-    onNavigateToFilterSelection: () -> Unit,
     onNavigateToCaptureInbox: () -> Unit,
     onOpenTrip: (Long) -> Unit = {},
     onAddTripExpense: (Long) -> Unit = {},
@@ -120,6 +126,9 @@ fun HistoryScreen(
     var sheetTransactionId by remember { mutableStateOf<Long?>(null) }
     var showDeleteSelectedDialog by remember { mutableStateOf(false) }
     var batchDialog by remember { mutableStateOf<BatchDialog?>(null) }
+    val filter by vm.filter.collectAsStateWithLifecycle()
+    val filterChips by vm.filterChips.collectAsStateWithLifecycle()
+    var showFilterSheet by rememberSaveable { mutableStateOf(false) }
     val allVisibleRecords = remember(state.days) { state.days.flatMap { day -> day.rows.map { it.record } } }
     val selectedCount = vm.selectedTxIds.size
     val selectedNet = Ledger.net(vm.selectedTransactions())
@@ -215,7 +224,12 @@ fun HistoryScreen(
                     periodClickable = canOpenMonthPicker,
                     onBookmarksClick = onNavigateToBookmarks,
                     onSearchClick = onNavigateToSearch,
-                    onFilterClick = onNavigateToFilterSelection
+                    isFilterActive = !filter.isEmpty,
+                    filterCount = filter.activeCount,
+                    onFilterClick = {
+                        vm.startFilterDraft()
+                        showFilterSheet = true
+                    }
                 )
             }
         },
@@ -229,6 +243,9 @@ fun HistoryScreen(
         ) {
             PeriodTabRow(selectedTab, headerBg, headerText) { tabIndex ->
                 selectedTab = tabIndex
+            }
+            if (filterChips.isNotEmpty()) {
+                FilterChipsRow(chips = filterChips, onRemove = vm::removeFilter, onClear = vm::clearFilter)
             }
 
             if (pendingCaptures > 0) {
@@ -250,12 +267,29 @@ fun HistoryScreen(
                     modifier = Modifier.fillMaxSize()
                 ) { page ->
                     when (page) {
-                        1 -> CalendarContent(
+                        1 -> Column {
+                            // A filtered month with nothing in it says so, here as on Daily.
+                            if (!filter.isEmpty && state.days.isEmpty()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "No transactions match",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    TextButton(onClick = vm::clearFilter) { Text("Clear") }
+                                }
+                            }
+                            CalendarContent(
                             cells        = state.calendar,
                             selectedDate = vm.selectedDate,
                             isLight      = isLight,
                             onDaySelect  = vm::selectDate
                         )
+                        }
                         2 -> MonthlyTabScreen(
                             monthGroups = monthlyState.monthGroups,
                             onToggleExpand = monthlyVm::toggleMonthExpanded,
@@ -263,6 +297,8 @@ fun HistoryScreen(
                         )
                         else -> DailyContent(
                             days = state.days,
+                            isFiltered = !filter.isEmpty,
+                            onClearFilter = vm::clearFilter,
                             selectedIds = selectedIdSet,
                             onTransactionClick = { record ->
                                 if (vm.isSelectionMode()) {
@@ -357,6 +393,29 @@ fun HistoryScreen(
             ),
             onDismiss = { sheetTransactionId = null }
         )
+    }
+
+    if (showFilterSheet) {
+        val draft by vm.filterDraft.collectAsStateWithLifecycle()
+        val options by vm.filterOptions.collectAsStateWithLifecycle()
+        options?.let {
+            LedgerFilterSheet(
+                monthLabel = state.monthLabel,
+                options = it,
+                draft = draft,
+                onToggleExpense = vm::toggleExpenseCategory,
+                onToggleIncome = vm::toggleIncomeCategory,
+                onToggleAccount = vm::toggleAccount,
+                onAnyCategory = vm::clearDraftCategories,
+                onAnyAccount = vm::clearDraftAccounts,
+                onClear = vm::clearDraft,
+                onShow = {
+                    vm.applyFilterDraft()
+                    showFilterSheet = false
+                },
+                onDismiss = { showFilterSheet = false }
+            )
+        }
     }
 
     if (showDeleteSelectedDialog) {
@@ -703,11 +762,36 @@ private fun CalendarAmount(text: String, color: Color, weight: FontWeight) {
     )
 }
 
+/** The active filter under the tabs: one removable chip per section, and Clear. */
+@Composable
+private fun FilterChipsRow(chips: List<FilterChipUi>, onRemove: (FilterSection) -> Unit, onClear: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        chips.forEach { chip ->
+            InputChip(
+                selected = true,
+                onClick = { onRemove(chip.section) },
+                label = { Text(chip.label) },
+                trailingIcon = { Icon(Icons.Filled.Close, contentDescription = "Remove filter ${chip.label}", modifier = Modifier.size(18.dp)) }
+            )
+        }
+        TextButton(onClick = onClear) { Text("Clear") }
+    }
+}
+
 // ── Daily List Content ────────────────────────────────────────────────────────
 
 @Composable
 private fun DailyContent(
     days: List<LedgerDay>,
+    isFiltered: Boolean,
+    onClearFilter: () -> Unit,
     selectedIds: Set<Long>,
     onTransactionClick: (ExpenseRecord) -> Unit,
     onTransactionLongClick: (ExpenseRecord) -> Unit,
@@ -715,9 +799,12 @@ private fun DailyContent(
 ) {
     if (days.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No transactions this month",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyMedium)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(if (isFiltered) "No transactions match" else "No transactions this month",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium)
+                if (isFiltered) TextButton(onClick = onClearFilter) { Text("Clear") }
+            }
         }
     } else {
         LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = 96.dp)) {
@@ -757,6 +844,8 @@ private fun MoneyManagerAppBar(
     periodClickable: Boolean,
     onBookmarksClick: () -> Unit,
     onSearchClick: () -> Unit,
+    isFilterActive: Boolean,
+    filterCount: Int,
     onFilterClick: () -> Unit
 ) {
     val compactDevice = LocalConfiguration.current.screenWidthDp < 360
@@ -802,7 +891,12 @@ private fun MoneyManagerAppBar(
         actions = {
             IconButton(onClick = onBookmarksClick) { Icon(Icons.Filled.StarBorder, null, tint = contentColor) }
             IconButton(onClick = onSearchClick) { Icon(Icons.Filled.Search, null, tint = contentColor) }
-            IconButton(onClick = onFilterClick) { Icon(Icons.Filled.Tune, null, tint = contentColor) }
+            IconButton(onClick = onFilterClick) {
+                // Marked while a filter is on, so filtered numbers are never mistaken for the month's.
+                BadgedBox(badge = { if (isFilterActive) Badge { Text(filterCount.toString()) } }) {
+                    Icon(Icons.Filled.Tune, contentDescription = if (isFilterActive) "Filter, $filterCount active" else "Filter", tint = contentColor)
+                }
+            }
         },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = bg)
     )

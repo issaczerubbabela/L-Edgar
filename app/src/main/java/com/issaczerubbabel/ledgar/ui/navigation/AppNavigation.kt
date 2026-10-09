@@ -42,10 +42,10 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Tune
 import com.issaczerubbabel.ledgar.ui.screens.BucketDetailScreen
 import com.issaczerubbabel.ledgar.ui.screens.BudgetHomeScreen
 import com.issaczerubbabel.ledgar.ui.screens.HistoryScreen
+import com.issaczerubbabel.ledgar.viewmodel.HistoryViewModel
 import com.issaczerubbabel.ledgar.ui.screens.TripExpenseScreen
 import com.issaczerubbabel.ledgar.ui.screens.TripReviewScreen
 import com.issaczerubbabel.ledgar.ui.screens.TripScreen
@@ -59,8 +59,6 @@ import com.issaczerubbabel.ledgar.ui.screens.AccountsScreen
 import com.issaczerubbabel.ledgar.ui.screens.AccountFormScreen
 import com.issaczerubbabel.ledgar.ui.screens.BookmarksScreen
 import com.issaczerubbabel.ledgar.ui.screens.DropdownManagementScreen
-import com.issaczerubbabel.ledgar.ui.screens.FilterSelectionScreen
-import com.issaczerubbabel.ledgar.ui.screens.FilteredTransactionsScreen
 import com.issaczerubbabel.ledgar.ui.screens.NetWorthScreen
 import com.issaczerubbabel.ledgar.ui.screens.SearchScreen
 import com.issaczerubbabel.ledgar.ui.screens.MoreScreen
@@ -86,12 +84,6 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     )
     object Trans : Screen("trans", "Trans.", Icons.AutoMirrored.Filled.MenuBook)
     object Search : Screen("search", "Search", Icons.Filled.MoreHoriz)
-    object FilterSelection : Screen("filter_selection", "Filter", Icons.Filled.Tune)
-    object FilteredTransactions : Screen(
-        "filtered_transactions?year={year}&month={month}&incomeIds={incomeIds}&expenseIds={expenseIds}&accountIds={accountIds}",
-        "Filtered",
-        Icons.Filled.Tune
-    )
     object Bookmarks : Screen("bookmarks", "Bookmarks", Icons.Filled.Star)
     object Stats : Screen("stats", "Stats", Icons.Filled.BarChart)
     object Budget : Screen("budget", "Budget", Icons.Filled.AccountBalanceWallet)
@@ -132,7 +124,6 @@ private const val LOG_BASE_ROUTE = "log"
 
 /** Screens reached from the Budget tab; the tab stays highlighted while you are on them. */
 private val BUDGET_SUB_ROUTES = setOf(Screen.StartCycle.route, Screen.PlanBuckets.route, Screen.BucketDetail.route)
-private const val FILTERED_BASE_ROUTE = "filtered_transactions"
 private const val APP_LOCK_AUTHENTICATORS =
     BiometricManager.Authenticators.BIOMETRIC_WEAK or
         BiometricManager.Authenticators.DEVICE_CREDENTIAL
@@ -207,19 +198,6 @@ private fun logRoute(
     return if (params.isEmpty()) LOG_BASE_ROUTE else "$LOG_BASE_ROUTE?${params.joinToString("&")}" 
 }
 
-private fun filteredTransactionsRoute(
-    year: Int,
-    month: Int,
-    incomeIds: Set<Long>,
-    expenseIds: Set<Long>,
-    accountIds: Set<Long>
-): String {
-    val income = incomeIds.sorted().joinToString(",")
-    val expense = expenseIds.sorted().joinToString(",")
-    val accounts = accountIds.sorted().joinToString(",")
-    return "$FILTERED_BASE_ROUTE?year=$year&month=$month&incomeIds=$income&expenseIds=$expense&accountIds=$accounts"
-}
-
 val bottomNavItems = listOf(Screen.Trans, Screen.Stats, Screen.Budget, Screen.Accounts, Screen.More)
 
 @Composable
@@ -256,8 +234,7 @@ fun AppNavigation() {
         currentDest?.route?.startsWith(LOG_BASE_ROUTE) == true && navController.previousBackStackEntry == null
 
     val showBottomBar =
-        currentDest?.route != Screen.FilteredTransactions.route &&
-            currentDest?.route != Screen.Log.route &&
+        currentDest?.route != Screen.Log.route &&
             currentDest?.route != Screen.AccountForm.route
 
     val navigateToTransactionsAfterUnlock = {
@@ -496,6 +473,11 @@ fun AppNavigation() {
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
+                                if (screen != Screen.Trans) {
+                                    // Leaving the Ledger clears its filter, even if Back later returns to it.
+                                    runCatching { navController.getBackStackEntry(Screen.Trans.route) }.getOrNull()
+                                        ?.savedStateHandle?.set(HistoryViewModel.LEFT_LEDGER, true)
+                                }
                                 navController.navigate(screen.route) {
                                     popUpTo(screen.route) { inclusive = true }
                                     launchSingleTop = true
@@ -621,11 +603,6 @@ fun AppNavigation() {
                     },
                     onNavigateToSearch = {
                         navController.navigate(Screen.Search.route) {
-                            launchSingleTop = true
-                        }
-                    },
-                    onNavigateToFilterSelection = {
-                        navController.navigate(Screen.FilterSelection.route) {
                             launchSingleTop = true
                         }
                     },
@@ -867,41 +844,6 @@ fun AppNavigation() {
                     onBack = { navController.popBackStack() },
                     onEditTransaction = editTransaction,
                     onCopyTransaction = copyTransaction
-                )
-            }
-            composable(Screen.FilterSelection.route) {
-                FilterSelectionScreen(
-                    innerPadding = innerPadding,
-                    onBack = { navController.popBackStack() },
-                    onApplyFilters = { year, month, incomeIds, expenseIds, accountIds ->
-                        navController.navigate(
-                            filteredTransactionsRoute(
-                                year = year,
-                                month = month,
-                                incomeIds = incomeIds,
-                                expenseIds = expenseIds,
-                                accountIds = accountIds
-                            )
-                        ) {
-                            launchSingleTop = true
-                        }
-                    }
-                )
-            }
-            composable(
-                route = Screen.FilteredTransactions.route,
-                arguments = listOf(
-                    navArgument("year") { type = NavType.IntType; defaultValue = 0 },
-                    navArgument("month") { type = NavType.IntType; defaultValue = 0 },
-                    navArgument("incomeIds") { type = NavType.StringType; defaultValue = "" },
-                    navArgument("expenseIds") { type = NavType.StringType; defaultValue = "" },
-                    navArgument("accountIds") { type = NavType.StringType; defaultValue = "" }
-                )
-            ) {
-                FilteredTransactionsScreen(
-                    navInsets = innerPadding,
-                    onBack = { navController.popBackStack() },
-                    onNavigateToEditTransaction = editTransaction
                 )
             }
             composable("account_detail/{accountId}") {

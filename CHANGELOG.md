@@ -12,9 +12,11 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - Ledger: Undo a deleted transaction for 5 seconds; nothing reaches the Sheet until the delete is final
 - Ledger: ✕ or Back leaves selection, and Select all in <month> picks every row on screen
+- Ledger: filter the month on screen by category and account, shown as removable chips under the tabs
 
 ### Changed
 
+- Ledger: Filter opens over the month you're looking at; the separate Filter and Filtered screens are gone
 - Ledger: the summary reads Income, Expenses and Net, and amounts use Indian grouping without ".00"
 - Ledger: transactions look the same here, in Search, Bookmarks and on Account pages, and a tap opens one sheet
 - Ledger: a transaction's sheet has Copy for today and Copy for its date, and Bookmark says what it'll do
@@ -27,6 +29,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Ledger: a day's transactions keep their order after a Sync
 - Ledger: a Calendar day where you spent more than you earned shows a minus, in short readable amounts
 - Ledger: Change category no longer gives a Transfer a category or an Expense an income one
+- Ledger: Filter finds Food paid from HDFC, not every Food and every HDFC one, and finds renamed categories
 
 ### Developer
 
@@ -35,6 +38,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Ledger: one shared Transaction row and transaction sheet in ui/components; the Ledger module builds their contents
 - Ledger: a pending delete lives only in the Ledger ViewModel until final, so Undo never races a Sync
 - Ledger: a pure batch plan decides which selected rows a change fits; the DAO guards category and account writes
+- Ledger: filter matching, options and chips live in the Ledger module, with tests; old filter screens deleted
 
 ## [1.4.0] - 2026-10-09
 

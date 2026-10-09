@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
@@ -12,7 +13,13 @@ import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
 import com.issaczerubbabel.ledgar.ledger.BatchAction
+import com.issaczerubbabel.ledgar.ledger.FilterChipUi
+import com.issaczerubbabel.ledgar.ledger.FilterOptions
+import com.issaczerubbabel.ledgar.ledger.FilterSection
 import com.issaczerubbabel.ledgar.ledger.Ledger
+import com.issaczerubbabel.ledgar.ledger.LedgerFilter
+import com.issaczerubbabel.ledgar.ledger.filterChips
+import com.issaczerubbabel.ledgar.ledger.filterOptions
 import com.issaczerubbabel.ledgar.ledger.batchPlan
 import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.ledger.LedgerMonth
@@ -40,6 +47,7 @@ data class PendingDelete(
 
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
     private val repository: ExpenseRepository,
     accountRepository: AccountRepository,
     dropdownOptionRepository: DropdownOptionRepository
@@ -74,6 +82,15 @@ class HistoryViewModel @Inject constructor(
     }
 
     init {
+        // The bottom bar marks the Ledger left when another tab is picked; Back from there finds it clear.
+        viewModelScope.launch {
+            savedStateHandle.getStateFlow(LEFT_LEDGER, false).collect { left ->
+                if (left) {
+                    clearFilter()
+                    savedStateHandle[LEFT_LEDGER] = false
+                }
+            }
+        }
         viewModelScope.launch {
             repository.getAllRecords().collect { records ->
                 if (records.isEmpty()) {
@@ -96,9 +113,16 @@ class HistoryViewModel @Inject constructor(
         }
     }
 
+    /**
+     * The active filter: kept across months and trips to Search or an edit. It's cleared when another
+     * tab is picked ([LEFT_LEDGER]), or when the bottom bar brings back a fresh Ledger.
+     */
+    private val _filter = MutableStateFlow(LedgerFilter())
+    val filter: StateFlow<LedgerFilter> = _filter.asStateFlow()
+
     val uiState: StateFlow<LedgerMonth> =
-        combine(repository.getAllRecords(), accounts, _month, pendingDeleteIds) { records, accounts, month, pending ->
-            Ledger.build(records, accounts, month, LocalDate.now(), pending)
+        combine(repository.getAllRecords(), accounts, _month, pendingDeleteIds, _filter) { records, accounts, month, pending, filter ->
+            Ledger.build(records, accounts, month, LocalDate.now(), pending, filter)
         }
             .flowOn(Dispatchers.Default)
             .stateIn(
@@ -106,6 +130,61 @@ class HistoryViewModel @Inject constructor(
                 SharingStarted.WhileSubscribed(5000),
                 Ledger.build(emptyList(), emptyList(), YearMonth.now(), LocalDate.now())
             )
+
+    val filterChips: StateFlow<List<FilterChipUi>> = combine(_filter, accounts) { filter, accounts ->
+        Ledger.filterChips(filter, accounts)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // ── Filter sheet ──────────────────────────────────────────────────────────
+
+    /** What's ticked in the open filter sheet; applied only with Show. */
+    private val _filterDraft = MutableStateFlow(LedgerFilter())
+    val filterDraft: StateFlow<LedgerFilter> = _filterDraft.asStateFlow()
+
+    private val sheetMonth = combine(_month, _filterDraft, pendingDeleteIds) { month, draft, pending -> Triple(month, draft, pending) }
+    private val categoryLists = combine(expenseCategories, incomeCategories) { expense, income -> expense to income }
+
+    val filterOptions: StateFlow<FilterOptions?> =
+        combine(repository.getAllRecords(), accounts, categoryLists, sheetMonth) { records, accounts, (expense, income), (month, draft, pending) ->
+            Ledger.filterOptions(records, accounts, expense, income, month, draft, pending)
+        }
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** Opens the sheet on the active filter. */
+    fun startFilterDraft() {
+        _filterDraft.value = _filter.value
+    }
+
+    fun toggleExpenseCategory(name: String) = _filterDraft.update { it.copy(expenseCategories = it.expenseCategories.toggle(name)) }
+    fun toggleIncomeCategory(name: String) = _filterDraft.update { it.copy(incomeCategories = it.incomeCategories.toggle(name)) }
+    fun toggleAccount(id: Long) = _filterDraft.update { it.copy(accountIds = it.accountIds.toggle(id)) }
+
+    /** "Any" on the Expense or Income list: that list's choices off; the other keeps its own. */
+    fun clearDraftCategories(income: Boolean) = _filterDraft.update {
+        if (income) it.copy(incomeCategories = emptySet()) else it.copy(expenseCategories = emptySet())
+    }
+    fun clearDraftAccounts() = _filterDraft.update { it.copy(accountIds = emptySet()) }
+    fun clearDraft() {
+        _filterDraft.value = LedgerFilter()
+    }
+
+    fun applyFilterDraft() {
+        _filter.value = _filterDraft.value
+        clearSelection()
+    }
+
+    fun removeFilter(section: FilterSection) {
+        _filter.update { it.without(section) }
+        clearSelection()
+    }
+
+    fun clearFilter() {
+        _filter.value = LedgerFilter()
+        clearSelection()
+    }
+
+    private fun <T> Set<T>.toggle(item: T): Set<T> = if (item in this) this - item else this + item
 
     // ── Month navigation ──────────────────────────────────────────────────────
 
@@ -252,7 +331,10 @@ class HistoryViewModel @Inject constructor(
         }
     }
 
-    private companion object {
-        const val UNDO_WINDOW_MS = 5_000L
+    companion object {
+        private const val UNDO_WINDOW_MS = 5_000L
+
+        /** Set on the Ledger's back-stack entry when another bottom-bar tab is picked. */
+        const val LEFT_LEDGER = "leftLedger"
     }
 }
