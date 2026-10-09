@@ -24,13 +24,10 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -75,20 +72,13 @@ import com.issaczerubbabel.ledgar.ledger.LedgerSummary
 import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.util.formatListMoney
 import com.issaczerubbabel.ledgar.viewmodel.HistoryViewModel
-import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.YearMonth
+import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilledTonalButton
 
 private val TABS = listOf("Daily", "Calendar", "Monthly")
-private val monthNames = listOf(
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-)
-
-@Composable
-private fun responsiveTextSize(baseSp: Float, minSp: Float = 12f, maxSp: Float = 20f) =
-    (
-        baseSp * (LocalConfiguration.current.screenWidthDp / 411f).coerceIn(0.9f, 1.08f)
-    ).coerceIn(minSp, maxSp).sp
 
 /** Which batch-change dialog is open. */
 private enum class BatchDialog { DATE, CATEGORY, ACCOUNT, DESCRIPTION }
@@ -122,8 +112,6 @@ fun HistoryScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     val pagerState = rememberPagerState(pageCount = { TABS.size })
     var showMonthPicker by remember { mutableStateOf(false) }
-    var pickerMonth by remember(state.month) { mutableIntStateOf(state.month.monthValue) }
-    var pickerYear by remember(state.month) { mutableIntStateOf(state.month.year) }
     // The id, not a copy: the sheet follows the live Transaction and closes if it goes.
     var sheetTransactionId by remember { mutableStateOf<Long?>(null) }
     var showDeleteSelectedDialog by remember { mutableStateOf(false) }
@@ -183,12 +171,6 @@ fun HistoryScreen(
         }
     }
 
-    // ── Theme detection ────────────────────────────────────────────────────────
-    // luminance() > 0.5 → light theme (white background)
-    val isLight    = MaterialTheme.colorScheme.background.luminance() > 0.5f
-    val headerBg   = if (isLight) HeaderGreen else MaterialTheme.colorScheme.background
-    val headerText = Color.White   // always white on header (green or black)
-
     val periodLabel = when (selectedTab) {
         2 -> monthly.year.toString()
         else -> state.monthLabel
@@ -216,10 +198,9 @@ fun HistoryScreen(
                     onOpenDialog = { batchDialog = it }
                 )
             } else {
-                MoneyManagerAppBar(
-                    bg = headerBg,
-                    contentColor = headerText,
+                LedgerTopBar(
                     periodLabel = periodLabel,
+                    stepsYears = selectedTab == 2,
                     onPrevPeriod = onPrevPeriod,
                     onNextPeriod = onNextPeriod,
                     onPeriodClick = { if (canOpenMonthPicker) showMonthPicker = true },
@@ -243,16 +224,13 @@ fun HistoryScreen(
                 .padding(top = scaffoldPadding.calculateTopPadding())
                 .padding(bottom = navInsets.calculateBottomPadding())
         ) {
-            PeriodTabRow(selectedTab, headerBg, headerText) { tabIndex ->
+            PeriodTabRow(selectedTab) { tabIndex ->
                 selectedTab = tabIndex
             }
             if (filterChips.isNotEmpty()) {
                 FilterChipsRow(chips = filterChips, onRemove = vm::removeFilter, onClear = vm::clearFilter)
             }
 
-            if (pendingCaptures > 0) {
-                CaptureBanner(count = pendingCaptures, onClick = onNavigateToCaptureInbox)
-            }
             ActiveTripBanner(onOpenTrip = onOpenTrip, onAddExpense = onAddTripExpense)
 
             // Single pinned summary row below tabs
@@ -261,6 +239,15 @@ fun HistoryScreen(
                 else -> state.summary
             }
             SummaryBar(pinnedSummary)
+            // Waiting Captured transactions: a compact chip, not a full-width banner.
+            Ledger.captureChipLabel(pendingCaptures)?.let { label ->
+                AssistChip(
+                    onClick = onNavigateToCaptureInbox,
+                    label = { Text(label) },
+                    leadingIcon = { Icon(Icons.Filled.Inbox, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    modifier = Modifier.padding(horizontal = 12.dp)
+                )
+            }
             HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
 
             Box(modifier = Modifier.weight(1f)) {
@@ -288,7 +275,6 @@ fun HistoryScreen(
                             CalendarContent(
                             cells        = state.calendar,
                             selectedDate = vm.selectedDate,
-                            isLight      = isLight,
                             onDaySelect  = vm::openDay
                         )
                         }
@@ -308,6 +294,12 @@ fun HistoryScreen(
                         )
                         else -> DailyContent(
                             days = state.days,
+                            monthLabel = state.monthLabel,
+                            // From an empty month: start logging in it (today in the current month, else its 1st).
+                            onAdd = {
+                                val today = LocalDate.now()
+                                onAddOnDate(if (YearMonth.from(today) == state.month) today else state.month.atDay(1))
+                            },
                             isFiltered = !filter.isEmpty,
                             onClearFilter = vm::clearFilter,
                             scrollTo = scrollTo,
@@ -350,48 +342,13 @@ fun HistoryScreen(
     }
 
     if (showMonthPicker) {
-        AlertDialog(
-            onDismissRequest = { showMonthPicker = false },
-            title = { Text("Select Month") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    DropdownField(
-                        label = "Month",
-                        options = monthNames,
-                        selected = monthNames[pickerMonth - 1],
-                        onSelect = { selected ->
-                            pickerMonth = monthNames.indexOf(selected) + 1
-                        }
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        IconButton(onClick = { pickerYear -= 1 }) {
-                            Icon(Icons.Filled.ChevronLeft, contentDescription = "Previous year")
-                        }
-                        Text(pickerYear.toString(), style = MaterialTheme.typography.titleMedium)
-                        IconButton(onClick = { pickerYear += 1 }) {
-                            Icon(Icons.Filled.ChevronRight, contentDescription = "Next year")
-                        }
-                    }
-                }
+        MonthGridDialog(
+            selected = state.month,
+            onPick = { month ->
+                vm.setMonthYear(year = month.year, month = month.monthValue)
+                showMonthPicker = false
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.setMonthYear(year = pickerYear, month = pickerMonth)
-                    showMonthPicker = false
-                }) {
-                    Text("OK")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showMonthPicker = false }) {
-                    Text("Cancel")
-                }
-            }
+            onDismiss = { showMonthPicker = false }
         )
     }
 
@@ -615,10 +572,9 @@ private fun CategorySection(title: String, categories: List<String>, onPick: (St
 private fun CalendarContent(
     cells: List<LedgerCalendarCell>,
     selectedDate: LocalDate?,
-    isLight: Boolean,
     onDaySelect: (LocalDate) -> Unit
 ) {
-    val borderColor = if (isLight) Color(0xFFE0E0E0) else Color(0xFF333333)
+    val borderColor = MaterialTheme.colorScheme.outlineVariant
     val dayHeaders  = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -628,18 +584,15 @@ private fun CalendarContent(
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surface)
         ) {
-            dayHeaders.forEachIndexed { idx, day ->
+            dayHeaders.forEach { day ->
                 Text(
                     text      = day,
                     modifier  = Modifier.weight(1f).padding(vertical = 7.dp),
                     textAlign = TextAlign.Center,
                     fontSize  = 11.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = when (idx) {
-                        0    -> Color(0xFFEF5350)
-                        6    -> IncomeBlue
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    }
+                    // Neutral for every day: blue only ever means money in.
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -659,7 +612,6 @@ private fun CalendarContent(
                     CalendarCellView(
                         cell        = cell,
                         isSelected  = cell.date == selectedDate,
-                        isLight     = isLight,
                         borderColor = borderColor,
                         onTap       = { if (cell.isInMonth) onDaySelect(cell.date) }
                     )
@@ -675,25 +627,17 @@ private fun CalendarContent(
 private fun CalendarCellView(
     cell: LedgerCalendarCell,
     isSelected: Boolean,
-    isLight: Boolean,
     borderColor: Color,
     onTap: () -> Unit
 ) {
-    // ── Colours based on selection + theme ────────────────────────────────────
-    val selectedBg        = if (isLight) SelectedNavy else Color.White
-    val selectedTextColor = if (isLight) Color.White   else Color.Black
-
-    val cellBg = if (isSelected) selectedBg else Color.Transparent
-
-    val isSunday   = cell.date.dayOfWeek == DayOfWeek.SUNDAY
-    val isSaturday = cell.date.dayOfWeek == DayOfWeek.SATURDAY
+    // The chosen day takes the theme's container colour; weekends look like any other day.
+    val selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer
+    val cellBg = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
 
     val dateNumColor = when {
-        isSelected           -> selectedTextColor
-        !cell.isInMonth      -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
-        isSunday             -> Color(0xFFEF5350)
-        isSaturday           -> IncomeBlue
-        else                 -> MaterialTheme.colorScheme.onBackground
+        isSelected      -> selectedTextColor
+        !cell.isInMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+        else            -> MaterialTheme.colorScheme.onBackground
     }
 
     val normalTextColor = if (isSelected) selectedTextColor else MaterialTheme.colorScheme.onBackground
@@ -821,6 +765,8 @@ private fun FilterChipsRow(chips: List<FilterChipUi>, onRemove: (FilterSection) 
 @Composable
 private fun DailyContent(
     days: List<LedgerDay>,
+    monthLabel: String,
+    onAdd: () -> Unit,
     isFiltered: Boolean,
     onClearFilter: () -> Unit,
     scrollTo: LocalDate?,
@@ -833,10 +779,19 @@ private fun DailyContent(
     if (days.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(if (isFiltered) "No transactions match" else "No transactions this month",
+                Text(if (isFiltered) "No transactions match" else "No transactions in $monthLabel",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium)
-                if (isFiltered) TextButton(onClick = onClearFilter) { Text("Clear") }
+                if (isFiltered) {
+                    TextButton(onClick = onClearFilter) { Text("Clear") }
+                } else {
+                    // Start logging from an empty month.
+                    FilledTonalButton(onClick = onAdd, modifier = Modifier.padding(top = 8.dp)) {
+                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Add")
+                    }
+                }
             }
         }
     } else {
@@ -874,12 +829,15 @@ private fun DailyContent(
 
 // ── App Bar ───────────────────────────────────────────────────────────────────
 
+/**
+ * The Ledger's top bar: ‹ month › as the title (tap it for the month grid), Search and Filter, and an
+ * overflow menu with Bookmarks. Theme surface colours in both modes.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MoneyManagerAppBar(
-    bg: Color,
-    contentColor: Color,
+private fun LedgerTopBar(
     periodLabel: String,
+    stepsYears: Boolean,
     onPrevPeriod: () -> Unit,
     onNextPeriod: () -> Unit,
     onPeriodClick: () -> Unit,
@@ -890,57 +848,101 @@ private fun MoneyManagerAppBar(
     filterCount: Int,
     onFilterClick: () -> Unit
 ) {
-    val compactDevice = LocalConfiguration.current.screenWidthDp < 360
-    val appTitle = if (compactDevice) "l.edgar" else "l.edgar's"
-    val navButtonSize = if (compactDevice) 28.dp else 30.dp
-
+    var isMenuExpanded by remember { mutableStateOf(false) }
+    val unit = if (stepsYears) "year" else "month"
     TopAppBar(
         title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = appTitle,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = contentColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    softWrap = false
-                )
-                Spacer(Modifier.width(6.dp))
-                IconButton(onClick = onPrevPeriod, modifier = Modifier.size(navButtonSize)) {
-                    Icon(Icons.Filled.ChevronLeft, null, tint = contentColor)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onPrevPeriod) {
+                    Icon(Icons.Filled.ChevronLeft, contentDescription = "Previous $unit")
                 }
                 Text(
                     text = periodLabel,
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = contentColor,
-                    modifier = if (periodClickable) Modifier
-                        .widthIn(min = 68.dp, max = 110.dp)
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                    modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onPeriodClick)
-                        .padding(horizontal = 6.dp, vertical = 4.dp) else Modifier.widthIn(min = 68.dp, max = 110.dp),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    softWrap = false
+                        .clickable(enabled = periodClickable, onClickLabel = "Choose month", onClick = onPeriodClick)
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                    maxLines = 1
                 )
-                IconButton(onClick = onNextPeriod, modifier = Modifier.size(navButtonSize)) {
-                    Icon(Icons.Filled.ChevronRight, null, tint = contentColor)
+                IconButton(onClick = onNextPeriod) {
+                    Icon(Icons.Filled.ChevronRight, contentDescription = "Next $unit")
                 }
             }
         },
         actions = {
-            IconButton(onClick = onBookmarksClick) { Icon(Icons.Filled.StarBorder, null, tint = contentColor) }
-            IconButton(onClick = onSearchClick) { Icon(Icons.Filled.Search, null, tint = contentColor) }
+            IconButton(onClick = onSearchClick) { Icon(Icons.Filled.Search, contentDescription = "Search") }
             IconButton(onClick = onFilterClick) {
                 // Marked while a filter is on, so filtered numbers are never mistaken for the month's.
                 BadgedBox(badge = { if (isFilterActive) Badge { Text(filterCount.toString()) } }) {
-                    Icon(Icons.Filled.Tune, contentDescription = if (isFilterActive) "Filter, $filterCount active" else "Filter", tint = contentColor)
+                    Icon(Icons.Filled.Tune, contentDescription = if (isFilterActive) "Filter, $filterCount active" else "Filter")
+                }
+            }
+            Box {
+                IconButton(onClick = { isMenuExpanded = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+                }
+                DropdownMenu(expanded = isMenuExpanded, onDismissRequest = { isMenuExpanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Bookmarks") },
+                        leadingIcon = { Icon(Icons.Filled.StarBorder, contentDescription = null) },
+                        onClick = { isMenuExpanded = false; onBookmarksClick() }
+                    )
                 }
             }
         },
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = bg)
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+    )
+}
+
+/** Tap the month title: 12 months with a year stepper. A tap opens the month; later ones are greyed but allowed. */
+@Composable
+private fun MonthGridDialog(selected: YearMonth, onPick: (YearMonth) -> Unit, onDismiss: () -> Unit) {
+    var year by rememberSaveable { mutableIntStateOf(selected.year) }
+    val months = Ledger.monthGrid(year, selected, LocalDate.now())
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                IconButton(onClick = { year -= 1 }) { Icon(Icons.Filled.ChevronLeft, contentDescription = "Previous year") }
+                Text(year.toString(), style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                IconButton(onClick = { year += 1 }) { Icon(Icons.Filled.ChevronRight, contentDescription = "Next year") }
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                months.chunked(3).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { choice ->
+                            val container = if (choice.isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+                            val content = when {
+                                choice.isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
+                                choice.isFuture -> MaterialTheme.colorScheme.onSurfaceVariant
+                                else -> MaterialTheme.colorScheme.onSurface
+                            }
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(container)
+                                    .clickable { onPick(choice.month) }
+                            ) {
+                                Text(
+                                    choice.name,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = content,
+                                    fontWeight = if (choice.isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
@@ -1006,14 +1008,11 @@ private fun ContextualSelectionAppBar(
 // ── Period Tabs ───────────────────────────────────────────────────────────────
 
 @Composable
-private fun PeriodTabRow(
-    selected: Int, bg: Color, textColor: Color,
-    onSelect: (Int) -> Unit
-) {
+private fun PeriodTabRow(selected: Int, onSelect: (Int) -> Unit) {
     SecondaryTabRow(
         selectedTabIndex = selected,
-        containerColor   = bg,
-        contentColor     = textColor,
+        containerColor   = MaterialTheme.colorScheme.surface,
+        contentColor     = MaterialTheme.colorScheme.onSurface,
         indicator = {
             TabRowDefaults.SecondaryIndicator(
                 modifier = Modifier.tabIndicatorOffset(selected),
@@ -1032,11 +1031,7 @@ private fun PeriodTabRow(
                         label,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = if (selected == idx) FontWeight.Bold else FontWeight.Normal,
-                        fontSize   = responsiveTextSize(baseSp = 14f, minSp = 13f, maxSp = 15f),
-                        color      = if (selected == idx) textColor else textColor.copy(alpha = 0.55f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        softWrap = false
+                        color = if (selected == idx) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             )
@@ -1078,8 +1073,6 @@ private fun SummaryColumn(label: String, amount: String, color: Color, modifier:
 
 @Composable
 private fun DayHeader(day: LedgerDay) {
-    val dateMetaSpacing = if (day.dayNumber.length >= 2) 10.dp else 8.dp
-
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
     Row(
@@ -1091,38 +1084,21 @@ private fun DayHeader(day: LedgerDay) {
     ) {
         Text(
             text = day.dayNumber,
-            fontSize = responsiveTextSize(baseSp = 32f, minSp = 28f, maxSp = 34f),
+            style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Clip,
-            modifier = Modifier.widthIn(min = 40.dp, max = 56.dp)
+            color = MaterialTheme.colorScheme.onBackground
         )
-        Spacer(Modifier.width(dateMetaSpacing))
-        Column(modifier = Modifier.widthIn(min = 78.dp, max = 112.dp)) {
+        Spacer(Modifier.width(10.dp))
+        Box(
+            modifier = Modifier.clip(RoundedCornerShape(4.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
             Text(
-                text = day.date.let { "${it.year}/${it.monthValue.toString().padStart(2,'0')}" },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                softWrap = false
+                text = day.weekday,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Box(
-                modifier = Modifier.clip(RoundedCornerShape(3.dp))
-                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f))
-                    .padding(horizontal = 5.dp, vertical = 1.dp)
-            ) {
-                Text(
-                    text = day.weekday,
-                    fontSize = responsiveTextSize(baseSp = 10f, minSp = 10f, maxSp = 11f),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Clip,
-                    softWrap = false
-                )
-            }
         }
         Spacer(Modifier.weight(1f))
         // Only the sides that moved, each in full.
@@ -1149,28 +1125,4 @@ private fun DayHeader(day: LedgerDay) {
         color = MaterialTheme.colorScheme.outlineVariant,
         thickness = 0.5.dp
     )
-}
-
-@Composable
-private fun CaptureBanner(count: Int, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.primaryContainer)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = if (count == 1) "1 captured transaction to review" else "$count captured transactions to review",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-            modifier = Modifier.weight(1f)
-        )
-        Text(
-            text = "Review",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onPrimaryContainer
-        )
-    }
 }

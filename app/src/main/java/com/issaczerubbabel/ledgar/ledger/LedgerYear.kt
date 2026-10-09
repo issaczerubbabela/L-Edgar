@@ -5,9 +5,7 @@ import com.issaczerubbabel.ledgar.util.formatListMoney
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
-import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
-import java.util.Locale
 
 /** One Sunday-to-Saturday week of a month on Monthly, clipped to the month, so a month's weeks add up to it. */
 data class LedgerWeek(
@@ -43,8 +41,6 @@ data class LedgerYear(
     /** Up to this month in the current year, all 12 in a past one, none in a future one. */
     val months: List<LedgerMonthRow>
 )
-
-private val monthNameFormat = DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH)
 
 /** Monthly for [year], counted like the Ledger: the same filter, and deletes waiting on Undo left out. */
 fun Ledger.year(

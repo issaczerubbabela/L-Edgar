@@ -97,6 +97,15 @@ data class LedgerCalendarCell(
     val transactionCount: Int
 )
 
+/** One month in the month title's grid. */
+data class MonthChoice(
+    val month: YearMonth,
+    /** "Oct". */
+    val name: String,
+    val isFuture: Boolean,
+    val isSelected: Boolean
+)
+
 /** One month of the Ledger: everything the tab draws for it. */
 data class LedgerMonth(
     val month: YearMonth,
@@ -111,6 +120,7 @@ data class LedgerMonth(
 
 private val monthLabelFormat = DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)
 private val weekdayFormat = DateTimeFormatter.ofPattern("EEE", Locale.ENGLISH)
+internal val monthNameFormat = DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH)
 private val dayTitleFormat = DateTimeFormatter.ofPattern("EEE, d MMM", Locale.ENGLISH)
 internal val dayMonthFormat = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
 internal val sheetDateFormat = DateTimeFormatter.ofPattern("EEE, d MMM yyyy", Locale.ENGLISH)
@@ -205,6 +215,16 @@ object Ledger {
         expense = expense,
         rows = rows
     )
+
+    /** The month title's 12-month grid for [year]: months after this one are greyed but can still be picked. */
+    fun monthGrid(year: Int, selected: YearMonth, today: LocalDate): List<MonthChoice> =
+        (1..12).map { m ->
+            val month = YearMonth.of(year, m)
+            MonthChoice(month, month.format(monthNameFormat), isFuture = month > YearMonth.from(today), isSelected = month == selected)
+        }
+
+    /** "3 captured to review", or null when nothing is waiting and the chip hides. */
+    fun captureChipLabel(waiting: Int): String? = if (waiting > 0) "$waiting captured to review" else null
 
     /** The newest month with a Transaction in it, or null when there are none. */
     fun latestMonth(transactions: List<ExpenseRecord>): YearMonth? =

@@ -82,7 +82,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
         "Log",
         Icons.Filled.AddCircle
     )
-    object Trans : Screen("trans", "Trans.", Icons.AutoMirrored.Filled.MenuBook)
+    object Trans : Screen("trans", "Ledger", Icons.AutoMirrored.Filled.MenuBook)
     object Search : Screen("search", "Search", Icons.Filled.MoreHoriz)
     object Bookmarks : Screen("bookmarks", "Bookmarks", Icons.Filled.Star)
     object Stats : Screen("stats", "Stats", Icons.Filled.BarChart)
@@ -200,6 +200,9 @@ private fun logRoute(
     prefillDate?.let { params += "prefillDate=$it" }
     return if (params.isEmpty()) LOG_BASE_ROUTE else "$LOG_BASE_ROUTE?${params.joinToString("&")}" 
 }
+
+/** Screens reached from the Ledger: its tab stays highlighted on them. */
+private val LEDGER_SUB_ROUTES = setOf(Screen.Search.route, Screen.Bookmarks.route, Screen.CaptureInbox.route)
 
 val bottomNavItems = listOf(Screen.Trans, Screen.Stats, Screen.Budget, Screen.Accounts, Screen.More)
 
@@ -471,7 +474,7 @@ fun AppNavigation() {
                     bottomNavItems.forEach { screen ->
                         val selected = currentDest?.hierarchy?.any { it.route == screen.route } == true ||
                             (screen == Screen.Budget && currentDest?.route in BUDGET_SUB_ROUTES) ||
-                            (screen == Screen.Trans && currentDest?.route == Screen.CaptureInbox.route) ||
+                            (screen == Screen.Trans && currentDest?.route in LEDGER_SUB_ROUTES) ||
                             (screen == Screen.More && currentDest?.route in MORE_SUB_ROUTES)
                         NavigationBarItem(
                             selected = selected,

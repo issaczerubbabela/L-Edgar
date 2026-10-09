@@ -523,6 +523,24 @@ class LedgerTest {
     }
 
     @Test
+    fun theMonthGridGreysMonthsAfterThisOneAndMarksTheOpenMonth() {
+        val grid = Ledger.monthGrid(2026, selected = YearMonth.of(2026, 9), today = today)
+
+        assertEquals(listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"), grid.map { it.name })
+        assertEquals(listOf(YearMonth.of(2026, 11), YearMonth.of(2026, 12)), grid.filter { it.isFuture }.map { it.month })
+        assertEquals(listOf(YearMonth.of(2026, 9)), grid.filter { it.isSelected }.map { it.month })
+        assertEquals(12, Ledger.monthGrid(2027, YearMonth.of(2026, 9), today).count { it.isFuture })
+        assertEquals(0, Ledger.monthGrid(2025, YearMonth.of(2026, 9), today).count { it.isFuture || it.isSelected })
+    }
+
+    @Test
+    fun theCaptureChipCountsWhatsWaitingAndHidesWhenNothingIs() {
+        assertEquals("3 captured to review", Ledger.captureChipLabel(3))
+        assertEquals("1 captured to review", Ledger.captureChipLabel(1))
+        assertEquals(null, Ledger.captureChipLabel(0))
+    }
+
+    @Test
     fun theLatestMonthIsTheNewestWithATransaction() {
         assertEquals(YearMonth.of(2026, 11), Ledger.latestMonth(listOf(
             txn("2026-09-30", "Expense", 1.0), txn("2026-11-02", "Income", 1.0), txn("not a date", "Expense", 1.0)

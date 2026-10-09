@@ -29,8 +29,6 @@ val RedTertiaryContainer = Color(0xFF5B2B1A)
 
 val TealDark      = Color(0xFF005B4F)
 val TealLight     = Color(0xFF4EBAAA)
-val HeaderGreen   = Color(0xFF20C997)  // explicit alias for readability
-val SelectedNavy  = Color(0xFF1A3A5C)  // calendar selected-cell bg in light theme
 
 // ── Transaction colours (Money Manager palette) ───────────────────────────────
 /**

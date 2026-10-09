@@ -18,6 +18,10 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 ### Changed
 
+- Ledger (was Trans.): the month is the title; tap it for a 12-month grid. Bookmarks moves to the ⋮ menu
+- Ledger: theme colours throughout, plain weekday headers, and day headers without the repeated month
+- Ledger: waiting captures show as a small chip, the Trip card is compact, and an empty month offers Add
+- Ledger: the Ledger tab stays highlighted on Search, Bookmarks and the capture inbox
 - Monthly: shows the year of the Ledger's month, and its arrows step a year keeping the month
 - Monthly: tap a month or week to open it on Daily, with a separate arrow to show its weeks
 - Search: results are grouped by date, with the month in each header since they span all time
@@ -48,6 +52,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Ledger: Search's date groups, range label and match highlighting come from the Ledger module, with tests
 - Ledger: Add transaction takes an optional prefillDate for one Transaction; a shared DaySheet hosts the day
 - Ledger: Monthly's months and weeks come from the Ledger module, with tests; MonthlyViewModel merged away
+- Ledger: the month grid and capture chip text come from the Ledger module; hard-coded header colours removed
 
 ## [1.4.0] - 2026-10-09
 
