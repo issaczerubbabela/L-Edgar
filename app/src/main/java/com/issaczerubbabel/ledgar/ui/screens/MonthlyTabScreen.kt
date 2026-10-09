@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseOrange
 import com.issaczerubbabel.ledgar.ui.theme.IncomeBlue
+import com.issaczerubbabel.ledgar.util.formatListMoney
 import com.issaczerubbabel.ledgar.viewmodel.MonthGroup
 import com.issaczerubbabel.ledgar.viewmodel.WeeklyItem
 import java.time.LocalDate
@@ -106,20 +107,20 @@ private fun MonthHeaderRow(
         Column(horizontalAlignment = Alignment.End) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 AmountCell(
-                    value = "₹ ${formatCompact(monthGroup.monthIncome)}",
+                    value = formatListMoney(monthGroup.monthIncome),
                     color = IncomeBlue,
                     width = 120.dp,
                     fontSize = 15.sp
                 )
                 AmountCell(
-                    value = "₹ ${formatCompact(monthGroup.monthExpense)}",
+                    value = formatListMoney(monthGroup.monthExpense),
                     color = ExpenseOrange,
                     width = 120.dp,
                     fontSize = 15.sp
                 )
             }
             AmountCell(
-                value = "₹ ${formatSigned(monthGroup.monthTotal)}",
+                value = formatListMoney(monthGroup.monthTotal),
                 color = MaterialTheme.colorScheme.onBackground,
                 width = 120.dp,
                 fontSize = 12.sp
@@ -162,20 +163,20 @@ private fun WeeklyBreakdownRow(item: WeeklyItem) {
         Column(horizontalAlignment = Alignment.End) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 AmountCell(
-                    value = "₹ ${formatCompact(item.income)}",
+                    value = formatListMoney(item.income),
                     color = IncomeBlue,
                     width = 120.dp,
                     fontSize = 15.sp
                 )
                 AmountCell(
-                    value = "₹ ${formatCompact(item.expense)}",
+                    value = formatListMoney(item.expense),
                     color = ExpenseOrange,
                     width = 120.dp,
                     fontSize = 15.sp
                 )
             }
             AmountCell(
-                value = "₹ ${formatSigned(item.total)}",
+                value = formatListMoney(item.total),
                 color = MaterialTheme.colorScheme.onBackground,
                 width = 120.dp,
                 fontSize = 12.sp
@@ -209,11 +210,3 @@ private fun formatWeek(date: LocalDate): String =
 
 private fun monthName(month: Int): String =
     java.time.Month.of(month).getDisplayName(TextStyle.SHORT, Locale.ENGLISH)
-
-private fun formatCompact(value: Double): String =
-    "%,.2f".format(kotlin.math.abs(value))
-
-private fun formatSigned(value: Double): String {
-    val sign = if (value < 0) "-" else ""
-    return "$sign${formatCompact(value)}"
-}

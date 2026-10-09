@@ -67,6 +67,44 @@ class MoneyFormatTest {
     }
 
     @Test
+    fun aListAmountDropsPointZeroZeroOnWholeRupees() {
+        assertEquals("₹212", formatListMoney(212.0))
+        assertEquals("₹1,25,000", formatListMoney(125000.0))
+        assertEquals("₹1,25,000.50", formatListMoney(125000.5))
+        assertEquals("₹0", formatListMoney(0.0))
+    }
+
+    @Test
+    fun aListAmountUsesATrueMinusAndCanBeSigned() {
+        assertEquals("−₹4,250", formatListMoney(-4250.0))
+        assertEquals("+₹340", formatListMoney(340.0, signed = true))
+        assertEquals("−₹12.40", formatListMoney(-12.4, signed = true))
+        assertEquals("₹0", formatListMoney(-0.004, signed = true))
+    }
+
+    @Test
+    fun aCalendarAmountIsShortWithNoRupeeSign() {
+        assertEquals("950", formatCalendarMoney(950.0))
+        assertEquals("999", formatCalendarMoney(999.0))
+        assertEquals("1k", formatCalendarMoney(1000.0))
+        assertEquals("1.2k", formatCalendarMoney(1240.0))
+        assertEquals("12.5k", formatCalendarMoney(12500.0))
+        assertEquals("1L", formatCalendarMoney(99999.0))
+        assertEquals("1L", formatCalendarMoney(100000.0))
+        assertEquals("1.5L", formatCalendarMoney(150000.0))
+        assertEquals("12.3L", formatCalendarMoney(1234567.0))
+    }
+
+    @Test
+    fun aCalendarAmountKeepsItsMinusAndRoundsToWholeRupees() {
+        assertEquals("−950", formatCalendarMoney(-950.0))
+        assertEquals("−1.2k", formatCalendarMoney(-1200.0))
+        assertEquals("−1.5L", formatCalendarMoney(-150000.0))
+        assertEquals("1k", formatCalendarMoney(999.6))
+        assertEquals("0", formatCalendarMoney(-0.3))
+    }
+
+    @Test
     fun aFieldShowsNoTrailingPointZero() {
         assertEquals("68000", amountToInput(68000.0))
         assertEquals("0", amountToInput(0.0))

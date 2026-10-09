@@ -44,6 +44,41 @@ fun formatMoney(amount: Double, signed: Boolean = false): String {
     return "$sign₹$digits.$fraction"
 }
 
+/**
+ * An amount in a list: Indian grouping, paise only when there are some (₹1,25,000, ₹212.40), a
+ * true minus (−₹4,250) and, with [signed], a + on positive amounts. Never cut short: the row grows.
+ */
+fun formatListMoney(amount: Double, signed: Boolean = false): String {
+    val paise = (amount * 100).roundToLong()
+    val digits = groupIndian((abs(paise) / 100).toString())
+    val fraction = abs(paise) % 100
+    val sign = when {
+        paise < 0 -> "−"
+        signed && paise > 0 -> "+"
+        else -> ""
+    }
+    val base = "$sign₹$digits"
+    return if (fraction == 0L) base else base + "." + fraction.toString().padStart(2, '0')
+}
+
+/**
+ * A Calendar cell's amount, short enough to fit: whole rupees under 1,000 (950), then thousands
+ * (1.2k), then lakhs (1.5L), each with one decimal and no ".0", and a true minus (−1.2k). No ₹:
+ * the cell's colour says which side it is.
+ */
+fun formatCalendarMoney(amount: Double): String {
+    val rupees = abs(amount).roundToLong()
+    val sign = if (amount < 0 && rupees != 0L) "−" else ""
+    if (rupees < 1000) return "$sign$rupees"
+    val thousandTenths = (rupees / 100.0).roundToLong()
+    if (thousandTenths < 1000) return sign + tenths(thousandTenths) + "k"
+    return sign + tenths((rupees / 10_000.0).roundToLong()) + "L"
+}
+
+/** 12 → "1.2", 10 → "1". */
+private fun tenths(value: Long): String =
+    if (value % 10 == 0L) (value / 10).toString() else "${value / 10}.${value % 10}"
+
 private fun groupIndian(digits: String): String {
     if (digits.length <= 3) return digits
     val lastThree = digits.takeLast(3)

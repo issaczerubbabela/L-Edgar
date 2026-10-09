@@ -3,6 +3,12 @@ package com.issaczerubbabel.ledgar.viewmodel
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import java.time.LocalDate
 
+data class PeriodSummary(
+    val income: Double  = 0.0,
+    val expense: Double = 0.0,
+    val total: Double   = 0.0
+)
+
 /**
  * Represents a single week's aggregated data.
  * Shows: date range, income amount, expense amount, and net total.

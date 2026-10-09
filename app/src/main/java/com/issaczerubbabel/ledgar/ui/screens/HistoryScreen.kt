@@ -43,8 +43,11 @@ import com.issaczerubbabel.ledgar.ui.components.DropdownField
 import com.issaczerubbabel.ledgar.ui.components.SingleDatePickerDialog
 import com.issaczerubbabel.ledgar.ui.theme.*
 import com.issaczerubbabel.ledgar.util.TransactionType
-import com.issaczerubbabel.ledgar.viewmodel.CalendarCell
-import com.issaczerubbabel.ledgar.viewmodel.DayGroup
+import com.issaczerubbabel.ledgar.ledger.LedgerCalendarCell
+import com.issaczerubbabel.ledgar.ledger.LedgerDay
+import com.issaczerubbabel.ledgar.ledger.LedgerRow
+import com.issaczerubbabel.ledgar.ledger.LedgerSummary
+import com.issaczerubbabel.ledgar.util.formatListMoney
 import com.issaczerubbabel.ledgar.viewmodel.HistoryViewModel
 import com.issaczerubbabel.ledgar.viewmodel.MonthlyViewModel
 import com.issaczerubbabel.ledgar.viewmodel.PeriodSummary
@@ -57,45 +60,6 @@ private val monthNames = listOf(
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
 )
-private fun formatMoney(amount: Double)   = "₹ %,.2f".format(amount)
-private fun formatCompact(amount: Double) = "%,.2f".format(kotlin.math.abs(amount))
-private fun accountLabelForTransaction(record: ExpenseRecord, accountsById: Map<Long, String>): String {
-    return when (record.type) {
-        "Income" -> {
-            val accountId = record.toAccountId ?: record.accountId
-            accountId?.let { accountsById[it] }
-                ?: record.toAccountName
-                ?: record.accountName
-                ?: ""
-        }
-        "Expense" -> {
-            val accountId = record.fromAccountId ?: record.accountId
-            accountId?.let { accountsById[it] }
-                ?: record.fromAccountName
-                ?: record.accountName
-                ?: ""
-        }
-        TransactionType.ADJUSTMENT -> record.accountId?.let { accountsById[it] } ?: record.accountName ?: ""
-        "Transfer" -> {
-            val from = record.fromAccountId?.let { accountsById[it] }
-                ?: record.fromAccountName
-                ?: ""
-            val to = record.toAccountId?.let { accountsById[it] }
-                ?: record.toAccountName
-                ?: ""
-            when {
-                from.isNotBlank() && to.isNotBlank() -> "$from -> $to"
-                from.isNotBlank() -> from
-                else -> to
-            }
-        }
-        else -> ""
-    }
-}
-private fun formatSignedMoney(amount: Double): String {
-    val sign = if (amount > 0.0001) "+" else if (amount < -0.0001) "-" else ""
-    return "$sign₹ %,.2f".format(kotlin.math.abs(amount))
-}
 
 @Composable
 private fun responsiveTextSize(baseSp: Float, minSp: Float = 12f, maxSp: Float = 20f) =
@@ -137,8 +101,8 @@ fun HistoryScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     val pagerState = rememberPagerState(pageCount = { TABS.size })
     var showMonthPicker by remember { mutableStateOf(false) }
-    var pickerMonth by remember(state.selectedMonth, state.selectedYear) { mutableIntStateOf(state.selectedMonth) }
-    var pickerYear by remember(state.selectedMonth, state.selectedYear) { mutableIntStateOf(state.selectedYear) }
+    var pickerMonth by remember(state.month) { mutableIntStateOf(state.month.monthValue) }
+    var pickerYear by remember(state.month) { mutableIntStateOf(state.month.year) }
     val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val sheetScope = rememberCoroutineScope()
     var selectedTransaction by remember { mutableStateOf<ExpenseRecord?>(null) }
@@ -150,9 +114,7 @@ fun HistoryScreen(
     var selectedCategory by remember { mutableStateOf("") }
     var selectedAssetId by remember { mutableStateOf<Long?>(null) }
     var updatedDescription by remember { mutableStateOf("") }
-    val accountsById = remember(accounts) { accounts.associate { it.id to it.accountName } }
-
-    val allVisibleRecords = remember(state.groups) { state.groups.flatMap { it.records } }
+    val allVisibleRecords = remember(state.days) { state.days.flatMap { day -> day.rows.map { it.record } } }
     val selectedCount = vm.selectedTxIds.size
     val selectedSum = vm.selectedSum(allVisibleRecords)
     val selectedIdSet = vm.selectedTxIds.toSet()
@@ -243,7 +205,7 @@ fun HistoryScreen(
 
             // Single pinned summary row below tabs
             val pinnedSummary = when (selectedTab) {
-                2 -> monthlyState.summary
+                2 -> monthlyState.summary.toLedgerSummary()
                 else -> state.summary
             }
             SummaryBar(pinnedSummary)
@@ -256,7 +218,7 @@ fun HistoryScreen(
                 ) { page ->
                     when (page) {
                         1 -> CalendarContent(
-                            cells        = state.calendarCells,
+                            cells        = state.calendar,
                             selectedDate = vm.selectedDate,
                             isLight      = isLight,
                             onDaySelect  = vm::selectDate
@@ -267,8 +229,7 @@ fun HistoryScreen(
                             modifier = Modifier.fillMaxSize()
                         )
                         else -> DailyContent(
-                            groups = state.groups,
-                            accountsById = accountsById,
+                            days = state.days,
                             selectedIds = selectedIdSet,
                             onTransactionClick = { record ->
                                 if (vm.isSelectionMode()) {
@@ -609,7 +570,7 @@ fun HistoryScreen(
 
 @Composable
 private fun CalendarContent(
-    cells: List<CalendarCell>,
+    cells: List<LedgerCalendarCell>,
     selectedDate: LocalDate?,
     isLight: Boolean,
     onDaySelect: (LocalDate) -> Unit
@@ -657,7 +618,7 @@ private fun CalendarContent(
                         isSelected  = cell.date == selectedDate,
                         isLight     = isLight,
                         borderColor = borderColor,
-                        onTap       = { if (cell.isCurrentMonth) onDaySelect(cell.date) }
+                        onTap       = { if (cell.isInMonth) onDaySelect(cell.date) }
                     )
                 }
             }
@@ -669,7 +630,7 @@ private fun CalendarContent(
 
 @Composable
 private fun CalendarCellView(
-    cell: CalendarCell,
+    cell: LedgerCalendarCell,
     isSelected: Boolean,
     isLight: Boolean,
     borderColor: Color,
@@ -686,7 +647,7 @@ private fun CalendarCellView(
 
     val dateNumColor = when {
         isSelected           -> selectedTextColor
-        !cell.isCurrentMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
+        !cell.isInMonth      -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
         isSunday             -> Color(0xFFEF5350)
         isSaturday           -> IncomeBlue
         else                 -> MaterialTheme.colorScheme.onBackground
@@ -696,16 +657,10 @@ private fun CalendarCellView(
     val incomeColor     = if (isSelected) selectedTextColor else IncomeBlue
     val expenseColor    = if (isSelected) selectedTextColor else ExpenseOrange
 
-    // "07/01" for 1st of a month, plain number otherwise
-    val dateLabel = if (cell.date.dayOfMonth == 1)
-        "${cell.date.monthValue.toString().padStart(2, '0')}/01"
-    else cell.date.dayOfMonth.toString()
+    // The month is in the title, so the 1st is just "1".
+    val dateLabel = cell.date.dayOfMonth.toString()
 
-    // Pre-compute daily amounts
-    val hasIncome  = cell.dayIncome  > 0.005
-    val hasExpense = cell.dayExpense > 0.005
-    val hasBoth    = hasIncome && hasExpense
-    val dayNet     = cell.dayIncome - cell.dayExpense
+    val hasBoth = cell.incomeLabel != null && cell.expenseLabel != null
 
     Box(
         modifier = Modifier
@@ -737,7 +692,7 @@ private fun CalendarCellView(
             Text(
                 text = dateLabel,
                 color = if (isSelected) MaterialTheme.colorScheme.onPrimary else dateNumColor,
-                fontSize = if (cell.date.dayOfMonth == 1) 9.sp else 11.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 textAlign = TextAlign.Center
@@ -745,11 +700,12 @@ private fun CalendarCellView(
         }
 
         // ── Category dots — centre ────────────────────────────────────────────
-        if (cell.isCurrentMonth && cell.categories.isNotEmpty()) {
+        if (cell.isInMonth && cell.categories.isNotEmpty()) {
             val visibleCats = cell.categories.take(4)
             val extra       = cell.categories.size - visibleCats.size
             Row(
-                modifier = Modifier.align(Alignment.Center),
+                // Under the date, clear of up to three stacked amounts.
+                modifier = Modifier.align(Alignment.TopStart).padding(start = 5.dp, top = 28.dp),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -757,13 +713,13 @@ private fun CalendarCellView(
                     Canvas(modifier = Modifier.size(6.dp)) { drawCircle(categoryDotColor(cat)) }
                 }
                 if (extra > 0) {
-                    Text("+$extra", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("+$extra", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
 
         // ── Stacked amounts — bottom end ──────────────────────────────────────
-        if (cell.isCurrentMonth && cell.totalTransactions > 0) {
+        if (cell.isInMonth && cell.transactionCount > 0) {
             Column(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.Bottom,
@@ -771,72 +727,39 @@ private fun CalendarCellView(
                     .align(Alignment.BottomEnd)
                     .padding(end = 3.dp, bottom = 3.dp)
             ) {
-                when {
-                    hasBoth -> {
-                        // Income row
-                        Text(
-                            text       = formatCompact(cell.dayIncome),
-                            color      = incomeColor,
-                            fontSize   = 9.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign  = TextAlign.End
-                        )
-                        // Expense row
-                        Text(
-                            text       = formatCompact(cell.dayExpense),
-                            color      = expenseColor,
-                            fontSize   = 9.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign  = TextAlign.End
-                        )
-                        // Net row (bold)
-                        Text(
-                            text       = formatCompact(dayNet),
-                            color      = normalTextColor,
-                            fontSize   = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            textAlign  = TextAlign.End
-                        )
-                    }
-                    hasIncome -> Text(
-                        text       = formatCompact(cell.dayIncome),
-                        color      = incomeColor,
-                        fontSize   = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign  = TextAlign.End
-                    )
-                    hasExpense -> Text(
-                        text       = formatCompact(cell.dayExpense),
-                        color      = expenseColor,
-                        fontSize   = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign  = TextAlign.End
-                    )
-                    else -> Text(
-                        text       = "0",
-                        color      = normalTextColor,
-                        fontSize   = 10.sp,
-                        fontWeight = FontWeight.Normal,
-                        textAlign  = TextAlign.End
-                    )
-                }
+                cell.incomeLabel?.let { CalendarAmount(it, incomeColor, FontWeight.SemiBold) }
+                cell.expenseLabel?.let { CalendarAmount(it, expenseColor, FontWeight.SemiBold) }
+                // The Net only adds something when both sides moved.
+                if (hasBoth) cell.netLabel?.let { CalendarAmount(it, normalTextColor, FontWeight.Bold) }
             }
         }
     }
+}
+
+@Composable
+private fun CalendarAmount(text: String, color: Color, weight: FontWeight) {
+    Text(
+        text = text,
+        color = color,
+        fontSize = 10.sp,
+        fontWeight = weight,
+        textAlign = TextAlign.End,
+        maxLines = 1,
+        softWrap = false
+    )
 }
 
 // ── Daily List Content ────────────────────────────────────────────────────────
 
 @Composable
 private fun DailyContent(
-    groups: List<DayGroup>,
-    accountsById: Map<Long, String>,
+    days: List<LedgerDay>,
     selectedIds: Set<Long>,
     onTransactionClick: (ExpenseRecord) -> Unit,
     onTransactionLongClick: (ExpenseRecord) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    if (groups.isEmpty()) {
+    if (days.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("No transactions this month",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -844,17 +767,16 @@ private fun DailyContent(
         }
     } else {
         LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = 96.dp)) {
-            groups.forEach { group ->
-                item(key = group.date.toString()) { DayGroupHeader(group) }
-                itemsIndexed(group.records, key = { _, record -> record.id }) { index, record ->
+            days.forEach { day ->
+                item(key = day.date.toString()) { DayHeader(day) }
+                itemsIndexed(day.rows, key = { _, row -> row.id }) { index, row ->
                     TransactionRow(
-                        record = record,
-                        accountLabel = accountLabelForTransaction(record, accountsById),
-                        isSelected = selectedIds.contains(record.id),
-                        onClick = { onTransactionClick(record) },
-                        onLongClick = { onTransactionLongClick(record) }
+                        row = row,
+                        isSelected = selectedIds.contains(row.id),
+                        onClick = { onTransactionClick(row.record) },
+                        onLongClick = { onTransactionLongClick(row.record) }
                     )
-                    if (index < group.records.lastIndex) {
+                    if (index < day.rows.lastIndex) {
                         HorizontalDivider(
                             color = MaterialTheme.colorScheme.outlineVariant,
                             thickness = 0.5.dp,
@@ -951,7 +873,7 @@ private fun ContextualSelectionAppBar(
         },
         actions = {
             Text(
-                text = formatSignedMoney(selectedSum),
+                text = formatListMoney(selectedSum, signed = true),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(end = 6.dp)
@@ -1033,39 +955,45 @@ private fun PeriodTabRow(
 // ── Summary Bar ───────────────────────────────────────────────────────────────
 
 @Composable
-private fun SummaryBar(summary: PeriodSummary) {
+private fun SummaryBar(summary: LedgerSummary) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 8.dp, vertical = 12.dp)
     ) {
-        SummaryColumn("Income",   formatMoney(summary.income),  IncomeBlue,    Modifier.weight(1f))
-        SummaryColumn("Expenses", formatMoney(summary.expense), ExpenseOrange, Modifier.weight(1f))
-        SummaryColumn("Total",    formatMoney(summary.total),   MaterialTheme.colorScheme.onBackground, Modifier.weight(1f))
+        SummaryColumn("Income",   summary.income,   IncomeBlue,    Modifier.weight(1f))
+        SummaryColumn("Expenses", summary.expenses, ExpenseOrange, Modifier.weight(1f))
+        SummaryColumn("Net",      summary.net,      MaterialTheme.colorScheme.onBackground, Modifier.weight(1f))
     }
 }
+
+/** Monthly keeps its own sums until Ledger 8/10 (#77) moves it onto the Ledger module. */
+private fun PeriodSummary.toLedgerSummary() = LedgerSummary(
+    income = formatListMoney(income),
+    expenses = formatListMoney(expense),
+    net = formatListMoney(total)
+)
 
 @Composable
 private fun SummaryColumn(label: String, amount: String, color: Color, modifier: Modifier) {
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // Never cut short: a big amount wraps rather than losing digits.
         Text(
             amount,
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
             color = color,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            softWrap = false
+            textAlign = TextAlign.Center
         )
     }
 }
 
-// ── Day Group Header ──────────────────────────────────────────────────────────
+// ── Day Header ──────────────────────────────────────────────────────────────
 
 @Composable
-private fun DayGroupHeader(group: DayGroup) {
-    val dateMetaSpacing = if (group.dayNumber.length >= 2) 10.dp else 8.dp
+private fun DayHeader(day: LedgerDay) {
+    val dateMetaSpacing = if (day.dayNumber.length >= 2) 10.dp else 8.dp
 
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
@@ -1077,7 +1005,7 @@ private fun DayGroupHeader(group: DayGroup) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = group.dayNumber,
+            text = day.dayNumber,
             fontSize = responsiveTextSize(baseSp = 32f, minSp = 28f, maxSp = 34f),
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
@@ -1088,7 +1016,7 @@ private fun DayGroupHeader(group: DayGroup) {
         Spacer(Modifier.width(dateMetaSpacing))
         Column(modifier = Modifier.widthIn(min = 78.dp, max = 112.dp)) {
             Text(
-                text = group.date.let { "${it.year}/${it.monthValue.toString().padStart(2,'0')}" },
+                text = day.date.let { "${it.year}/${it.monthValue.toString().padStart(2,'0')}" },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -1101,7 +1029,7 @@ private fun DayGroupHeader(group: DayGroup) {
                     .padding(horizontal = 5.dp, vertical = 1.dp)
             ) {
                 Text(
-                    text = group.dayOfWeekBadge,
+                    text = day.weekday,
                     fontSize = responsiveTextSize(baseSp = 10f, minSp = 10f, maxSp = 11f),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium,
@@ -1112,27 +1040,24 @@ private fun DayGroupHeader(group: DayGroup) {
             }
         }
         Spacer(Modifier.weight(1f))
-        Text(
-            text = formatMoney(group.dayIncome),
-            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-            color = if (group.dayIncome > 0) IncomeBlue else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-            modifier = Modifier.widthIn(min = 72.dp, max = 96.dp),
-            textAlign = TextAlign.End,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            softWrap = false
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = formatMoney(group.dayExpense),
-            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-            color = if (group.dayExpense > 0) ExpenseOrange else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-            modifier = Modifier.widthIn(min = 72.dp, max = 96.dp),
-            textAlign = TextAlign.End,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            softWrap = false
-        )
+        // Only the sides that moved, each in full.
+        day.income?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                color = IncomeBlue,
+                textAlign = TextAlign.End
+            )
+        }
+        if (day.income != null && day.expense != null) Spacer(Modifier.width(8.dp))
+        day.expense?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                color = ExpenseOrange,
+                textAlign = TextAlign.End
+            )
+        }
     }
     HorizontalDivider(
         modifier = Modifier.padding(horizontal = 16.dp),
@@ -1146,19 +1071,17 @@ private fun DayGroupHeader(group: DayGroup) {
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 private fun TransactionRow(
-    record: ExpenseRecord,
-    accountLabel: String,
+    row: LedgerRow,
     isSelected: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val categoryColumnWidth = if (screenWidthDp >= 600) 128.dp else 96.dp
-    val isIncome  = record.type == "Income"
-    val isExpense = record.type == "Expense"
-    val isTransfer = record.type == "Transfer"
+    val isIncome  = row.type == TransactionType.INCOME
+    val isExpense = row.type == TransactionType.EXPENSE
     // A Balance adjustment only corrects a balance, so it reads apart from money in and out.
-    val isAdjustment = record.type == TransactionType.ADJUSTMENT
+    val isAdjustment = row.isAdjustment
     val amountColor = when {
         isIncome -> IncomeBlue
         isExpense -> ExpenseOrange
@@ -1175,7 +1098,7 @@ private fun TransactionRow(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(if (isAdjustment) TransactionType.label(record.type) else record.category,
+        Text(row.category,
             style = MaterialTheme.typography.bodySmall,
             fontStyle = if (isAdjustment) FontStyle.Italic else null,
             color = if (isAdjustment) amountColor else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1186,11 +1109,11 @@ private fun TransactionRow(
             lineHeight = responsiveTextSize(baseSp = 14f, minSp = 13f, maxSp = 15f))
         Spacer(Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(record.description.ifBlank { if (isAdjustment) TransactionType.label(record.type) else record.category },
+            Text(row.description,
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(accountLabel,
+            Text(row.accountLabel,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -1198,14 +1121,14 @@ private fun TransactionRow(
                 softWrap = false)
         }
         Spacer(Modifier.width(8.dp))
-        Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(min = 72.dp, max = 96.dp)) {
+        Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(min = 72.dp)) {
+            // In full, never ellipsised: the description gives way instead.
             Text(
-                text = if (isAdjustment) formatSignedMoney(record.amount) else formatMoney(record.amount),
+                text = row.amount,
                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                 fontStyle = if (isAdjustment) FontStyle.Italic else null,
                 color = amountColor,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
                 softWrap = false
             )
         }

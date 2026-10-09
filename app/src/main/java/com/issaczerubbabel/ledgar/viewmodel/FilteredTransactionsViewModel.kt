@@ -25,6 +25,28 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import javax.inject.Inject
 
+// The Filtered screen's own copies of the old Trans tab models; Ledger 5/10 (#74) removes the screen.
+data class DayGroup(
+    val date: LocalDate,
+    val dayNumber: String,
+    val dateLabel: String,
+    val dayOfWeekBadge: String,
+    val dayIncome: Double,
+    val dayExpense: Double,
+    val records: List<ExpenseRecord>
+)
+
+data class CalendarCell(
+    val date: LocalDate,
+    val isCurrentMonth: Boolean,
+    val isToday: Boolean,
+    val dayIncome: Double,
+    val dayExpense: Double,
+    val dayNet: Double,
+    val categories: List<String>,
+    val totalTransactions: Int
+)
+
 data class FilteredTransactionsUiState(
     val selectedYear: Int = LocalDate.now().year,
     val selectedMonth: Int = LocalDate.now().monthValue,

@@ -8,9 +8,20 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 ## [1.5.0] - 2026-10-09
 
+### Changed
+
+- Ledger: the summary reads Income, Expenses and Net, and amounts use Indian grouping without ".00"
+
+### Fixed
+
+- Ledger: big amounts show in full instead of being cut off
+- Ledger: a day's transactions keep their order after a Sync
+- Ledger: a Calendar day where you spent more than you earned shows a minus, in short readable amounts
+
 ### Developer
 
 - Glossary: Net (the Ledger's raw Income minus Expenses) and Ledger (the tab that lists every Transaction)
+- Ledger: a pure Ledger module builds the summary, day groups and Calendar cells off the main thread, with tests
 
 ## [1.4.0] - 2026-10-09
 
