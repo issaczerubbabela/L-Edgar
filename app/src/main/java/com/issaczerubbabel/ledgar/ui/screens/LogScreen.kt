@@ -23,6 +23,8 @@ import com.issaczerubbabel.ledgar.ui.components.NumericKeypad
 import com.issaczerubbabel.ledgar.ui.components.OptionPickerSheet
 import com.issaczerubbabel.ledgar.ui.components.PickerOption
 import com.issaczerubbabel.ledgar.ui.components.SingleDatePickerDialog
+import com.issaczerubbabel.ledgar.util.RecurrenceCalculator
+import com.issaczerubbabel.ledgar.util.RecurrenceFrequency
 import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.util.applyKeypadAction
 import com.issaczerubbabel.ledgar.viewmodel.AccountTarget
@@ -35,6 +37,26 @@ private sealed interface LogSheet {
     data object Category : LogSheet
     data class Account(val target: AccountTarget) : LogSheet
     data object Note : LogSheet
+    data object Repeat : LogSheet
+}
+
+/** [PickerOption.key] for each Repeat choice; "NEVER" carries no frequency. */
+private val repeatPickerOptions = listOf(
+    PickerOption(key = "NEVER", label = "Never"),
+    PickerOption(key = "${RecurrenceFrequency.WEEKLY}:1", label = "Weekly"),
+    PickerOption(key = "${RecurrenceFrequency.WEEKLY}:2", label = "Every 2 weeks"),
+    PickerOption(key = "${RecurrenceFrequency.MONTHLY}:1", label = "Monthly"),
+    PickerOption(key = "${RecurrenceFrequency.MONTHLY}:3", label = "Every 3 months"),
+    PickerOption(key = "${RecurrenceFrequency.YEARLY}:1", label = "Yearly")
+)
+
+private fun repeatKeyOf(frequency: String?, interval: Int): String =
+    if (frequency == null) "NEVER" else "$frequency:$interval"
+
+private fun parseRepeatKey(key: String): Pair<String?, Int> {
+    if (key == "NEVER") return null to 1
+    val (frequency, interval) = key.split(":")
+    return frequency to interval.toInt()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,6 +71,7 @@ fun LogScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var showDatePicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showStopRepeatConfirm by remember { mutableStateOf(false) }
     var activeSheet by remember { mutableStateOf<LogSheet?>(null) }
     var savePulseSignal by remember { mutableIntStateOf(0) }
     val accounts by vm.accounts.collectAsStateWithLifecycle()
@@ -57,7 +80,7 @@ fun LogScreen(
     val bucketContext by vm.bucketContext.collectAsStateWithLifecycle()
 
     BackHandler(
-        enabled = !showDatePicker && !showDeleteConfirm && activeSheet == null,
+        enabled = !showDatePicker && !showDeleteConfirm && !showStopRepeatConfirm && activeSheet == null,
         onBack = onBack
     )
 
@@ -155,6 +178,13 @@ fun LogScreen(
             val fromName = accounts.nameOf(vm.selectedFromAccountId)
             val toName = accounts.nameOf(vm.selectedToAccountId)
             val hasNote = vm.description.isNotBlank() || vm.remarks.isNotBlank()
+            val activeRule = vm.editingRule
+            val repeatLabel = when {
+                activeRule != null -> "Repeats ${RecurrenceCalculator.label(activeRule.frequency, activeRule.interval)}"
+                vm.repeatFrequency != null -> RecurrenceCalculator.label(vm.repeatFrequency!!, vm.repeatInterval)
+                else -> "Repeat"
+            }
+            val showRepeatChip = !vm.isEditMode || activeRule != null
 
             ChipRow(
                 primaryChips = if (isTransfer) {
@@ -183,9 +213,16 @@ fun LogScreen(
                     )
                 },
                 swapKey = isTransfer,
-                trailingChip = ChipSpec(if (hasNote) "Note added" else "+ Note", hasNote) {
-                    activeSheet = LogSheet.Note
-                }
+                trailingChips = listOfNotNull(
+                    if (showRepeatChip) {
+                        ChipSpec(repeatLabel, activeRule != null || vm.repeatFrequency != null) {
+                            if (activeRule != null) showStopRepeatConfirm = true else activeSheet = LogSheet.Repeat
+                        }
+                    } else null,
+                    ChipSpec(if (hasNote) "Note added" else "+ Note", hasNote) {
+                        activeSheet = LogSheet.Note
+                    }
+                )
             )
 
             NumericKeypad(
@@ -243,7 +280,40 @@ fun LogScreen(
             onDismiss = { activeSheet = null }
         )
 
+        LogSheet.Repeat -> OptionPickerSheet(
+            title = "Repeat",
+            options = repeatPickerOptions,
+            selectedKey = repeatKeyOf(vm.repeatFrequency, vm.repeatInterval),
+            onSelect = { key ->
+                val (frequency, interval) = parseRepeatKey(key)
+                vm.setRepeat(frequency, interval)
+                activeSheet = null
+            },
+            onDismiss = { activeSheet = null }
+        )
+
         null -> Unit
+    }
+
+    if (showStopRepeatConfirm) {
+        AlertDialog(
+            onDismissRequest = { showStopRepeatConfirm = false },
+            title = { Text("Stop repeating?") },
+            text = { Text("Transactions already added won't be removed. No new ones will be created from this rule.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showStopRepeatConfirm = false
+                    vm.stopRepeating()
+                }) {
+                    Text("Stop repeating")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStopRepeatConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     if (showDeleteConfirm) {

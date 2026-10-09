@@ -16,6 +16,17 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
+        version = "v1.4.1",
+        date = "2026-10-09",
+        added = listOf(
+            "Add Transaction: a Repeat chip for rent, SIPs and salary, adding itself when due while the app was closed",
+            "Editing a transaction a Repeat rule made offers Stop repeating; past transactions are untouched"
+        ),
+        developer = listOf(
+            "Recurring transactions: local-only Room table (migration 24 → 25), a pure RecurrenceCalculator and RecurringRepository, with tests"
+        )
+    ),
+    ChangelogRelease(
         version = "v1.4.0",
         date = "2026-10-09",
         added = listOf(

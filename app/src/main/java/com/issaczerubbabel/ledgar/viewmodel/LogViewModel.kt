@@ -12,11 +12,15 @@ import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewContext
 import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewSource
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.data.local.entity.RecurringRule
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
+import com.issaczerubbabel.ledgar.data.repository.RecurringRepository
 import com.issaczerubbabel.ledgar.sync.SyncScheduler
 import com.issaczerubbabel.ledgar.sync.SyncStatus
+import com.issaczerubbabel.ledgar.util.RecurrenceCalculator
+import com.issaczerubbabel.ledgar.util.RecurrenceFrequency
 import com.issaczerubbabel.ledgar.util.TransactionType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.map
@@ -35,6 +39,7 @@ class LogViewModel @Inject constructor(
     private val repository: ExpenseRepository,
     accountRepository: AccountRepository,
     private val dropdownOptionRepository: DropdownOptionRepository,
+    private val recurringRepository: RecurringRepository,
     private val syncScheduler: SyncScheduler,
     bucketPreviewSource: BucketPreviewSource,
     private val savedStateHandle: SavedStateHandle
@@ -93,6 +98,14 @@ class LogViewModel @Inject constructor(
     var errorMessage by mutableStateOf<String?>(null)
     var syncStatus by mutableStateOf(SyncStatus.Idle)
 
+    /** Null means Never. Only meaningful for a brand-new Transaction: repeat can't be added while editing. */
+    var repeatFrequency by mutableStateOf<String?>(null)
+    var repeatInterval by mutableStateOf(1)
+
+    /** The rule behind the Transaction being edited, if any, so its cadence can be shown and stopped. */
+    var editingRule by mutableStateOf<RecurringRule?>(null)
+        private set
+
     private var editingRecordId: Long? = null
 
     /** The record being edited, as first loaded: its amount is already in its bucket's spend. */
@@ -126,6 +139,7 @@ class LogViewModel @Inject constructor(
                 description = record.description
                 amount = if (record.amount % 1.0 == 0.0) record.amount.toInt().toString() else record.amount.toString()
                 remarks = record.remarks
+                editingRule = record.recurringRuleId?.let { recurringRepository.getById(it) }
             }
         } else if (copyTransactionId == null) {
             // Opened from an Account's page: start an Expense, Income or Transfer from that Account.
@@ -192,7 +206,7 @@ class LogViewModel @Inject constructor(
             val baseRecord = editingRecordId?.let { repository.getById(it) }
             val accountNameById = accounts.value.associate { it.id to it.accountName }
 
-            val record = ExpenseRecord(
+            var record = ExpenseRecord(
                 id = baseRecord?.id ?: 0,
                 date = selectedDate.toString(),
                 type = selectedType,
@@ -218,8 +232,37 @@ class LogViewModel @Inject constructor(
                 isBookmarked = baseRecord?.isBookmarked ?: false,
                 isSynced = false,
                 remoteTimestamp = baseRecord?.remoteTimestamp,
-                syncAction = if (isEditMode) "UPDATE" else "INSERT"
+                syncAction = if (isEditMode) "UPDATE" else "INSERT",
+                recurringRuleId = baseRecord?.recurringRuleId
             )
+
+            val frequency = repeatFrequency
+            if (!isEditMode && frequency != null) {
+                val anchorDay = if (frequency == RecurrenceFrequency.WEEKLY) {
+                    selectedDate.dayOfWeek.value
+                } else {
+                    selectedDate.dayOfMonth
+                }
+                val ruleId = recurringRepository.createRule(
+                    RecurringRule(
+                        type = record.type,
+                        category = record.category,
+                        description = record.description,
+                        amount = record.amount,
+                        accountId = record.accountId,
+                        remarks = record.remarks,
+                        fromAccountId = record.fromAccountId,
+                        toAccountId = record.toAccountId,
+                        frequency = frequency,
+                        interval = repeatInterval,
+                        anchorDay = anchorDay,
+                        startDate = record.date,
+                        nextDate = RecurrenceCalculator.nextAfter(selectedDate, frequency, repeatInterval, anchorDay).toString(),
+                        createdAt = LocalDate.now().toString()
+                    )
+                )
+                record = record.copy(recurringRuleId = ruleId)
+            }
 
             if (isEditMode) {
                 repository.update(record)
@@ -232,6 +275,20 @@ class LogViewModel @Inject constructor(
                 resetForm()
             }
             saveSuccess = true
+        }
+    }
+
+    fun setRepeat(frequency: String?, interval: Int) {
+        repeatFrequency = frequency
+        repeatInterval = interval
+    }
+
+    /** Deletes the rule behind the Transaction being edited; Transactions it already made stay. */
+    fun stopRepeating() {
+        val rule = editingRule ?: return
+        viewModelScope.launch {
+            recurringRepository.deleteRule(rule)
+            editingRule = null
         }
     }
 
@@ -312,6 +369,8 @@ class LogViewModel @Inject constructor(
         description = ""
         amount = ""
         remarks = ""
+        repeatFrequency = null
+        repeatInterval = 1
     }
 
     private fun observeSyncStatus() {
