@@ -13,7 +13,9 @@ data class AccountRecord(
     val isHidden: Boolean = false,
     val displayOrder: Int = 0,
     val description: String? = null,
-    val includeInTotals: Boolean = true
+    val includeInTotals: Boolean = true,
+    /** The day the user last Reconciled this Account (yyyy-MM-dd), or null if never. */
+    val reconciledAt: String? = null
 ) {
     // Backward-compatible alias for older call sites still using accountGroup.
     val accountGroup: String

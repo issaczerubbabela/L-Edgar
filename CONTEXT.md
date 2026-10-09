@@ -5,7 +5,7 @@ An offline-first Android expense tracker. Each user keeps their data on their ph
 ## Money
 
 **Transaction**:
-One movement of money: an Expense, an Income or a Transfer. Stored as `ExpenseRecord` in `expense_records`.
+One movement of money: an Expense, an Income, a Transfer or a Balance adjustment. Stored as `ExpenseRecord` in `expense_records`.
 _Avoid_: record, entry, expense (when you mean any type)
 
 **Transfer**:
@@ -13,14 +13,44 @@ A Transaction that moves money from one Account to another. It has a from-accoun
 _Avoid_: payment between accounts
 
 **Account**:
-A place money is held, such as a bank account, card or cash wallet. Its balance is its Initial balance plus the Transactions dated on or after its As-of date.
+A place money is held or owed, such as a bank account, card, loan or cash wallet. Its balance is its Initial balance plus the Transactions dated after its As-of date. A balance below zero means money owed.
 _Avoid_: asset (the UI's "Edit All Assets" means Accounts), payment mode
+
+**Balance adjustment**:
+A Transaction that only corrects one Account's balance to match the bank, for the difference found when Reconciling. It is never Earned, Spent or Saved.
+_Avoid_: correction, manual balance edit
+
+**Reconcile**:
+Typing in what the bank shows for an Account today, so the app adds a Balance adjustment for any difference. The Initial balance stays as it was.
+_Avoid_: edit balance, sync (for this)
 
 **Account group**:
 The named group an Account belongs to, picked from the `ACCOUNT_GROUP` Dropdown options.
 
+**Liability**:
+An Account in an Account group with the Liability role, such as a credit card or loan. Liabilities are the money owed across them: minus the sum of their balances, so an overpaid card lowers it.
+_Avoid_: debt group (keywords in a group's name no longer decide this)
+
+**Net worth**:
+The sum of the balances of every Account included in totals: Assets minus Liabilities. It is the "Total" on the Accounts tab.
+_Avoid_: balance (for the total), total assets
+
+**Cash flow**:
+Money moving into and out of the Accounts Included in totals in a period. A Transfer counts only when it crosses that boundary; Balance adjustments are shown apart from it.
+_Avoid_: income/expense (for this; those are Earned and Spent)
+
+**Included in totals**:
+Whether an Account counts towards Assets, Liabilities and Net worth. It doesn't affect whether the Account is shown.
+
+**Hidden**:
+An Account left out of the Accounts list and the account pickers. A Hidden Account still counts in totals unless it is also not Included in totals.
+
+**Archived**:
+An Account that is both Hidden and not Included in totals, kept so its Transactions still have an Account.
+_Avoid_: deleted (for an account that still exists)
+
 **Initial balance**:
-An Account's balance on its As-of date (`initialBalanceDate`). Transactions dated before the As-of date don't count towards the Account's balance.
+An Account's balance at the end of its As-of date (`initialBalanceDate`), as the bank would show it that evening. Transactions dated on or before the As-of date are already in it, so they don't count again.
 _Avoid_: opening balance, starting balance
 
 **Category**:
@@ -41,7 +71,7 @@ _Avoid_: envelope, budget (the legacy per-category plan)
 The routing of one expense Category into one Bucket for one cycle. A Category sits in at most one Bucket per cycle; Categories in none count as Unbucketed.
 
 **Stats role**:
-The part a Dropdown option plays in Stats, stored in its `role`: an expense Category can be **Saving**, an income Category can be **Refund**, and an Account group can be **Savings**. Most options have no role.
+The part a Dropdown option plays in Stats, stored in its `role`: an expense Category can be **Saving**, an income Category can be **Refund**, and an Account group can be **Savings** or **Liability**. Most options have no role.
 _Avoid_: flag, tag
 
 **Earned**:

@@ -118,7 +118,7 @@ class LogViewModel @Inject constructor(
                 selectedType = record.type
                 selectedCategory = record.category
                 selectedAccountId = when (record.type) {
-                    TransactionType.EXPENSE, TransactionType.INCOME -> record.accountId
+                    TransactionType.EXPENSE, TransactionType.INCOME, TransactionType.ADJUSTMENT -> record.accountId
                     else -> null
                 }
                 selectedFromAccountId = record.fromAccountId
@@ -127,7 +127,18 @@ class LogViewModel @Inject constructor(
                 amount = if (record.amount % 1.0 == 0.0) record.amount.toInt().toString() else record.amount.toString()
                 remarks = record.remarks
             }
-        } else if (copyTransactionId != null) {
+        } else if (copyTransactionId == null) {
+            // Opened from an Account's page: start an Expense, Income or Transfer from that Account.
+            val prefillType = savedStateHandle.get<String>("prefillType").orEmpty()
+            val prefillAccountId = savedStateHandle.get<Long>("prefillAccountId")?.takeIf { it > 0L }
+            if (prefillType in listOf(TransactionType.EXPENSE, TransactionType.INCOME, TransactionType.TRANSFER)) {
+                selectedType = prefillType
+            }
+            if (prefillAccountId != null) {
+                if (selectedType == TransactionType.TRANSFER) selectedFromAccountId = prefillAccountId
+                else selectedAccountId = prefillAccountId
+            }
+        } else {
             viewModelScope.launch {
                 val source = repository.getById(copyTransactionId)
                 if (source == null) {
@@ -141,16 +152,19 @@ class LogViewModel @Inject constructor(
                     runCatching { LocalDate.parse(source.date) }.getOrDefault(LocalDate.now())
                 }
 
-                selectedType = source.type
-                selectedCategory = source.category
+                // Only Reconcile creates Balance adjustments, so a copy of one starts as an Expense.
+                val isAdjustment = source.type == TransactionType.ADJUSTMENT
+                selectedType = if (isAdjustment) TransactionType.EXPENSE else source.type
+                selectedCategory = if (isAdjustment) "" else source.category
                 selectedAccountId = when (source.type) {
-                    TransactionType.EXPENSE, TransactionType.INCOME -> source.accountId
+                    TransactionType.EXPENSE, TransactionType.INCOME, TransactionType.ADJUSTMENT -> source.accountId
                     else -> null
                 }
                 selectedFromAccountId = source.fromAccountId
                 selectedToAccountId = source.toAccountId
                 description = source.description
-                amount = if (source.amount % 1.0 == 0.0) source.amount.toInt().toString() else source.amount.toString()
+                val copiedAmount = if (isAdjustment) kotlin.math.abs(source.amount) else source.amount
+                amount = if (copiedAmount % 1.0 == 0.0) copiedAmount.toInt().toString() else copiedAmount.toString()
                 remarks = source.remarks
             }
         }
@@ -158,10 +172,14 @@ class LogViewModel @Inject constructor(
 
     fun save() {
         val parsedAmount = amount.toDoubleOrNull()
-        if (parsedAmount == null || parsedAmount <= 0.0) {
+        // A Balance adjustment is signed: negative lowers the balance.
+        val isAdjustment = selectedType == TransactionType.ADJUSTMENT
+        if (parsedAmount == null || (if (isAdjustment) parsedAmount == 0.0 else parsedAmount <= 0.0)) {
             errorMessage = "Enter a valid amount"; return
         }
-        if (selectedType == TransactionType.TRANSFER) {
+        if (isAdjustment) {
+            if (selectedAccountId == null) { errorMessage = "Select an account"; return }
+        } else if (selectedType == TransactionType.TRANSFER) {
             if (selectedFromAccountId == null) { errorMessage = "Select From Account"; return }
             if (selectedToAccountId == null) { errorMessage = "Select To Account"; return }
             if (selectedFromAccountId == selectedToAccountId) { errorMessage = "From and To accounts must differ"; return }

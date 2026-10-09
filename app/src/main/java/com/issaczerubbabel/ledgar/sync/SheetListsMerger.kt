@@ -54,7 +54,8 @@ class SheetListsMerger @Inject constructor(
                         isHidden = dto.isHidden,
                         displayOrder = nextOrder++,
                         description = dto.description,
-                        includeInTotals = dto.includeInTotals
+                        includeInTotals = dto.includeInTotals,
+                        reconciledAt = dto.reconciledAt?.takeIf { it.isNotBlank() }
                     )
                 )
             }

@@ -3,6 +3,7 @@ package com.issaczerubbabel.ledgar.sync
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.remote.ImportRecordDto
 import com.issaczerubbabel.ledgar.data.remote.SheetTransactionDto
+import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -48,7 +49,7 @@ data class TransactionContent(
             return TransactionContent(
                 date = normalizeDate(record.date),
                 type = type,
-                category = if (isTransfer) "" else record.category.trim(),
+                category = if (type == EXPENSE || type == INCOME) record.category.trim() else "",
                 description = record.description.trim(),
                 amount = amountText(record.amount),
                 account = account.trim(),
@@ -90,6 +91,7 @@ data class TransactionContent(
             "expense" -> EXPENSE
             "income" -> INCOME
             "transfer" -> TRANSFER
+            "adjustment" -> TransactionType.ADJUSTMENT
             else -> raw.trim()
         }
 

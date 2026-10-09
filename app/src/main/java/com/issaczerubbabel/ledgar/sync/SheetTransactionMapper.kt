@@ -4,6 +4,7 @@ import com.issaczerubbabel.ledgar.data.local.dao.AccountDao
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.remote.ImportRecordDto
+import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.util.normalizeTimestampKey
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import javax.inject.Inject
@@ -68,8 +69,9 @@ class SheetTransactionMapper @Inject constructor(private val accountDao: Account
         val resolvedType = canonicalType(dto.type)
         val resolvedDate = normalizeDate(dto.date, dto.timestamp)
         val mappedCategoryRaw = when {
-            resolvedType.equals("Expense", ignoreCase = true) -> dto.expCategory
-            resolvedType.equals("Income", ignoreCase = true) -> dto.incCategory
+            resolvedType.equals(TransactionType.EXPENSE, ignoreCase = true) -> dto.expCategory
+            resolvedType.equals(TransactionType.INCOME, ignoreCase = true) -> dto.incCategory
+            resolvedType == TransactionType.ADJUSTMENT -> null
             else -> dto.expCategory ?: dto.incCategory
         }
         val mappedCategory = mappedCategoryRaw
@@ -101,16 +103,19 @@ class SheetTransactionMapper @Inject constructor(private val accountDao: Account
                 accountsByName[key]?.id ?: accountsByGroup[key]?.id
             }
 
+        val isAdjustment = resolvedType == TransactionType.ADJUSTMENT
+        val namedAccountId = remoteAccountName?.let { name ->
+            val key = normalizeAccountKey(name)
+            accountsByName[key]?.id ?: accountsByGroup[key]?.id
+        }
         val mappedAccountId = when {
-            resolvedType.equals("Transfer", ignoreCase = true) -> null
-            remoteAccountName == null -> fallbackAccountId
-            else -> {
-                val key = normalizeAccountKey(remoteAccountName)
-                accountsByName[key]?.id ?: accountsByGroup[key]?.id ?: fallbackAccountId
-            }
+            resolvedType.equals(TransactionType.TRANSFER, ignoreCase = true) -> null
+            // A Balance adjustment changes one balance, so it's never put on a guessed Account.
+            isAdjustment -> namedAccountId
+            else -> namedAccountId ?: fallbackAccountId
         }
 
-        if (!resolvedType.equals("Transfer", ignoreCase = true) && mappedAccountId == null) {
+        if (!resolvedType.equals(TransactionType.TRANSFER, ignoreCase = true) && !isAdjustment && mappedAccountId == null) {
             return MappedImportRecord(
                 record = ExpenseRecord(
                     date = resolvedDate,
@@ -184,6 +189,7 @@ class SheetTransactionMapper @Inject constructor(private val accountDao: Account
             t == "expense" -> "Expense"
             t == "income" -> "Income"
             t == "transfer" -> "Transfer"
+            t == "adjustment" -> TransactionType.ADJUSTMENT
             else -> rawType.trim().replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         }
     }

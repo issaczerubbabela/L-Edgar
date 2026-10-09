@@ -1,21 +1,24 @@
 package com.issaczerubbabel.ledgar.data.repository
 
+import com.issaczerubbabel.ledgar.account.AccountMath
+import com.issaczerubbabel.ledgar.account.Reconcile
+import com.issaczerubbabel.ledgar.account.ReconcileOutcome
 import com.issaczerubbabel.ledgar.data.local.dao.AccountDao
+import com.issaczerubbabel.ledgar.data.local.dao.DropdownOptionDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import androidx.room.withTransaction
-import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
-import com.issaczerubbabel.ledgar.util.parseAsOfDateTime
-import com.issaczerubbabel.ledgar.util.parseTransactionDateTime
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import java.time.LocalDate
 import javax.inject.Inject
 
 class AccountRepositoryImpl @Inject constructor(
     private val dao: AccountDao,
     private val expenseDao: ExpenseDao,
+    private val dropdownOptionDao: DropdownOptionDao,
     private val database: SheetSyncDatabase
 ) : AccountRepository {
 
@@ -23,53 +26,21 @@ class AccountRepositoryImpl @Inject constructor(
 
     override fun getAllVisibleAccounts(): Flow<List<AccountRecord>> = dao.getVisibleAccounts()
 
+    override fun getAccountBook(): Flow<AccountBook> =
+        combine(
+            dao.getAllAccounts(),
+            dropdownOptionDao.getOptionsByType("ACCOUNT_GROUP"),
+            expenseDao.getAllRecords(),
+            AccountBook::of
+        )
+
     override fun getAccountBalances(): Flow<List<AccountBalance>> =
-        combine(dao.getAllAccounts(), expenseDao.getAllRecords()) { accounts, records ->
-            val totalsByAccount = mutableMapOf<Long, Double>()
-            val asOfDateByAccount = accounts.associate { it.id to it.initialBalanceDate }
-
-            fun addDelta(accountId: Long?, delta: Double, txn: ExpenseRecord) {
-                if (accountId == null) return
-                val asOfDate = asOfDateByAccount[accountId] ?: "1970-01-01"
-                if (!isAfterAsOf(txn, asOfDate)) return
-                totalsByAccount[accountId] = (totalsByAccount[accountId] ?: 0.0) + delta
-            }
-
-            records.forEach { txn ->
-                when (txn.type) {
-                    "Income" -> addDelta(txn.toAccountId ?: txn.accountId, txn.amount, txn)
-                    "Expense" -> addDelta(txn.fromAccountId ?: txn.accountId, -txn.amount, txn)
-                    "Transfer" -> {
-                        addDelta(txn.fromAccountId, -txn.amount, txn)
-                        addDelta(txn.toAccountId, txn.amount, txn)
-                    }
-                }
-            }
-
-            accounts.map { account ->
-                val net = totalsByAccount[account.id] ?: 0.0
-                AccountBalance(accountId = account.id, balance = account.initialBalance + net)
-            }
-        }
-
-    private fun isAfterAsOf(record: ExpenseRecord, asOfDate: String): Boolean {
-        val tx = parseTransactionDateTime(dateRaw = record.date, timestampRaw = record.remoteTimestamp)
-        val asOf = parseAsOfDateTime(asOfDate)
-        return when {
-            tx != null && asOf != null -> tx.isAfter(asOf)
-            else -> false
-        }
-    }
+        getAccountsWithBalances().map { list -> list.map { AccountBalance(it.account.id, it.balance) } }
 
     override fun getAccountsWithBalances(): Flow<List<AccountWithBalance>> =
-        combine(dao.getAllAccounts(), getAccountBalances()) { accounts, balances ->
-            val balancesById = balances.associateBy { it.accountId }
-            accounts.map { account ->
-                AccountWithBalance(
-                    account = account,
-                    balance = balancesById[account.id]?.balance ?: account.initialBalance
-                )
-            }
+        getAccountBook().map { book ->
+            val balances = AccountMath.balances(book.accounts, book.transactions)
+            book.records.map { AccountWithBalance(account = it, balance = balances.getValue(it.id)) }
         }
 
     override fun getBalanceForAccount(accountId: Long): Flow<Double> =
@@ -102,14 +73,35 @@ class AccountRepositoryImpl @Inject constructor(
         dao.updateHiddenStatus(accountId = accountId, isHidden = !account.isHidden)
     }
 
-    override suspend fun swapDisplayOrder(firstAccountId: Long, secondAccountId: Long) {
-        dao.swapDisplayOrder(firstAccountId = firstAccountId, secondAccountId = secondAccountId)
+    override suspend fun setDisplayOrder(accountIds: List<Long>) {
+        dao.setDisplayOrder(accountIds)
     }
 
     override suspend fun hasTransactions(accountId: Long): Boolean =
         expenseDao.countRecordsForAccount(accountId) > 0
 
+    override suspend fun countTransactions(accountId: Long): Int = expenseDao.countRecordsForAccount(accountId)
+
     override suspend fun delete(record: AccountRecord) = dao.delete(record)
+
+    override suspend fun reconcile(accountId: Long, bankBalance: Double, today: LocalDate): Boolean =
+        write(accountId) { account ->
+            val book = AccountBook.of(listOf(account), emptyList(), expenseDao.getAllRecordsSnapshot().filter { it.syncAction != "DELETE" })
+            val balance = AccountMath.balances(book.accounts, book.transactions).getValue(accountId)
+            Reconcile.reconcile(account, appBalance = balance, bankBalance = bankBalance, today = today)
+        }
+
+    override suspend fun startFresh(accountId: Long, bankBalance: Double, today: LocalDate): Boolean =
+        write(accountId) { account -> Reconcile.startFresh(account, bankBalance, today) }
+
+    private suspend fun write(accountId: Long, outcomeFor: suspend (AccountRecord) -> ReconcileOutcome): Boolean =
+        database.withTransaction {
+            val account = dao.getAccountById(accountId) ?: return@withTransaction false
+            val outcome = outcomeFor(account)
+            outcome.adjustment?.let { expenseDao.insert(it) }
+            dao.update(outcome.account)
+            true
+        }
 
     override suspend fun permanentlyDeleteAccount(
         accountId: Long,
