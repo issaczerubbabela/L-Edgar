@@ -138,6 +138,12 @@ class LogViewModel @Inject constructor(
                 if (selectedType == TransactionType.TRANSFER) selectedFromAccountId = prefillAccountId
                 else selectedAccountId = prefillAccountId
             }
+            // From the Calendar's "Add on <day>": that date for this Transaction only. Not pinned, so the
+            // next one after saving starts on today again. Not reapplied over a date restored after
+            // the process was killed.
+            savedStateHandle.get<String>("prefillDate")?.takeIf { it.isNotBlank() && !savedStateHandle.contains(KEY_SELECTED_DATE) }
+                ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+                ?.let { selectedDate = it }
         } else {
             viewModelScope.launch {
                 val source = repository.getById(copyTransactionId)

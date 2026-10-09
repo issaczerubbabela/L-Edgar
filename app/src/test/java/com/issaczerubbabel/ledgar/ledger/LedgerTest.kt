@@ -109,6 +109,23 @@ class LedgerTest {
     }
 
     @Test
+    fun aDaySheetHasItsTitleAndAnEmptyDayStillOpens() {
+        val ledger = build(listOf(txn("2026-10-09", "Expense", 212.0, "Transport")))
+
+        val friday = Ledger.day(ledger, LocalDate.of(2026, 10, 9))
+        assertEquals("Fri, 9 Oct", friday.title)
+        assertEquals("9 Oct", friday.shortDate)
+        assertEquals("₹212", friday.expense)
+        assertEquals(1, friday.rows.size)
+
+        val empty = Ledger.day(ledger, LocalDate.of(2026, 10, 1))
+        assertEquals("Thu, 1 Oct", empty.title)
+        assertEquals(null, empty.income)
+        assertEquals(null, empty.expense)
+        assertEquals(emptyList<LedgerRow>(), empty.rows)
+    }
+
+    @Test
     fun aMonthStartingOnSundayFillsFiveWeeksFromItsFirst() {
         val cells = build(emptyList(), month = YearMonth.of(2026, 2)).calendar
 

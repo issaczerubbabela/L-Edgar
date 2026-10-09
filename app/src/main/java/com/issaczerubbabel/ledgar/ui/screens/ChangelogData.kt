@@ -31,7 +31,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Ledger: Undo a deleted transaction for 5 seconds; nothing reaches the Sheet until the delete is final",
             "Ledger: ✕ or Back leaves selection, and Select all in <month> picks every row on screen",
             "Ledger: filter the month on screen by category and account, shown as removable chips under the tabs",
-            "Search: pick a date range instead of typing dates, and see your words highlighted in the results"
+            "Search: pick a date range instead of typing dates, and see your words highlighted in the results",
+            "Calendar: tap a day to see its transactions, open one in place, or Add on that day without pinning the date"
         ),
         fixed = listOf(
             "Ledger: big amounts show in full instead of being cut off",
@@ -47,7 +48,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Ledger: a pending delete lives only in the Ledger ViewModel until final, so Undo never races a Sync",
             "Ledger: a pure batch plan decides which selected rows a change fits; the DAO guards category and account writes",
             "Ledger: filter matching, options and chips live in the Ledger module, with tests; old filter screens deleted",
-            "Ledger: Search's date groups, range label and match highlighting come from the Ledger module, with tests"
+            "Ledger: Search's date groups, range label and match highlighting come from the Ledger module, with tests",
+            "Ledger: Add transaction takes an optional prefillDate for one Transaction; a shared DaySheet hosts the day"
         )
     ),
     ChangelogRelease(

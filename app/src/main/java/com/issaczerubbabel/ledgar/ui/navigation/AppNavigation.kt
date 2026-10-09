@@ -78,7 +78,7 @@ import kotlinx.coroutines.launch
 sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
     object Log : Screen(
         "log?transactionId={transactionId}&copyTransactionId={copyTransactionId}&copyDateMode={copyDateMode}" +
-            "&prefillType={prefillType}&prefillAccountId={prefillAccountId}",
+            "&prefillType={prefillType}&prefillAccountId={prefillAccountId}&prefillDate={prefillDate}",
         "Log",
         Icons.Filled.AddCircle
     )
@@ -185,7 +185,9 @@ private fun logRoute(
     copyTransactionId: Long? = null,
     useTodayDateForCopy: Boolean = false,
     prefillType: String? = null,
-    prefillAccountId: Long? = null
+    prefillAccountId: Long? = null,
+    /** A date for this one Transaction (the Calendar's "Add on <day>"); it never pins the date. */
+    prefillDate: java.time.LocalDate? = null
 ): String {
     val params = mutableListOf<String>()
     transactionId?.let { params += "transactionId=$it" }
@@ -195,6 +197,7 @@ private fun logRoute(
     }
     prefillType?.let { params += "prefillType=$it" }
     prefillAccountId?.let { params += "prefillAccountId=$it" }
+    prefillDate?.let { params += "prefillDate=$it" }
     return if (params.isEmpty()) LOG_BASE_ROUTE else "$LOG_BASE_ROUTE?${params.joinToString("&")}" 
 }
 
@@ -560,6 +563,10 @@ fun AppNavigation() {
                     navArgument("prefillAccountId") {
                         type = NavType.LongType
                         defaultValue = -1L
+                    },
+                    navArgument("prefillDate") {
+                        type = NavType.StringType
+                        defaultValue = ""
                     }
                 )
             ) {
@@ -593,6 +600,9 @@ fun AppNavigation() {
                             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                             launchSingleTop = true; restoreState = true
                         }
+                    },
+                    onAddOnDate = { date ->
+                        navController.navigate(logRoute(prefillDate = date)) { launchSingleTop = true }
                     },
                     onNavigateToEditTransaction = editTransaction,
                     onNavigateToCopyTransaction = copyTransaction,

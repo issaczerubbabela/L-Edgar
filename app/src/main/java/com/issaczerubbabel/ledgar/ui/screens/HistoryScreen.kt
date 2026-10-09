@@ -42,6 +42,7 @@ import com.issaczerubbabel.ledgar.ui.components.TransactionRow
 import com.issaczerubbabel.ledgar.ui.components.TransactionSheet
 import com.issaczerubbabel.ledgar.ui.components.TransactionSheetActions
 import com.issaczerubbabel.ledgar.ledger.Ledger
+import com.issaczerubbabel.ledgar.ui.components.DaySheet
 import com.issaczerubbabel.ledgar.ledger.FilterChipUi
 import com.issaczerubbabel.ledgar.ledger.FilterSection
 import androidx.compose.foundation.horizontalScroll
@@ -100,6 +101,7 @@ private enum class BatchDialog { DATE, CATEGORY, ACCOUNT, DESCRIPTION }
 fun HistoryScreen(
     navInsets: PaddingValues,
     onNavigateToLog: () -> Unit,
+    onAddOnDate: (LocalDate) -> Unit,
     onNavigateToEditTransaction: (Long) -> Unit,
     onNavigateToCopyTransaction: (Long, Boolean) -> Unit,
     onNavigateToBookmarks: () -> Unit,
@@ -287,7 +289,7 @@ fun HistoryScreen(
                             cells        = state.calendar,
                             selectedDate = vm.selectedDate,
                             isLight      = isLight,
-                            onDaySelect  = vm::selectDate
+                            onDaySelect  = vm::openDay
                         )
                         }
                         2 -> MonthlyTabScreen(
@@ -416,6 +418,23 @@ fun HistoryScreen(
                 onDismiss = { showFilterSheet = false }
             )
         }
+    }
+
+    vm.selectedDate?.let { date ->
+        DaySheet(
+            day = Ledger.day(state, date),
+            detailsOf = { Ledger.details(it, accounts) },
+            actionsFor = { record ->
+                TransactionSheetActions(
+                    onEdit = { onNavigateToEditTransaction(record.id) },
+                    onToggleBookmark = { vm.toggleBookmark(record) },
+                    onCopy = { useToday -> onNavigateToCopyTransaction(record.id, useToday) },
+                    onDelete = { vm.delete(record) }
+                )
+            },
+            onAdd = { onAddOnDate(date) },
+            onDismiss = vm::closeDay
+        )
     }
 
     if (showDeleteSelectedDialog) {
@@ -680,7 +699,8 @@ private fun CalendarCellView(
             .height(95.dp)
             .border(0.5.dp, borderColor)
             .background(cellBg)
-            .clickable(onClick = onTap)
+            // Days outside the month only fill the week: faded, and not tappable.
+            .clickable(enabled = cell.isInMonth, onClick = onTap)
             .padding(2.dp)
     ) {
         // Date badge — centered text for selected/today indicators.

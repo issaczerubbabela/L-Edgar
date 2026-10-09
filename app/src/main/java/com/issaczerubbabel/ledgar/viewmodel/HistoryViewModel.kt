@@ -73,12 +73,16 @@ class HistoryViewModel @Inject constructor(
         .map { options -> options.map { it.name } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** The date the user has tapped in the Calendar grid. */
+    /** The Calendar day whose sheet is open: highlighted in the grid while it is. */
     var selectedDate: LocalDate? by mutableStateOf(null)
         private set
 
-    fun selectDate(date: LocalDate) {
-        selectedDate = if (selectedDate == date) null else date
+    fun openDay(date: LocalDate) {
+        selectedDate = date
+    }
+
+    fun closeDay() {
+        selectedDate = null
     }
 
     init {

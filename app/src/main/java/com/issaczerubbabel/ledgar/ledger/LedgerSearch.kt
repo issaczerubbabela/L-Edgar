@@ -3,10 +3,6 @@ package com.issaczerubbabel.ledgar.ledger
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
-
-private val dayMonthFormat = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
 
 /** One date in Search's results: its header names the month too, since results span all time. */
 data class SearchDay(

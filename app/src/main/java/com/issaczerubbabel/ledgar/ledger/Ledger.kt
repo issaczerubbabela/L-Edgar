@@ -66,6 +66,10 @@ data class LedgerDay(
     val dayNumber: String,
     /** "Fri". */
     val weekday: String,
+    /** "Fri, 9 Oct": the day sheet's title. */
+    val title: String,
+    /** "9 Oct", for "Add on 9 Oct". */
+    val shortDate: String,
     /** Null when nothing came in that day. */
     val income: String?,
     /** Null when nothing went out that day. */
@@ -107,6 +111,8 @@ data class LedgerMonth(
 
 private val monthLabelFormat = DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)
 private val weekdayFormat = DateTimeFormatter.ofPattern("EEE", Locale.ENGLISH)
+private val dayTitleFormat = DateTimeFormatter.ofPattern("EEE, d MMM", Locale.ENGLISH)
+internal val dayMonthFormat = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
 internal val sheetDateFormat = DateTimeFormatter.ofPattern("EEE, d MMM yyyy", Locale.ENGLISH)
 internal val shortDateFormat = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
 
@@ -134,10 +140,8 @@ object Ledger {
         val accountNames = accounts.associate { it.id to it.accountName }
         val days = byDate.toSortedMap(reverseOrder()).map { (date, onDay) ->
             val dayTotals = Totals.of(onDay)
-            LedgerDay(
-                date = date,
-                dayNumber = date.dayOfMonth.toString(),
-                weekday = date.format(weekdayFormat),
+            dayOf(
+                date,
                 income = dayTotals.income.takeIf { dayTotals.hasIncome }?.let(::formatListMoney),
                 expense = dayTotals.expense.takeIf { dayTotals.hasExpense }?.let(::formatListMoney),
                 rows = rowsNewestFirst(onDay, accountNames)
@@ -186,6 +190,21 @@ object Ledger {
             )
         }
     }
+
+    /** [date]'s day on [ledger], for the Calendar's day sheet: an empty day when nothing was logged. */
+    fun day(ledger: LedgerMonth, date: LocalDate): LedgerDay =
+        ledger.days.firstOrNull { it.date == date } ?: dayOf(date, income = null, expense = null, rows = emptyList())
+
+    private fun dayOf(date: LocalDate, income: String?, expense: String?, rows: List<LedgerRow>) = LedgerDay(
+        date = date,
+        dayNumber = date.dayOfMonth.toString(),
+        weekday = date.format(weekdayFormat),
+        title = date.format(dayTitleFormat),
+        shortDate = date.format(dayMonthFormat),
+        income = income,
+        expense = expense,
+        rows = rows
+    )
 
     /** The newest month with a Transaction in it, or null when there are none. */
     fun latestMonth(transactions: List<ExpenseRecord>): YearMonth? =
