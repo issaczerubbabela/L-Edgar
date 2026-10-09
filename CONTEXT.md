@@ -93,6 +93,14 @@ An Income in a Refund Category. It reduces Spent instead of adding to Earned, an
 Earned minus Spent minus Saved, for a week, month, year or custom range.
 _Avoid_: kept, balance, savings
 
+**Net**:
+Income minus Expenses for the Transactions on screen, counted as they are: Saving Categories count as Expenses and Refunds as Income. Transfers and Balance adjustments are left out. It's what the Ledger shows, so it adds up to the rows you can see; Stats uses Earned, Spent and Left over instead.
+_Avoid_: total, balance, left over (for this)
+
+**Ledger**:
+The tab that lists every Transaction, one month at a time: day by day, on a calendar, or as a year of months.
+_Avoid_: Trans., history
+
 **Left to spend**:
 A Salary cycle's spendable amount minus every Expense in it, Saving Categories included and Refunds not taken off: the same figure the Budget tab shows, because a Bucket can hold savings. Once the cycle is over, the Stats tab calls it "Left unspent".
 _Avoid_: left over (which is based on Earned, not the spendable amount)

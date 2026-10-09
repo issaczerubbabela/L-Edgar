@@ -6,6 +6,12 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `app/src/main/java/com/issaczerubbabel/ledgar/ui/screens/ChangelogData.kt`,
 which is also what the app shows under More > Changelog. Developer notes appear here only.
 
+## [1.5.0] - 2026-10-09
+
+### Developer
+
+- Glossary: Net (the Ledger's raw Income minus Expenses) and Ledger (the tab that lists every Transaction)
+
 ## [1.4.0] - 2026-10-09
 
 ### Added
@@ -209,6 +215,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - Room database, Vico charts and date-parsing tests
 
+[1.5.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.5.0
 [1.4.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.4.0
 [1.3.2]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.3.2
 [1.3.1]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.3.1

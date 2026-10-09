@@ -16,6 +16,13 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
+        version = "v1.5.0",
+        date = "2026-10-09",
+        developer = listOf(
+            "Glossary: Net (the Ledger's raw Income minus Expenses) and Ledger (the tab that lists every Transaction)"
+        )
+    ),
+    ChangelogRelease(
         version = "v1.4.0",
         date = "2026-10-09",
         added = listOf(
