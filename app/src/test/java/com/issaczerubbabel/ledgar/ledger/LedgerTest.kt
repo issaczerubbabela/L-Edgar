@@ -463,6 +463,65 @@ class LedgerTest {
         assertEquals(emptyList<IntRange>(), Ledger.matchRanges("Uber", "taxi"))
     }
 
+    private val yearOfTransactions = listOf(
+        txn("2026-10-01", "Expense", 100.0, "Food", id = 301),
+        txn("2026-10-03", "Income", 1000.0, "Salary", id = 302),
+        txn("2026-10-04", "Expense", 250.0, "Food", id = 303),
+        txn("2026-10-31", "Expense", 50.0, "Food", id = 304),
+        txn("2026-02-14", "Expense", 400.0, "Gifts", id = 305),
+        txn("2026-02-14", "Transfer", 999.0, from = 1, to = 3, id = 306),
+        txn("2025-12-31", "Income", 7000.0, "Salary", id = 307)
+    )
+
+    @Test
+    fun theCurrentYearListsMonthsUpToThisOneNewestFirst() {
+        val year = Ledger.year(yearOfTransactions, 2026, today)
+
+        assertEquals((10 downTo 1).map { YearMonth.of(2026, it) }, year.months.map { it.month })
+        assertEquals("Oct", year.months.first().name)
+        assertEquals("₹1,000", year.summary.income)
+        assertEquals("₹800", year.summary.expenses)
+        assertEquals("₹200", year.summary.net)
+    }
+
+    @Test
+    fun aPastYearHasAllTwelveMonthsAndAFutureYearNone() {
+        val past = Ledger.year(yearOfTransactions, 2025, today)
+        assertEquals(12, past.months.size)
+        assertEquals("₹7,000", past.months.first().income)
+        assertEquals(emptyList<LedgerMonthRow>(), Ledger.year(yearOfTransactions, 2027, today).months)
+    }
+
+    @Test
+    fun weeksRunSundayToSaturdayClippedToTheMonthAndAddUpToIt() {
+        val october = Ledger.year(yearOfTransactions, 2026, today).months.first()
+
+        assertEquals(listOf("1 – 3 Oct", "4 – 10 Oct", "11 – 17 Oct", "18 – 24 Oct", "25 – 31 Oct"), october.weeks.map { it.label })
+        assertEquals(listOf("₹1,000", "₹0", "₹0", "₹0", "₹0"), october.weeks.map { it.income })
+        assertEquals(listOf("₹100", "₹250", "₹0", "₹0", "₹50"), october.weeks.map { it.expense })
+        assertEquals("₹1,000", october.income)
+        assertEquals("₹400", october.expense)
+        assertEquals("₹600", october.net)
+    }
+
+    @Test
+    fun aWeekOpensDailyAtItsNewestDayWithTransactions() {
+        val october = Ledger.year(yearOfTransactions, 2026, today).months.first()
+
+        assertEquals(LocalDate.of(2026, 10, 3), october.weeks[0].scrollTo)
+        assertEquals(null, october.weeks[2].scrollTo)
+    }
+
+    @Test
+    fun theYearFollowsTheFilterAndPendingDeletes() {
+        val year = Ledger.year(yearOfTransactions, 2026, today, pendingDeleteIds = setOf(304L),
+            filter = LedgerFilter(expenseCategories = setOf("Food")))
+
+        assertEquals("₹0", year.summary.income)
+        assertEquals("₹350", year.summary.expenses)
+        assertEquals("₹0", year.months.single { it.month == YearMonth.of(2026, 2) }.expense)
+    }
+
     @Test
     fun theLatestMonthIsTheNewestWithATransaction() {
         assertEquals(YearMonth.of(2026, 11), Ledger.latestMonth(listOf(

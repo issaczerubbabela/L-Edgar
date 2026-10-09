@@ -19,6 +19,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
         version = "v1.5.0",
         date = "2026-10-09",
         changed = listOf(
+            "Monthly: shows the year of the Ledger's month, and its arrows step a year keeping the month",
+            "Monthly: tap a month or week to open it on Daily, with a separate arrow to show its weeks",
             "Search: results are grouped by date, with the month in each header since they span all time",
             "Ledger: Filter opens over the month you're looking at; the separate Filter and Filtered screens are gone",
             "Ledger: the summary reads Income, Expenses and Net, and amounts use Indian grouping without \".00\"",
@@ -39,6 +41,7 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Ledger: a day's transactions keep their order after a Sync",
             "Ledger: a Calendar day where you spent more than you earned shows a minus, in short readable amounts",
             "Ledger: Change category no longer gives a Transfer a category or an Expense an income one",
+            "Monthly: amounts are stacked so none are cut off, weeks run Sunday to Saturday, and a future year says so",
             "Ledger: Filter finds Food paid from HDFC, not every Food and every HDFC one, and finds renamed categories"
         ),
         developer = listOf(
@@ -49,7 +52,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Ledger: a pure batch plan decides which selected rows a change fits; the DAO guards category and account writes",
             "Ledger: filter matching, options and chips live in the Ledger module, with tests; old filter screens deleted",
             "Ledger: Search's date groups, range label and match highlighting come from the Ledger module, with tests",
-            "Ledger: Add transaction takes an optional prefillDate for one Transaction; a shared DaySheet hosts the day"
+            "Ledger: Add transaction takes an optional prefillDate for one Transaction; a shared DaySheet hosts the day",
+            "Ledger: Monthly's months and weeks come from the Ledger module, with tests; MonthlyViewModel merged away"
         )
     ),
     ChangelogRelease(

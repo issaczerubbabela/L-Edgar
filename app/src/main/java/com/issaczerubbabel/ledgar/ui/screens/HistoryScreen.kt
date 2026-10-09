@@ -42,6 +42,7 @@ import com.issaczerubbabel.ledgar.ui.components.TransactionRow
 import com.issaczerubbabel.ledgar.ui.components.TransactionSheet
 import com.issaczerubbabel.ledgar.ui.components.TransactionSheetActions
 import com.issaczerubbabel.ledgar.ledger.Ledger
+import androidx.compose.foundation.lazy.rememberLazyListState
 import com.issaczerubbabel.ledgar.ui.components.DaySheet
 import com.issaczerubbabel.ledgar.ledger.FilterChipUi
 import com.issaczerubbabel.ledgar.ledger.FilterSection
@@ -74,8 +75,6 @@ import com.issaczerubbabel.ledgar.ledger.LedgerSummary
 import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.util.formatListMoney
 import com.issaczerubbabel.ledgar.viewmodel.HistoryViewModel
-import com.issaczerubbabel.ledgar.viewmodel.MonthlyViewModel
-import com.issaczerubbabel.ledgar.viewmodel.PeriodSummary
 import java.time.DayOfWeek
 import java.time.LocalDate
 
@@ -110,7 +109,6 @@ fun HistoryScreen(
     onOpenTrip: (Long) -> Unit = {},
     onAddTripExpense: (Long) -> Unit = {},
     vm: HistoryViewModel = hiltViewModel(),
-    monthlyVm: MonthlyViewModel = hiltViewModel(),
     captureBadgeVm: com.issaczerubbabel.ledgar.viewmodel.CaptureBadgeViewModel = hiltViewModel(),
 ) {
     val pendingCaptures by captureBadgeVm.pendingCount.collectAsStateWithLifecycle()
@@ -118,7 +116,9 @@ fun HistoryScreen(
     val accounts by vm.accounts.collectAsStateWithLifecycle()
     val expenseCategories by vm.expenseCategories.collectAsStateWithLifecycle()
     val incomeCategories by vm.incomeCategories.collectAsStateWithLifecycle()
-    val monthlyState by monthlyVm.uiState.collectAsStateWithLifecycle()
+    val monthly by vm.year.collectAsStateWithLifecycle()
+    val expandedMonths by vm.expandedMonths.collectAsStateWithLifecycle()
+    val scrollTo by vm.scrollTo.collectAsStateWithLifecycle()
     var selectedTab by remember { mutableIntStateOf(0) }
     val pagerState = rememberPagerState(pageCount = { TABS.size })
     var showMonthPicker by remember { mutableStateOf(false) }
@@ -190,15 +190,15 @@ fun HistoryScreen(
     val headerText = Color.White   // always white on header (green or black)
 
     val periodLabel = when (selectedTab) {
-        2 -> monthlyState.selectedYear.toString()
+        2 -> monthly.year.toString()
         else -> state.monthLabel
     }
     val onPrevPeriod = when (selectedTab) {
-        2 -> monthlyVm::prevYear
+        2 -> vm::prevYear
         else -> vm::prevMonth
     }
     val onNextPeriod = when (selectedTab) {
-        2 -> monthlyVm::nextYear
+        2 -> vm::nextYear
         else -> vm::nextMonth
     }
     val canOpenMonthPicker = selectedTab == 0 || selectedTab == 1
@@ -257,7 +257,7 @@ fun HistoryScreen(
 
             // Single pinned summary row below tabs
             val pinnedSummary = when (selectedTab) {
-                2 -> monthlyState.summary.toLedgerSummary()
+                2 -> monthly.summary
                 else -> state.summary
             }
             SummaryBar(pinnedSummary)
@@ -293,14 +293,25 @@ fun HistoryScreen(
                         )
                         }
                         2 -> MonthlyTabScreen(
-                            monthGroups = monthlyState.monthGroups,
-                            onToggleExpand = monthlyVm::toggleMonthExpanded,
+                            year = monthly,
+                            expanded = expandedMonths,
+                            onOpenMonth = { month ->
+                                vm.openMonth(month)
+                                selectedTab = 0
+                            },
+                            onOpenWeek = { month, week ->
+                                vm.openWeek(month, week)
+                                selectedTab = 0
+                            },
+                            onToggleExpand = vm::toggleMonthExpanded,
                             modifier = Modifier.fillMaxSize()
                         )
                         else -> DailyContent(
                             days = state.days,
                             isFiltered = !filter.isEmpty,
                             onClearFilter = vm::clearFilter,
+                            scrollTo = scrollTo,
+                            onScrolled = vm::onScrolled,
                             selectedIds = selectedIdSet,
                             onTransactionClick = { record ->
                                 if (vm.isSelectionMode()) {
@@ -812,6 +823,8 @@ private fun DailyContent(
     days: List<LedgerDay>,
     isFiltered: Boolean,
     onClearFilter: () -> Unit,
+    scrollTo: LocalDate?,
+    onScrolled: () -> Unit,
     selectedIds: Set<Long>,
     onTransactionClick: (ExpenseRecord) -> Unit,
     onTransactionLongClick: (ExpenseRecord) -> Unit,
@@ -827,7 +840,16 @@ private fun DailyContent(
             }
         }
     } else {
-        LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = 96.dp)) {
+        val listState = rememberLazyListState()
+        // A week tapped on Monthly: once its month has loaded, bring its day to the top.
+        LaunchedEffect(scrollTo, days) {
+            val target = scrollTo ?: return@LaunchedEffect
+            val dayIndex = days.indexOfFirst { it.date == target }
+            if (dayIndex < 0) return@LaunchedEffect
+            listState.scrollToItem(days.take(dayIndex).sumOf { 1 + it.rows.size })
+            onScrolled()
+        }
+        LazyColumn(state = listState, modifier = modifier, contentPadding = PaddingValues(bottom = 96.dp)) {
             days.forEach { day ->
                 item(key = day.date.toString()) { DayHeader(day) }
                 itemsIndexed(day.rows, key = { _, row -> row.id }) { index, row ->
@@ -1037,13 +1059,6 @@ private fun SummaryBar(summary: LedgerSummary) {
         SummaryColumn("Net",      summary.net,      MaterialTheme.colorScheme.onBackground, Modifier.weight(1f))
     }
 }
-
-/** Monthly keeps its own sums until Ledger 8/10 (#77) moves it onto the Ledger module. */
-private fun PeriodSummary.toLedgerSummary() = LedgerSummary(
-    income = formatListMoney(income),
-    expenses = formatListMoney(expense),
-    net = formatListMoney(total)
-)
 
 @Composable
 private fun SummaryColumn(label: String, amount: String, color: Color, modifier: Modifier) {

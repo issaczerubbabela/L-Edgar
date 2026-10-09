@@ -18,6 +18,9 @@ import com.issaczerubbabel.ledgar.ledger.FilterOptions
 import com.issaczerubbabel.ledgar.ledger.FilterSection
 import com.issaczerubbabel.ledgar.ledger.Ledger
 import com.issaczerubbabel.ledgar.ledger.LedgerFilter
+import com.issaczerubbabel.ledgar.ledger.LedgerWeek
+import com.issaczerubbabel.ledgar.ledger.LedgerYear
+import com.issaczerubbabel.ledgar.ledger.year
 import com.issaczerubbabel.ledgar.ledger.filterChips
 import com.issaczerubbabel.ledgar.ledger.filterOptions
 import com.issaczerubbabel.ledgar.ledger.batchPlan
@@ -135,6 +138,47 @@ class HistoryViewModel @Inject constructor(
                 Ledger.build(emptyList(), emptyList(), YearMonth.now(), LocalDate.now())
             )
 
+    /** Monthly: the year of the Ledger's month, under the same filter. */
+    val year: StateFlow<LedgerYear> =
+        combine(repository.getAllRecords(), _month, pendingDeleteIds, _filter) { records, month, pending, filter ->
+            Ledger.year(records, month.year, LocalDate.now(), pending, filter)
+        }
+            .flowOn(Dispatchers.Default)
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5000),
+                Ledger.year(emptyList(), YearMonth.now().year, LocalDate.now())
+            )
+
+    private val _expandedMonths = MutableStateFlow<Set<YearMonth>>(emptySet())
+    /** Months on Monthly whose weeks are showing. */
+    val expandedMonths: StateFlow<Set<YearMonth>> = _expandedMonths.asStateFlow()
+
+    fun toggleMonthExpanded(month: YearMonth) = _expandedMonths.update { if (month in it) it - month else it + month }
+
+    /** Steps Monthly a year, keeping the month, so Daily comes back on the same month. */
+    fun nextYear() = shiftMonth(12)
+    fun prevYear() = shiftMonth(-12)
+
+    /** A month tapped on Monthly: the Ledger goes to it (the screen switches to Daily). */
+    fun openMonth(month: YearMonth) = setMonthYear(month.year, month.monthValue)
+
+    // State, not a one-off event: Daily isn't composed while Monthly shows, so an event would be lost.
+    // Any change of month clears it.
+    private val _scrollTo = MutableStateFlow<LocalDate?>(null)
+    /** A day Daily should scroll to once, after a week is tapped on Monthly. */
+    val scrollTo: StateFlow<LocalDate?> = _scrollTo.asStateFlow()
+
+    /** A week tapped on Monthly: its month on Daily, scrolled to the week. */
+    fun openWeek(month: YearMonth, week: LedgerWeek) {
+        openMonth(month)
+        _scrollTo.value = week.scrollTo
+    }
+
+    fun onScrolled() {
+        _scrollTo.value = null
+    }
+
     val filterChips: StateFlow<List<FilterChipUi>> = combine(_filter, accounts) { filter, accounts ->
         Ledger.filterChips(filter, accounts)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -200,6 +244,7 @@ class HistoryViewModel @Inject constructor(
         val safeYear = year.coerceIn(1900, 2100)
         shouldAutoFocusLatestMonth = false
         _month.value = YearMonth.of(safeYear, safeMonth)
+        _scrollTo.value = null
         selectedDate = null
         clearSelection()
     }
@@ -207,6 +252,7 @@ class HistoryViewModel @Inject constructor(
     private fun shiftMonth(delta: Long) {
         shouldAutoFocusLatestMonth = false
         _month.value = _month.value.plusMonths(delta)
+        _scrollTo.value = null
         selectedDate = null
         clearSelection()
     }

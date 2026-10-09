@@ -305,7 +305,7 @@ object Ledger {
 private data class Dated(val date: LocalDate, val transaction: ExpenseRecord)
 
 /** Income and Expenses counted by type alone; Transfers and Balance adjustments never add up. */
-private data class Totals(val income: Double, val expense: Double) {
+internal data class Totals(val income: Double, val expense: Double) {
     val net: Double get() = income - expense
     /** More than rounding dust came in. */
     val hasIncome: Boolean get() = income > HALF_PAISA
