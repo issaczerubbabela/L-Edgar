@@ -51,7 +51,7 @@ data class CapturedTransaction(
     val confidence: Double = 0.0,
     val decidedBy: String? = null,
     val traceJson: String? = null,
-    val status: String = "PENDING", // PENDING | CONFIRMED | DISMISSED | DUPLICATE | POSSIBLE_DUPLICATE
+    val status: String = "PENDING", // PENDING | CONFIRMED | DISMISSED | DUPLICATE | POSSIBLE_DUPLICATE | TRIP
     val confirmedExpenseId: Long? = null,
     val finalCategory: String? = null
 )

@@ -165,7 +165,8 @@ class BackupWorker @AssistedInject constructor(
                 isHidden = account.isHidden,
                 displayOrder = account.displayOrder,
                 description = account.description,
-                includeInTotals = account.includeInTotals
+                includeInTotals = account.includeInTotals,
+                reconciledAt = account.reconciledAt
             )
         }
 

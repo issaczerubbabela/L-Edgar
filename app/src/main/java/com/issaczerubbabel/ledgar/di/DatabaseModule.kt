@@ -13,12 +13,15 @@ import com.issaczerubbabel.ledgar.data.local.dao.AccountDao
 import com.issaczerubbabel.ledgar.data.local.dao.BucketBudgetDao
 import com.issaczerubbabel.ledgar.data.local.dao.BudgetDao
 import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
+import com.issaczerubbabel.ledgar.data.local.migration.AccountMigration
 import com.issaczerubbabel.ledgar.data.local.migration.BucketBudgetMigration
 import com.issaczerubbabel.ledgar.data.local.migration.CaptureMigration
+import com.issaczerubbabel.ledgar.data.local.migration.TripMigration
 import com.issaczerubbabel.ledgar.data.local.dao.DropdownOptionDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
 import com.issaczerubbabel.ledgar.data.local.dao.MerchantRuleDao
 import com.issaczerubbabel.ledgar.data.local.dao.UnparsedAlertDao
+import com.issaczerubbabel.ledgar.data.local.dao.TripDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -123,6 +126,27 @@ object DatabaseModule {
                 MIGRATION_19_20.migrate(db)
             }
             CaptureMigration.createTables(db)
+        }
+    }
+
+    /** Adds the local-only Trip tables (see "Trips" in CONTEXT.md). Additive and idempotent. */
+    internal val MIGRATION_21_22 = object : Migration(21, 22) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            TripMigration.createTables(db)
+        }
+    }
+
+    /** Trip Member colours, and Adjust / Exact splits become Custom with every Share unchanged. */
+    internal val MIGRATION_22_23 = object : Migration(22, 23) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            TripMigration.upgradeTo23(db)
+        }
+    }
+
+    /** Accounts revamp: Liability roles, "reconciled on" dates and linked Transfer destinations. */
+    internal val MIGRATION_23_24 = object : Migration(23, 24) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            AccountMigration.upgradeTo24(db)
         }
     }
 
@@ -269,6 +293,9 @@ object DatabaseModule {
             .addMigrations(MIGRATION_18_19)
             .addMigrations(MIGRATION_19_20)
             .addMigrations(MIGRATION_20_21)
+            .addMigrations(MIGRATION_21_22)
+            .addMigrations(MIGRATION_22_23)
+            .addMigrations(MIGRATION_23_24)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .addCallback(callback)
             .build()
@@ -300,4 +327,7 @@ object DatabaseModule {
 
     @Provides
     fun provideUnparsedAlertDao(db: SheetSyncDatabase): UnparsedAlertDao = db.unparsedAlertDao()
+
+    @Provides
+    fun provideTripDao(db: SheetSyncDatabase): TripDao = db.tripDao()
 }

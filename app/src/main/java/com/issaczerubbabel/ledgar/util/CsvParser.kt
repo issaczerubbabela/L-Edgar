@@ -56,13 +56,22 @@ object CsvParser {
 
             val expCat = cols.getOrEmpty(idx.expCat)
             val incCat = cols.getOrEmpty(idx.incCat)
-            val category = if (type.equals("Expense", ignoreCase = true)) expCat else incCat
+            val resolvedType = when {
+                type.equals("Expense", ignoreCase = true) -> TransactionType.EXPENSE
+                type.equals(TransactionType.ADJUSTMENT, ignoreCase = true) -> TransactionType.ADJUSTMENT
+                else -> TransactionType.INCOME
+            }
+            val category = when (resolvedType) {
+                TransactionType.EXPENSE -> expCat.ifBlank { "Other" }
+                TransactionType.ADJUSTMENT -> "" // a Balance adjustment has no Category
+                else -> incCat.ifBlank { "Other" }
+            }
 
             records.add(
                 ExpenseRecord(
                     date        = normaliseDate(cols.getOrEmpty(idx.date)),
-                    type        = if (type.equals("Expense", ignoreCase = true)) "Expense" else "Income",
-                    category    = category.ifBlank { "Other" },
+                    type        = resolvedType,
+                    category    = category,
                     description = cols.getOrEmpty(idx.description),
                     amount      = amount,
                     accountId   = null,

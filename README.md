@@ -138,7 +138,7 @@ APPS_SCRIPT_URL_DEBUG=https://script.google.com/macros/s/YOUR_TEST_SCRIPT_ID/exe
 5. Type: `Web app`.
 6. Execute as: `Me`.
 7. Who has access: `Anyone`.
-8. Copy the deployment URL and paste it into the app under `More -> Database Setup (Sheets)`.
+8. Copy the deployment URL and paste it into the app under `More -> Settings -> Database Setup (Sheets)`.
 
 Note: the deployment URL changes on each new deployment. Paste the new URL into the app whenever you redeploy.
 

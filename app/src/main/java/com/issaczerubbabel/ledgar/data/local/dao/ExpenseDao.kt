@@ -193,6 +193,11 @@ interface ExpenseDao {
     )
     suspend fun updateTransactionsDateByIds(ids: List<Long>, newDate: String)
 
+    /**
+     * Gives [newCategory], a Category of [type], to those of [ids] that are that type. A guard even if
+     * the caller is wrong: a Transfer or Balance adjustment never gets a Category, and an Expense never
+     * an income one.
+     */
     @Query(
         """
         UPDATE expense_records
@@ -200,19 +205,23 @@ interface ExpenseDao {
             isSynced = 0,
             syncAction = CASE WHEN syncAction IN ('INSERT', 'DELETE') THEN syncAction ELSE 'UPDATE' END
         WHERE id IN (:ids)
+          AND type = :type
+          AND type IN ('Expense', 'Income')
         """
     )
-    suspend fun updateTransactionsCategoryByIds(ids: List<Long>, newCategory: String)
+    suspend fun updateTransactionsCategoryByIds(ids: List<Long>, newCategory: String, type: String)
 
+    /** Moves those of [ids] that have one Account to [accountId]; a Transfer keeps its from and to Accounts. */
     @Query(
         """
         UPDATE expense_records
-        SET accountId = CASE WHEN type IN ('Expense', 'Income') THEN :accountId ELSE accountId END,
+        SET accountId = CASE WHEN type IN ('Expense', 'Income', 'Adjustment') THEN :accountId ELSE accountId END,
             fromAccountId = CASE WHEN type = 'Expense' THEN :accountId ELSE fromAccountId END,
             toAccountId = CASE WHEN type = 'Income' THEN :accountId ELSE toAccountId END,
             isSynced = 0,
             syncAction = CASE WHEN syncAction IN ('INSERT', 'DELETE') THEN syncAction ELSE 'UPDATE' END
         WHERE id IN (:ids)
+          AND type IN ('Expense', 'Income', 'Adjustment')
         """
     )
     suspend fun updateTransactionsAssetByIds(ids: List<Long>, accountId: Long)
@@ -331,66 +340,4 @@ interface ExpenseDao {
         """
     )
     fun getTransactionsForAccountInMonth(accountId: Long, startDate: String, endDate: String): Flow<List<ExpenseRecord>>
-
-    @Query(
-        """
-                SELECT COALESCE(SUM(
-            CASE
-                                WHEN e.type = 'Income' AND (e.toAccountId = :accountId OR e.accountId = :accountId) THEN e.amount
-                                WHEN e.type = 'Expense' AND (e.fromAccountId = :accountId OR e.accountId = :accountId) THEN -e.amount
-                                WHEN e.type = 'Transfer' AND e.toAccountId = :accountId THEN e.amount
-                                WHEN e.type = 'Transfer' AND e.fromAccountId = :accountId THEN -e.amount
-                ELSE 0
-            END
-                ), 0)
-                FROM expense_records e
-                INNER JOIN account_records a ON a.id = :accountId
-                WHERE (e.accountId = :accountId OR e.fromAccountId = :accountId OR e.toAccountId = :accountId)
-                    AND e.date < :beforeDate
-                    AND e.date >= substr(a.initialBalanceDate, 1, 10)
-                    AND e.syncAction != 'DELETE'
-        """
-    )
-    fun getHistoricalSumForAccount(accountId: Long, beforeDate: String): Flow<Double?>
-
-    @Query(
-        """
-        SELECT a.initialBalance + COALESCE(SUM(
-            CASE
-                WHEN e.type = 'Income' THEN e.amount
-                WHEN e.type = 'Expense' THEN -e.amount
-                ELSE 0
-            END
-        ), 0)
-        FROM account_records a
-        LEFT JOIN expense_records e
-            ON e.accountId = a.id
-           AND e.syncAction != 'DELETE'
-                  AND e.date >= substr(a.initialBalanceDate, 1, 10)
-           AND e.date <= :endDate
-        WHERE a.id = :accountId
-        """
-    )
-    fun getAccountBalanceUntilDate(accountId: Long, endDate: String): Flow<Double>
-
-    @Query(
-        """
-        SELECT a.initialBalance + COALESCE(SUM(
-            CASE
-                WHEN e.type = 'Income' AND e.toAccountId = :accountId THEN e.amount
-                WHEN e.type = 'Expense' AND e.fromAccountId = :accountId THEN -e.amount
-                WHEN e.type = 'Transfer' AND e.toAccountId = :accountId THEN e.amount
-                WHEN e.type = 'Transfer' AND e.fromAccountId = :accountId THEN -e.amount
-                ELSE 0
-            END
-        ), 0)
-        FROM account_records a
-        LEFT JOIN expense_records e
-            ON (e.fromAccountId = a.id OR e.toAccountId = a.id)
-           AND e.syncAction != 'DELETE'
-           AND e.date >= substr(a.initialBalanceDate, 1, 10)
-        WHERE a.id = :accountId
-        """
-    )
-    fun getAccountBalance(accountId: Long): Flow<Double>
 }

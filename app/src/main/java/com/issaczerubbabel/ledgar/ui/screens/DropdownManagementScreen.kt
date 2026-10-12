@@ -55,6 +55,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownRole
 import com.issaczerubbabel.ledgar.viewmodel.DropdownManagementViewModel
 import com.issaczerubbabel.ledgar.viewmodel.DropdownOptionType
+import com.issaczerubbabel.ledgar.viewmodel.RoleChoice
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -144,7 +145,7 @@ fun DropdownManagementScreen(
                 items(state.options, key = { it.id }) { option ->
                     DropdownOptionRow(
                         option = option,
-                        statsRole = state.selectedType.statsRole,
+                        roles = state.selectedType.roles,
                         onSetRole = { vm.setRole(option, it) },
                         canMoveUp = state.options.firstOrNull()?.id != option.id,
                         canMoveDown = state.options.lastOrNull()?.id != option.id,
@@ -188,7 +189,7 @@ fun DropdownManagementScreen(
     }
 }
 
-private fun ordinaryLabel(role: String) = when (role) {
+private fun ordinaryLabel(roles: List<RoleChoice>) = when (roles.firstOrNull()?.role) {
     DropdownRole.SAVING -> "Spending"
     DropdownRole.REFUND -> "Earnings"
     else -> "Ordinary accounts"
@@ -197,7 +198,7 @@ private fun ordinaryLabel(role: String) = when (role) {
 @Composable
 private fun DropdownOptionRow(
     option: DropdownOption,
-    statsRole: Pair<String, String>?,
+    roles: List<RoleChoice>,
     onSetRole: (String) -> Unit,
     canMoveUp: Boolean,
     canMoveDown: Boolean,
@@ -215,8 +216,8 @@ private fun DropdownOptionRow(
         var roleMenuOpen by remember { mutableStateOf(false) }
         Box(Modifier.weight(1f)) {
             Column(
-                modifier = if (statsRole != null) {
-                    Modifier.fillMaxWidth().heightIn(min = 40.dp).clickable(onClickLabel = "Choose how Stats counts it") { roleMenuOpen = true }
+                modifier = if (roles.isNotEmpty()) {
+                    Modifier.fillMaxWidth().heightIn(min = 40.dp).clickable(onClickLabel = "Choose how it counts") { roleMenuOpen = true }
                 } else {
                     Modifier.fillMaxWidth()
                 },
@@ -228,15 +229,15 @@ private fun DropdownOptionRow(
                     color = MaterialTheme.colorScheme.onBackground,
                     fontWeight = FontWeight.Medium
                 )
-                if (statsRole != null && option.role == statsRole.first) {
+                roles.firstOrNull { it.role == option.role }?.let { chosen ->
                     Text(
-                        text = "Counts as ${statsRole.second.lowercase()} in Stats",
+                        text = chosen.effect,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
-            if (statsRole != null) {
+            if (roles.isNotEmpty()) {
                 DropdownMenu(expanded = roleMenuOpen, onDismissRequest = { roleMenuOpen = false }) {
                     Text(
                         "Counts as",
@@ -244,7 +245,7 @@ private fun DropdownOptionRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )
-                    listOf("" to ordinaryLabel(statsRole.first), statsRole).forEach { (value, label) ->
+                    (listOf("" to ordinaryLabel(roles)) + roles.map { it.role to it.label }).forEach { (value, label) ->
                         DropdownMenuItem(
                             text = { Text(label) },
                             leadingIcon = { RadioButton(selected = option.role == value, onClick = null) },

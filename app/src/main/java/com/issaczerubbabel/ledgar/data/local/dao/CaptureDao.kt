@@ -47,6 +47,10 @@ interface CaptureDao {
     )
     suspend fun markConfirmed(id: Long, expenseId: Long, finalCategory: String?)
 
+    /** The user turned this capture into a Trip expense instead of a Transaction (ADR-0008). */
+    @Query("UPDATE captured_transactions SET status = 'TRIP' WHERE id = :id")
+    suspend fun markAddedToTrip(id: Long)
+
     @Query("UPDATE captured_transactions SET status = 'DISMISSED' WHERE id = :id")
     suspend fun markDismissed(id: Long)
 

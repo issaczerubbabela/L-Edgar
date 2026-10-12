@@ -18,14 +18,26 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/**
- * [statsRole] is the one Stats role options of this type can take (ADR-0004), with how the UI
- * names it, or null when the type has none.
- */
-enum class DropdownOptionType(val key: String, val label: String, val statsRole: Pair<String, String>? = null) {
-    ExpenseCategory("EXPENSE_CATEGORY", "Expense Categories", DropdownRole.SAVING to "Saving"),
-    IncomeCategory("INCOME_CATEGORY", "Income Categories", DropdownRole.REFUND to "Refund"),
-    AccountGroup("ACCOUNT_GROUP", "Account Groups", DropdownRole.SAVINGS to "Savings"),
+/** A role an option can take (ADR-0004), how the UI names it, and what it does once chosen. */
+data class RoleChoice(val role: String, val label: String, val effect: String)
+
+/** [roles] are the roles options of this type can take besides none; empty when the type has none. */
+enum class DropdownOptionType(val key: String, val label: String, val roles: List<RoleChoice> = emptyList()) {
+    ExpenseCategory(
+        "EXPENSE_CATEGORY", "Expense Categories",
+        listOf(RoleChoice(DropdownRole.SAVING, "Saving", "Counts as saving in Stats"))
+    ),
+    IncomeCategory(
+        "INCOME_CATEGORY", "Income Categories",
+        listOf(RoleChoice(DropdownRole.REFUND, "Refund", "Counts as refund in Stats"))
+    ),
+    AccountGroup(
+        "ACCOUNT_GROUP", "Account Groups",
+        listOf(
+            RoleChoice(DropdownRole.SAVINGS, "Savings", "Counts as savings in Stats"),
+            RoleChoice(DropdownRole.LIABILITY, "Liability", "Money owed: counts in Liabilities")
+        )
+    ),
     PaymentMode("PAYMENT_MODE", "Payment Modes")
 }
 

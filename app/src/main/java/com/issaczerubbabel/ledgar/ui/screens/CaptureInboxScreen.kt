@@ -75,8 +75,11 @@ private fun whenText(arrivedAt: Long, txnTime: Long): String {
 fun CaptureInboxScreen(
     innerPadding: PaddingValues,
     onBack: () -> Unit,
-    vm: ReviewInboxViewModel = hiltViewModel()
+    onAddToTrip: (tripId: Long, captureId: Long) -> Unit = { _, _ -> },
+    vm: ReviewInboxViewModel = hiltViewModel(),
+    activeTripVm: com.issaczerubbabel.ledgar.viewmodel.ActiveTripViewModel = hiltViewModel()
 ) {
+    val activeTrip by activeTripVm.active.collectAsStateWithLifecycle()
     val rows by vm.rows.collectAsStateWithLifecycle()
     val accounts by vm.accounts.collectAsStateWithLifecycle()
     val expenseCategories by vm.expenseCategories.collectAsStateWithLifecycle()
@@ -154,7 +157,9 @@ fun CaptureInboxScreen(
                         onPickAccount = { picker = Picker.ForAccount(row) },
                         onAlwaysUseChange = { vm.setAlwaysUse(row.capture.id, it) },
                         onConfirm = { vm.confirm(row) },
-                        onDismiss = { vm.dismiss(row.capture.id) }
+                        onDismiss = { vm.dismiss(row.capture.id) },
+                        // ADR-0008: a shared trip payment becomes a Trip expense, never a full personal Transaction.
+                        onAddToTrip = activeTrip?.takeIf { !row.isIncome }?.let { trip -> { onAddToTrip(trip.tripId, row.capture.id) } }
                     )
                 }
             }
@@ -198,7 +203,8 @@ private fun CaptureCard(
     onPickAccount: () -> Unit,
     onAlwaysUseChange: (Boolean) -> Unit,
     onConfirm: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onAddToTrip: (() -> Unit)? = null
 ) {
     var showOriginal by remember { mutableStateOf(false) }
     val capture = row.capture
@@ -281,6 +287,7 @@ private fun CaptureCard(
                 }
                 Box(modifier = Modifier.weight(1f))
                 TextButton(onClick = onDismiss) { Text("Dismiss") }
+                if (onAddToTrip != null) TextButton(onClick = onAddToTrip) { Text("Add to trip") }
                 Button(onClick = onConfirm, enabled = row.canConfirm) { Text("Confirm") }
             }
         }

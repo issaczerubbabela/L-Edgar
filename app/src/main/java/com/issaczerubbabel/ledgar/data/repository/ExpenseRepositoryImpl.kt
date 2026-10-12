@@ -86,13 +86,6 @@ class ExpenseRepositoryImpl @Inject constructor(
     override fun getTransactionsForAccountInMonth(accountId: Long, startOfMonth: String, endOfMonth: String): Flow<List<ExpenseRecord>> =
         dao.getTransactionsForAccountInMonth(accountId = accountId, startDate = startOfMonth, endDate = endOfMonth)
 
-    override fun getHistoricalSumForAccount(accountId: Long, beforeDate: String): Flow<Double?> =
-        dao.getHistoricalSumForAccount(accountId = accountId, beforeDate = beforeDate)
-
-    override fun getAccountBalanceUntilDate(accountId: Long, endDate: String): Flow<Double> =
-        dao.getAccountBalanceUntilDate(accountId = accountId, endDate = endDate)
-
-    override fun getAccountBalance(accountId: Long): Flow<Double> = dao.getAccountBalance(accountId)
 
     override fun getRecordsByDateRange(startDate: String, endDate: String): Flow<List<ExpenseRecord>> =
         dao.getRecordsByDateRange(startDate, endDate)
@@ -105,8 +98,8 @@ class ExpenseRepositoryImpl @Inject constructor(
     override suspend fun updateTransactionsDateByIds(ids: List<Long>, newDate: String) =
         dao.updateTransactionsDateByIds(ids = ids, newDate = newDate)
 
-    override suspend fun updateTransactionsCategoryByIds(ids: List<Long>, newCategory: String) =
-        dao.updateTransactionsCategoryByIds(ids = ids, newCategory = newCategory)
+    override suspend fun updateTransactionsCategoryByIds(ids: List<Long>, newCategory: String, type: String) =
+        dao.updateTransactionsCategoryByIds(ids = ids, newCategory = newCategory, type = type)
 
     override suspend fun updateTransactionsAssetByIds(ids: List<Long>, accountId: Long) =
         dao.updateTransactionsAssetByIds(ids = ids, accountId = accountId)
@@ -176,7 +169,8 @@ class ExpenseRepositoryImpl @Inject constructor(
                     isHidden = dto.isHidden,
                     displayOrder = dto.displayOrder ?: index,
                     description = dto.description,
-                    includeInTotals = dto.includeInTotals
+                    includeInTotals = dto.includeInTotals,
+                    reconciledAt = dto.reconciledAt?.takeIf { it.isNotBlank() }
                 )
             }
             accountDao.overwriteAll(mapped)

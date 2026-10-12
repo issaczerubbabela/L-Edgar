@@ -27,6 +27,58 @@ fun formatRupeesExact(amount: Double): String {
     return if (fraction == 0L) sign + base else sign + base + "." + fraction.toString().padStart(2, '0')
 }
 
+/**
+ * An exact amount for statements and totals: always two decimals (₹2,47,980.50), a true minus sign
+ * (−₹18,640.00) and, with [signed], a + on positive amounts (+₹340.00). Rounds to paise first, so a
+ * sum that is zero to the paisa is ₹0.00, never −₹0.00.
+ */
+fun formatMoney(amount: Double, signed: Boolean = false): String {
+    val paise = (amount * 100).roundToLong()
+    val digits = groupIndian((abs(paise) / 100).toString())
+    val fraction = (abs(paise) % 100).toString().padStart(2, '0')
+    val sign = when {
+        paise < 0 -> "−"
+        signed && paise > 0 -> "+"
+        else -> ""
+    }
+    return "$sign₹$digits.$fraction"
+}
+
+/**
+ * An amount in a list: Indian grouping, paise only when there are some (₹1,25,000, ₹212.40), a
+ * true minus (−₹4,250) and, with [signed], a + on positive amounts. Never cut short: the row grows.
+ */
+fun formatListMoney(amount: Double, signed: Boolean = false): String {
+    val paise = (amount * 100).roundToLong()
+    val digits = groupIndian((abs(paise) / 100).toString())
+    val fraction = abs(paise) % 100
+    val sign = when {
+        paise < 0 -> "−"
+        signed && paise > 0 -> "+"
+        else -> ""
+    }
+    val base = "$sign₹$digits"
+    return if (fraction == 0L) base else base + "." + fraction.toString().padStart(2, '0')
+}
+
+/**
+ * A Calendar cell's amount, short enough to fit: whole rupees under 1,000 (950), then thousands
+ * (1.2k), then lakhs (1.5L), each with one decimal and no ".0", and a true minus (−1.2k). No ₹:
+ * the cell's colour says which side it is.
+ */
+fun formatCalendarMoney(amount: Double): String {
+    val rupees = abs(amount).roundToLong()
+    val sign = if (amount < 0 && rupees != 0L) "−" else ""
+    if (rupees < 1000) return "$sign$rupees"
+    val thousandTenths = (rupees / 100.0).roundToLong()
+    if (thousandTenths < 1000) return sign + tenths(thousandTenths) + "k"
+    return sign + tenths((rupees / 10_000.0).roundToLong()) + "L"
+}
+
+/** 12 → "1.2", 10 → "1". */
+private fun tenths(value: Long): String =
+    if (value % 10 == 0L) (value / 10).toString() else "${value / 10}.${value % 10}"
+
 private fun groupIndian(digits: String): String {
     if (digits.length <= 3) return digits
     val lastThree = digits.takeLast(3)

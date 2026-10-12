@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
@@ -11,65 +12,45 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
-import com.issaczerubbabel.ledgar.util.parseFlexibleDate
+import com.issaczerubbabel.ledgar.data.repository.UndoableDelete
+import com.issaczerubbabel.ledgar.data.repository.UndoableDeletes
+import com.issaczerubbabel.ledgar.ledger.BatchAction
+import com.issaczerubbabel.ledgar.ledger.FilterChipUi
+import com.issaczerubbabel.ledgar.ledger.FilterOptions
+import com.issaczerubbabel.ledgar.ledger.FilterSection
+import com.issaczerubbabel.ledgar.ledger.Ledger
+import com.issaczerubbabel.ledgar.ledger.LedgerFilter
+import com.issaczerubbabel.ledgar.ledger.LedgerWeek
+import com.issaczerubbabel.ledgar.ledger.LedgerYear
+import com.issaczerubbabel.ledgar.ledger.year
+import com.issaczerubbabel.ledgar.ledger.filterChips
+import com.issaczerubbabel.ledgar.ledger.filterOptions
+import com.issaczerubbabel.ledgar.ledger.batchPlan
+import com.issaczerubbabel.ledgar.util.TransactionType
+import com.issaczerubbabel.ledgar.ledger.LedgerMonth
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import java.time.DayOfWeek
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
+import java.time.YearMonth
 import javax.inject.Inject
-
-// ── Data models ───────────────────────────────────────────────────────────────
-
-data class PeriodSummary(
-    val income: Double  = 0.0,
-    val expense: Double = 0.0,
-    val total: Double   = 0.0
-)
-
-data class DayGroup(
-    val date: LocalDate,
-    val dayNumber: String,
-    val dateLabel: String,
-    val dayOfWeekBadge: String,
-    val dayIncome: Double,
-    val dayExpense: Double,
-    val records: List<ExpenseRecord>
-)
-
-data class CalendarCell(
-    val date: LocalDate,
-    val isCurrentMonth: Boolean,
-    val isToday: Boolean,
-    val dayIncome: Double,
-    val dayExpense: Double,
-    val dayNet: Double,          // positive = net income, negative = net expense
-    val categories: List<String>,// distinct categories for dot colours
-    val totalTransactions: Int
-)
-
-data class HistoryUiState(
-    val selectedMonth: Int      = LocalDate.now().monthValue,
-    val selectedYear: Int       = LocalDate.now().year,
-    val monthLabel: String       = "",
-    val summary: PeriodSummary   = PeriodSummary(),
-    val groups: List<DayGroup>   = emptyList(),
-    val calendarCells: List<CalendarCell> = emptyList()
-)
 
 // ── ViewModel ─────────────────────────────────────────────────────────────────
 
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
     private val repository: ExpenseRepository,
     accountRepository: AccountRepository,
-    dropdownOptionRepository: DropdownOptionRepository
+    dropdownOptionRepository: DropdownOptionRepository,
+    private val undoableDeletes: UndoableDeletes
 ) : ViewModel() {
 
-    private val _month = MutableStateFlow(LocalDate.now().monthValue)
-    private val _year  = MutableStateFlow(LocalDate.now().year)
+    private val _month = MutableStateFlow(YearMonth.now())
+    /** Transactions deleted but still offering Undo: hidden from the Ledger, not yet written. */
+    private val pendingDeleteIds = undoableDeletes.hiddenIds
     private var shouldAutoFocusLatestMonth = true
     val selectedTxIds = mutableStateListOf<Long>()
 
@@ -77,22 +58,38 @@ class HistoryViewModel @Inject constructor(
         .getAllVisibleAccounts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val categories: StateFlow<List<String>> = combine(
-        dropdownOptionRepository.getOptionsByType("EXPENSE_CATEGORY"),
-        dropdownOptionRepository.getOptionsByType("INCOME_CATEGORY")
-    ) { expense, income ->
-        (expense + income).map { it.name }.distinct().sorted()
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    /** For Change category: the Expense categories, then the Income ones, kept apart. */
+    val expenseCategories: StateFlow<List<String>> = dropdownOptionRepository
+        .getOptionsByType(TransactionType.EXPENSE_CATEGORY_OPTION)
+        .map { options -> options.map { it.name } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val incomeCategories: StateFlow<List<String>> = dropdownOptionRepository
+        .getOptionsByType(TransactionType.INCOME_CATEGORY_OPTION)
+        .map { options -> options.map { it.name } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** The date the user has tapped in the Calendar grid. */
+    /** The Calendar day whose sheet is open: highlighted in the grid while it is. */
     var selectedDate: LocalDate? by mutableStateOf(null)
         private set
 
-    fun selectDate(date: LocalDate) {
-        selectedDate = if (selectedDate == date) null else date
+    fun openDay(date: LocalDate) {
+        selectedDate = date
+    }
+
+    fun closeDay() {
+        selectedDate = null
     }
 
     init {
+        // The bottom bar marks the Ledger left when another tab is picked; Back from there finds it clear.
+        viewModelScope.launch {
+            savedStateHandle.getStateFlow(LEFT_LEDGER, false).collect { left ->
+                if (left) {
+                    clearFilter()
+                    savedStateHandle[LEFT_LEDGER] = false
+                }
+            }
+        }
         viewModelScope.launch {
             repository.getAllRecords().collect { records ->
                 if (records.isEmpty()) {
@@ -102,74 +99,132 @@ class HistoryViewModel @Inject constructor(
 
                 if (!shouldAutoFocusLatestMonth) return@collect
 
-                val latest = records
-                    .mapNotNull { parseRecordDate(it) }
-                    .maxOrNull() ?: return@collect
-
-                // Default the tab to the most recent available month so imported
-                // historical records are visible immediately after import.
-                if (_month.value != latest.monthValue || _year.value != latest.year) {
-                    _month.value = latest.monthValue
-                    _year.value = latest.year
+                // Open on the most recent month with Transactions, so imported history is
+                // visible straight away.
+                val latest = withContext(Dispatchers.Default) { Ledger.latestMonth(records) } ?: return@collect
+                if (shouldAutoFocusLatestMonth && _month.value != latest) {
+                    _month.value = latest
                     selectedDate = null
+                    clearSelection()
                 }
                 shouldAutoFocusLatestMonth = false
             }
         }
     }
 
-    val uiState: StateFlow<HistoryUiState> =
-        combine(repository.getAllRecords(), _month, _year) { records, month, year ->
+    /**
+     * The active filter: kept across months and trips to Search or an edit. It's cleared when another
+     * tab is picked ([LEFT_LEDGER]), or when the bottom bar brings back a fresh Ledger.
+     */
+    private val _filter = MutableStateFlow(LedgerFilter())
+    val filter: StateFlow<LedgerFilter> = _filter.asStateFlow()
 
-            val monthDate  = LocalDate.of(year, month, 1)
-            val monthLabel = monthDate.format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH))
-            val today      = LocalDate.now()
-
-            // ── Filter to current month ────────────────────────────────────
-            val monthRecords = records.filter { r ->
-                runCatching { parseRecordDate(r) }
-                    .getOrNull()?.let { d -> d.monthValue == month && d.year == year } == true
-            }
-
-            val income  = monthRecords.filter { it.type == "Income"  }.sumOf { it.amount }
-            val expense = monthRecords.filter { it.type == "Expense" }.sumOf { it.amount }
-
-            // ── Group by date for both Daily list and Calendar ─────────────
-            val byDate: Map<LocalDate, List<ExpenseRecord>> = monthRecords
-                .mapNotNull { r ->
-                    parseRecordDate(r)?.let { it to r }
-                }
-                .groupBy({ it.first }, { it.second })
-
-            // ── Daily groups (for the Daily tab list) ──────────────────────
-            val groups = byDate.entries
-                .sortedByDescending { it.key }
-                .map { (date, recs) ->
-                    val dow = date.dayOfWeek.name.take(3).lowercase().replaceFirstChar { it.uppercase() }
-                    DayGroup(
-                        date           = date,
-                        dayNumber      = date.dayOfMonth.toString(),
-                        dateLabel      = "${date.year}/${date.monthValue.toString().padStart(2, '0')} $dow",
-                        dayOfWeekBadge = dow,
-                        dayIncome      = recs.filter { it.type == "Income"  }.sumOf { it.amount },
-                        dayExpense     = recs.filter { it.type == "Expense" }.sumOf { it.amount },
-                        records        = recs.sortedByDescending { it.date }
-                    )
-                }
-
-            // ── Calendar cells (7 × 5 or 7 × 6 grid) ─────────────────────
-            val calCells = buildCalendarCells(monthDate, today, byDate, records)
-
-            HistoryUiState(
-                selectedMonth = month,
-                selectedYear = year,
-                monthLabel = monthLabel,
-                summary = PeriodSummary(income, expense, income - expense),
-                groups = groups,
-                calendarCells = calCells
-            )
+    val uiState: StateFlow<LedgerMonth> =
+        combine(repository.getAllRecords(), accounts, _month, pendingDeleteIds, _filter) { records, accounts, month, pending, filter ->
+            Ledger.build(records, accounts, month, LocalDate.now(), pending, filter)
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HistoryUiState())
+            .flowOn(Dispatchers.Default)
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5000),
+                Ledger.build(emptyList(), emptyList(), YearMonth.now(), LocalDate.now())
+            )
+
+    /** Monthly: the year of the Ledger's month, under the same filter. */
+    val year: StateFlow<LedgerYear> =
+        combine(repository.getAllRecords(), _month, pendingDeleteIds, _filter) { records, month, pending, filter ->
+            Ledger.year(records, month.year, LocalDate.now(), pending, filter)
+        }
+            .flowOn(Dispatchers.Default)
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5000),
+                Ledger.year(emptyList(), YearMonth.now().year, LocalDate.now())
+            )
+
+    private val _expandedMonths = MutableStateFlow<Set<YearMonth>>(emptySet())
+    /** Months on Monthly whose weeks are showing. */
+    val expandedMonths: StateFlow<Set<YearMonth>> = _expandedMonths.asStateFlow()
+
+    fun toggleMonthExpanded(month: YearMonth) = _expandedMonths.update { if (month in it) it - month else it + month }
+
+    /** Steps Monthly a year, keeping the month, so Daily comes back on the same month. */
+    fun nextYear() = shiftMonth(12)
+    fun prevYear() = shiftMonth(-12)
+
+    /** A month tapped on Monthly: the Ledger goes to it (the screen switches to Daily). */
+    fun openMonth(month: YearMonth) = setMonthYear(month.year, month.monthValue)
+
+    // State, not a one-off event: Daily isn't composed while Monthly shows, so an event would be lost.
+    // Any change of month clears it.
+    private val _scrollTo = MutableStateFlow<LocalDate?>(null)
+    /** A day Daily should scroll to once, after a week is tapped on Monthly. */
+    val scrollTo: StateFlow<LocalDate?> = _scrollTo.asStateFlow()
+
+    /** A week tapped on Monthly: its month on Daily, scrolled to the week. */
+    fun openWeek(month: YearMonth, week: LedgerWeek) {
+        openMonth(month)
+        _scrollTo.value = week.scrollTo
+    }
+
+    fun onScrolled() {
+        _scrollTo.value = null
+    }
+
+    val filterChips: StateFlow<List<FilterChipUi>> = combine(_filter, accounts) { filter, accounts ->
+        Ledger.filterChips(filter, accounts)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // ── Filter sheet ──────────────────────────────────────────────────────────
+
+    /** What's ticked in the open filter sheet; applied only with Show. */
+    private val _filterDraft = MutableStateFlow(LedgerFilter())
+    val filterDraft: StateFlow<LedgerFilter> = _filterDraft.asStateFlow()
+
+    private val sheetMonth = combine(_month, _filterDraft, pendingDeleteIds) { month, draft, pending -> Triple(month, draft, pending) }
+    private val categoryLists = combine(expenseCategories, incomeCategories) { expense, income -> expense to income }
+
+    val filterOptions: StateFlow<FilterOptions?> =
+        combine(repository.getAllRecords(), accounts, categoryLists, sheetMonth) { records, accounts, (expense, income), (month, draft, pending) ->
+            Ledger.filterOptions(records, accounts, expense, income, month, draft, pending)
+        }
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** Opens the sheet on the active filter. */
+    fun startFilterDraft() {
+        _filterDraft.value = _filter.value
+    }
+
+    fun toggleExpenseCategory(name: String) = _filterDraft.update { it.copy(expenseCategories = it.expenseCategories.toggle(name)) }
+    fun toggleIncomeCategory(name: String) = _filterDraft.update { it.copy(incomeCategories = it.incomeCategories.toggle(name)) }
+    fun toggleAccount(id: Long) = _filterDraft.update { it.copy(accountIds = it.accountIds.toggle(id)) }
+
+    /** "Any" on the Expense or Income list: that list's choices off; the other keeps its own. */
+    fun clearDraftCategories(income: Boolean) = _filterDraft.update {
+        if (income) it.copy(incomeCategories = emptySet()) else it.copy(expenseCategories = emptySet())
+    }
+    fun clearDraftAccounts() = _filterDraft.update { it.copy(accountIds = emptySet()) }
+    fun clearDraft() {
+        _filterDraft.value = LedgerFilter()
+    }
+
+    fun applyFilterDraft() {
+        _filter.value = _filterDraft.value
+        clearSelection()
+    }
+
+    fun removeFilter(section: FilterSection) {
+        _filter.update { it.without(section) }
+        clearSelection()
+    }
+
+    fun clearFilter() {
+        _filter.value = LedgerFilter()
+        clearSelection()
+    }
+
+    private fun <T> Set<T>.toggle(item: T): Set<T> = if (item in this) this - item else this + item
 
     // ── Month navigation ──────────────────────────────────────────────────────
 
@@ -180,25 +235,35 @@ class HistoryViewModel @Inject constructor(
         val safeMonth = month.coerceIn(1, 12)
         val safeYear = year.coerceIn(1900, 2100)
         shouldAutoFocusLatestMonth = false
-        _month.value = safeMonth
-        _year.value = safeYear
+        _month.value = YearMonth.of(safeYear, safeMonth)
+        _scrollTo.value = null
         selectedDate = null
         clearSelection()
     }
 
     private fun shiftMonth(delta: Long) {
         shouldAutoFocusLatestMonth = false
-        val next = LocalDate.of(_year.value, _month.value, 1).plusMonths(delta)
-        _month.value = next.monthValue
-        _year.value  = next.year
+        _month.value = _month.value.plusMonths(delta)
+        _scrollTo.value = null
         selectedDate = null
         clearSelection()
     }
 
-    fun delete(record: ExpenseRecord) {
-        viewModelScope.launch {
-            repository.delete(record)
-        }
+    // ── Delete with Undo ──────────────────────────────────────────────────────
+
+    /** The delete the Undo snackbar is offering, if any. */
+    val pendingDelete: StateFlow<UndoableDelete?> = undoableDeletes.pending
+
+    /** Hides [record] at once and offers Undo; see [UndoableDeletes]. */
+    fun delete(record: ExpenseRecord) =
+        undoableDeletes.delete(record, Ledger.deletedMessage(record, accounts.value))
+
+    fun undoDelete(pending: UndoableDelete) = undoableDeletes.undo(pending)
+
+    fun commitPendingDelete() = undoableDeletes.commit()
+
+    override fun onCleared() {
+        commitPendingDelete()
     }
 
     fun onTransactionLongPress(id: Long) {
@@ -219,63 +284,49 @@ class HistoryViewModel @Inject constructor(
 
     fun isSelectionMode(): Boolean = selectedTxIds.isNotEmpty()
 
-    fun selectedSum(records: List<ExpenseRecord>): Double {
+    /** The selected Transactions among those the Ledger shows. */
+    fun selectedTransactions(): List<ExpenseRecord> {
         val selected = selectedTxIds.toSet()
-        return records
-            .asSequence()
-            .filter { selected.contains(it.id) }
-            .sumOf { record ->
-                when (record.type) {
-                    "Income" -> record.amount
-                    "Expense" -> -record.amount
-                    else -> 0.0
-                }
-            }
+        return uiState.value.days.flatMap { day -> day.rows.map { it.record } }.filter { it.id in selected }
     }
 
+    /** Deletes the selection at once, with no Undo: the confirm before it is the safety. */
     fun deleteSelectedTransactions() {
         val ids = selectedTxIds.toList()
         if (ids.isEmpty()) return
+        commitPendingDelete()
         viewModelScope.launch {
             repository.deleteTransactionsByIds(ids)
             clearSelection()
         }
     }
 
-    fun updateSelectedDates(newDate: String) {
-        val ids = selectedTxIds.toList()
-        if (ids.isEmpty()) return
-        viewModelScope.launch {
-            repository.updateTransactionsDateByIds(ids = ids, newDate = newDate)
-            clearSelection()
-        }
+    private val _batchMessages = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    /** "Changed 4 Expenses · skipped 1 Transfer", once per batch change. */
+    val batchMessages: SharedFlow<String> = _batchMessages.asSharedFlow()
+
+    /** Selects every row the Ledger shows for its month. */
+    fun selectAllInMonth() {
+        val shown = uiState.value.days.flatMap { day -> day.rows.map { it.id } }
+        selectedTxIds.addAll(shown.filterNot { it in selectedTxIds })
     }
 
-    fun updateSelectedCategories(newCategory: String) {
-        val ids = selectedTxIds.toList()
-        if (ids.isEmpty() || newCategory.isBlank()) return
-        viewModelScope.launch {
-            repository.updateTransactionsCategoryByIds(ids = ids, newCategory = newCategory)
-            clearSelection()
+    /** Applies [action] to the selected rows it fits, as the batch plan says, and reports what it did. */
+    fun applyBatch(action: BatchAction) {
+        val plan = Ledger.batchPlan(selectedTransactions(), action)
+        clearSelection()
+        val ids = plan.changeIds
+        if (ids.isNotEmpty()) {
+            viewModelScope.launch {
+                when (action) {
+                    is BatchAction.ChangeDate -> repository.updateTransactionsDateByIds(ids, action.date)
+                    is BatchAction.ChangeCategory -> repository.updateTransactionsCategoryByIds(ids, action.category, action.type)
+                    is BatchAction.ChangeAccount -> repository.updateTransactionsAssetByIds(ids, action.accountId)
+                    is BatchAction.ChangeDescription -> repository.updateTransactionsDescriptionByIds(ids, action.description)
+                }
+            }
         }
-    }
-
-    fun updateSelectedAssets(accountId: Long) {
-        val ids = selectedTxIds.toList()
-        if (ids.isEmpty()) return
-        viewModelScope.launch {
-            repository.updateTransactionsAssetByIds(ids = ids, accountId = accountId)
-            clearSelection()
-        }
-    }
-
-    fun updateSelectedDescriptions(newDescription: String) {
-        val ids = selectedTxIds.toList()
-        if (ids.isEmpty() || newDescription.isBlank()) return
-        viewModelScope.launch {
-            repository.updateTransactionsDescriptionByIds(ids = ids, newDescription = newDescription)
-            clearSelection()
-        }
+        _batchMessages.tryEmit(plan.summary)
     }
 
     fun toggleBookmark(record: ExpenseRecord) {
@@ -284,77 +335,8 @@ class HistoryViewModel @Inject constructor(
         }
     }
 
-    // ── Calendar grid builder ─────────────────────────────────────────────────
-
-    private fun buildCalendarCells(
-        firstDay: LocalDate,
-        today: LocalDate,
-        byDate: Map<LocalDate, List<ExpenseRecord>>,
-        allRecords: List<ExpenseRecord>
-    ): List<CalendarCell> {
-
-        // Also need out-of-month cells to show no-amount but maybe different month records
-        val allByDate: Map<LocalDate, List<ExpenseRecord>> = allRecords
-            .mapNotNull { r -> parseRecordDate(r)?.let { it to r } }
-            .groupBy({ it.first }, { it.second })
-
-        val leadingDays = when (firstDay.dayOfWeek) {
-            DayOfWeek.SUNDAY    -> 0
-            DayOfWeek.MONDAY    -> 1
-            DayOfWeek.TUESDAY   -> 2
-            DayOfWeek.WEDNESDAY -> 3
-            DayOfWeek.THURSDAY  -> 4
-            DayOfWeek.FRIDAY    -> 5
-            DayOfWeek.SATURDAY  -> 6
-            else                -> 0
-        }
-
-        val cells = mutableListOf<CalendarCell>()
-
-        // Previous month trailing days
-        for (i in leadingDays - 1 downTo 0) {
-            val date = firstDay.minusDays((i + 1).toLong())
-            cells += makeCell(date, isCurrentMonth = false, today, allByDate)
-        }
-
-        // Current month
-        for (day in 1..firstDay.lengthOfMonth()) {
-            val date = LocalDate.of(firstDay.year, firstDay.month, day)
-            cells += makeCell(date, isCurrentMonth = true, today, byDate)
-        }
-
-        // Next month leading days to complete grid (35 or 42 cells)
-        val target = if (cells.size <= 35) 35 else 42
-        var nextDay = 1
-        while (cells.size < target) {
-            val date = firstDay.plusMonths(1).withDayOfMonth(nextDay++)
-            cells += makeCell(date, isCurrentMonth = false, today, allByDate)
-        }
-
-        return cells
+    companion object {
+        /** Set on the Ledger's back-stack entry when another bottom-bar tab is picked. */
+        const val LEFT_LEDGER = "leftLedger"
     }
-
-    private fun makeCell(
-        date: LocalDate,
-        isCurrentMonth: Boolean,
-        today: LocalDate,
-        byDate: Map<LocalDate, List<ExpenseRecord>>
-    ): CalendarCell {
-        val recs    = byDate[date] ?: emptyList()
-        val income  = recs.filter { it.type == "Income"  }.sumOf { it.amount }
-        val expense = recs.filter { it.type == "Expense" }.sumOf { it.amount }
-        return CalendarCell(
-            date              = date,
-            isCurrentMonth    = isCurrentMonth,
-            isToday           = date == today,
-            dayIncome         = income,
-            dayExpense        = expense,
-            dayNet            = income - expense,
-            categories        = recs.map { it.category }.distinct(),
-            totalTransactions = recs.size
-        )
-    }
-
-    private fun parseRecordDate(record: ExpenseRecord): LocalDate? =
-        parseFlexibleDate(record.date) ?: record.remoteTimestamp?.let(::parseFlexibleDate)
 }

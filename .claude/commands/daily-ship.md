@@ -56,7 +56,7 @@ git checkout -B claude/issue-<n>-<short-slug> origin/main
 ```
 
 Keep the change minimal and focused on the issue. Add or update unit tests under `app/src/test/`
-for the logic you touch. Follow the changelog policy in `CLAUDE.md` (mandatory): add a bullet to the
+for the logic you touch. Follow the changelog policy and "Changelog style" rules in `CLAUDE.md` (mandatory): add a bullet to the
 current (top) `ChangelogRelease` in `app/src/main/java/com/issaczerubbabel/ledgar/ui/screens/ChangelogData.kt`
 under `added`, `changed` or `fixed` (short, plain, user-facing) or `developer` (internal work), then
 regenerate `CHANGELOG.md` with `UPDATE_CHANGELOG=1 ./gradlew testDebugUnitTest --tests "*ChangelogMarkdownTest"`.

@@ -6,16 +6,11 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -25,87 +20,68 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
-import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.ui.components.DropdownField
 import com.issaczerubbabel.ledgar.ui.components.SingleDatePickerDialog
+import com.issaczerubbabel.ledgar.ui.components.TransactionRow
+import com.issaczerubbabel.ledgar.ui.components.UndoDeleteSnackbar
+import com.issaczerubbabel.ledgar.ui.components.TransactionSheet
+import com.issaczerubbabel.ledgar.ui.components.TransactionSheetActions
+import com.issaczerubbabel.ledgar.ledger.Ledger
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.issaczerubbabel.ledgar.ui.components.DaySheet
+import com.issaczerubbabel.ledgar.ledger.FilterChipUi
+import com.issaczerubbabel.ledgar.ledger.FilterSection
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.InputChip
+import com.issaczerubbabel.ledgar.ledger.BatchAction
+import com.issaczerubbabel.ledgar.ledger.accountPickerNote
+import com.issaczerubbabel.ledgar.ledger.categoryPickerNote
+import com.issaczerubbabel.ledgar.ledger.sharedDate
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.saveable.rememberSaveable
 import com.issaczerubbabel.ledgar.ui.theme.*
-import com.issaczerubbabel.ledgar.viewmodel.CalendarCell
-import com.issaczerubbabel.ledgar.viewmodel.DayGroup
+import com.issaczerubbabel.ledgar.ledger.LedgerCalendarCell
+import com.issaczerubbabel.ledgar.ledger.LedgerDay
+import com.issaczerubbabel.ledgar.ledger.LedgerSummary
+import com.issaczerubbabel.ledgar.util.TransactionType
+import com.issaczerubbabel.ledgar.util.formatListMoney
 import com.issaczerubbabel.ledgar.viewmodel.HistoryViewModel
-import com.issaczerubbabel.ledgar.viewmodel.MonthlyViewModel
-import com.issaczerubbabel.ledgar.viewmodel.PeriodSummary
-import java.time.DayOfWeek
 import java.time.LocalDate
-import kotlinx.coroutines.launch
+import java.time.YearMonth
+import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilledTonalButton
 
 private val TABS = listOf("Daily", "Calendar", "Monthly")
-private val monthNames = listOf(
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-)
-private fun formatMoney(amount: Double)   = "₹ %,.2f".format(amount)
-private fun formatCompact(amount: Double) = "%,.2f".format(kotlin.math.abs(amount))
-private fun accountLabelForTransaction(record: ExpenseRecord, accountsById: Map<Long, String>): String {
-    return when (record.type) {
-        "Income" -> {
-            val accountId = record.toAccountId ?: record.accountId
-            accountId?.let { accountsById[it] }
-                ?: record.toAccountName
-                ?: record.accountName
-                ?: ""
-        }
-        "Expense" -> {
-            val accountId = record.fromAccountId ?: record.accountId
-            accountId?.let { accountsById[it] }
-                ?: record.fromAccountName
-                ?: record.accountName
-                ?: ""
-        }
-        "Transfer" -> {
-            val from = record.fromAccountId?.let { accountsById[it] }
-                ?: record.fromAccountName
-                ?: ""
-            val to = record.toAccountId?.let { accountsById[it] }
-                ?: record.toAccountName
-                ?: ""
-            when {
-                from.isNotBlank() && to.isNotBlank() -> "$from -> $to"
-                from.isNotBlank() -> from
-                else -> to
-            }
-        }
-        else -> ""
-    }
-}
-private fun formatSignedMoney(amount: Double): String {
-    val sign = if (amount > 0.0001) "+" else if (amount < -0.0001) "-" else ""
-    return "$sign₹ %,.2f".format(kotlin.math.abs(amount))
-}
 
-@Composable
-private fun responsiveTextSize(baseSp: Float, minSp: Float = 12f, maxSp: Float = 20f) =
-    (
-        baseSp * (LocalConfiguration.current.screenWidthDp / 411f).coerceIn(0.9f, 1.08f)
-    ).coerceIn(minSp, maxSp).sp
-
-private enum class BatchAction {
-    EDIT_DATES,
-    EDIT_CATEGORIES,
-    EDIT_ASSETS,
-    EDIT_DESCRIPTIONS
-}
+/** Which batch-change dialog is open. */
+private enum class BatchDialog { DATE, CATEGORY, ACCOUNT, DESCRIPTION }
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
@@ -114,43 +90,48 @@ private enum class BatchAction {
 fun HistoryScreen(
     navInsets: PaddingValues,
     onNavigateToLog: () -> Unit,
+    onAddOnDate: (LocalDate) -> Unit,
     onNavigateToEditTransaction: (Long) -> Unit,
     onNavigateToCopyTransaction: (Long, Boolean) -> Unit,
     onNavigateToBookmarks: () -> Unit,
     onNavigateToSearch: () -> Unit,
-    onNavigateToFilterSelection: () -> Unit,
     onNavigateToCaptureInbox: () -> Unit,
+    onOpenTrip: (Long) -> Unit = {},
+    onAddTripExpense: (Long) -> Unit = {},
     vm: HistoryViewModel = hiltViewModel(),
-    monthlyVm: MonthlyViewModel = hiltViewModel(),
     captureBadgeVm: com.issaczerubbabel.ledgar.viewmodel.CaptureBadgeViewModel = hiltViewModel(),
 ) {
     val pendingCaptures by captureBadgeVm.pendingCount.collectAsStateWithLifecycle()
     val state by vm.uiState.collectAsStateWithLifecycle()
     val accounts by vm.accounts.collectAsStateWithLifecycle()
-    val categories by vm.categories.collectAsStateWithLifecycle()
-    val monthlyState by monthlyVm.uiState.collectAsStateWithLifecycle()
+    val expenseCategories by vm.expenseCategories.collectAsStateWithLifecycle()
+    val incomeCategories by vm.incomeCategories.collectAsStateWithLifecycle()
+    val monthly by vm.year.collectAsStateWithLifecycle()
+    val expandedMonths by vm.expandedMonths.collectAsStateWithLifecycle()
+    val scrollTo by vm.scrollTo.collectAsStateWithLifecycle()
     var selectedTab by remember { mutableIntStateOf(0) }
     val pagerState = rememberPagerState(pageCount = { TABS.size })
     var showMonthPicker by remember { mutableStateOf(false) }
-    var pickerMonth by remember(state.selectedMonth, state.selectedYear) { mutableIntStateOf(state.selectedMonth) }
-    var pickerYear by remember(state.selectedMonth, state.selectedYear) { mutableIntStateOf(state.selectedYear) }
-    val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val sheetScope = rememberCoroutineScope()
-    var selectedTransaction by remember { mutableStateOf<ExpenseRecord?>(null) }
-    var pendingCopyTransaction by remember { mutableStateOf<ExpenseRecord?>(null) }
-    var showCopyDateDialog by remember { mutableStateOf(false) }
+    // The id, not a copy: the sheet follows the live Transaction and closes if it goes.
+    var sheetTransactionId by remember { mutableStateOf<Long?>(null) }
     var showDeleteSelectedDialog by remember { mutableStateOf(false) }
-    var isBatchMenuExpanded by remember { mutableStateOf(false) }
-    var pendingBatchAction by remember { mutableStateOf<BatchAction?>(null) }
-    var selectedCategory by remember { mutableStateOf("") }
-    var selectedAssetId by remember { mutableStateOf<Long?>(null) }
-    var updatedDescription by remember { mutableStateOf("") }
-    val accountsById = remember(accounts) { accounts.associate { it.id to it.accountName } }
-
-    val allVisibleRecords = remember(state.groups) { state.groups.flatMap { it.records } }
+    var batchDialog by remember { mutableStateOf<BatchDialog?>(null) }
+    val filter by vm.filter.collectAsStateWithLifecycle()
+    val filterChips by vm.filterChips.collectAsStateWithLifecycle()
+    var showFilterSheet by rememberSaveable { mutableStateOf(false) }
+    val allVisibleRecords = remember(state.days) { state.days.flatMap { day -> day.rows.map { it.record } } }
     val selectedCount = vm.selectedTxIds.size
-    val selectedSum = vm.selectedSum(allVisibleRecords)
+    val selectedNet = Ledger.net(vm.selectedTransactions())
     val selectedIdSet = vm.selectedTxIds.toSet()
+    val pendingDelete by vm.pendingDelete.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    UndoDeleteSnackbar(pendingDelete, snackbarHostState, onUndo = vm::undoDelete, onCommit = vm::commitPendingDelete)
+    // Back leaves selection before it leaves the tab.
+    BackHandler(enabled = selectedCount > 0) { vm.clearSelection() }
+    LaunchedEffect(Unit) {
+        vm.batchMessages.collect { snackbarHostState.showSnackbar(it) }
+    }
 
     // Follow settledPage, not currentPage. currentPage changes on every page an animation passes,
     // so tapping a distant tab (Daily -> Total) wrote the intermediate pages back into selectedTab,
@@ -170,22 +151,16 @@ fun HistoryScreen(
         }
     }
 
-    // ── Theme detection ────────────────────────────────────────────────────────
-    // luminance() > 0.5 → light theme (white background)
-    val isLight    = MaterialTheme.colorScheme.background.luminance() > 0.5f
-    val headerBg   = if (isLight) HeaderGreen else MaterialTheme.colorScheme.background
-    val headerText = Color.White   // always white on header (green or black)
-
     val periodLabel = when (selectedTab) {
-        2 -> monthlyState.selectedYear.toString()
+        2 -> monthly.year.toString()
         else -> state.monthLabel
     }
     val onPrevPeriod = when (selectedTab) {
-        2 -> monthlyVm::prevYear
+        2 -> vm::prevYear
         else -> vm::prevMonth
     }
     val onNextPeriod = when (selectedTab) {
-        2 -> monthlyVm::nextYear
+        2 -> vm::nextYear
         else -> vm::nextMonth
     }
     val canOpenMonthPicker = selectedTab == 0 || selectedTab == 1
@@ -195,27 +170,29 @@ fun HistoryScreen(
             if (selectedCount > 0) {
                 ContextualSelectionAppBar(
                     selectedCount = selectedCount,
-                    selectedSum = selectedSum,
+                    selectedNet = selectedNet,
+                    monthLabel = state.monthLabel,
+                    onClose = vm::clearSelection,
                     onDeleteClick = { showDeleteSelectedDialog = true },
-                    isMenuExpanded = isBatchMenuExpanded,
-                    onMenuExpandedChange = { isBatchMenuExpanded = it },
-                    onSelectBatchAction = { action ->
-                        pendingBatchAction = action
-                        isBatchMenuExpanded = false
-                    }
+                    onSelectAll = vm::selectAllInMonth,
+                    onOpenDialog = { batchDialog = it }
                 )
             } else {
-                MoneyManagerAppBar(
-                    bg = headerBg,
-                    contentColor = headerText,
+                LedgerTopBar(
                     periodLabel = periodLabel,
+                    stepsYears = selectedTab == 2,
                     onPrevPeriod = onPrevPeriod,
                     onNextPeriod = onNextPeriod,
                     onPeriodClick = { if (canOpenMonthPicker) showMonthPicker = true },
                     periodClickable = canOpenMonthPicker,
                     onBookmarksClick = onNavigateToBookmarks,
                     onSearchClick = onNavigateToSearch,
-                    onFilterClick = onNavigateToFilterSelection
+                    isFilterActive = !filter.isEmpty,
+                    filterCount = filter.activeCount,
+                    onFilterClick = {
+                        vm.startFilterDraft()
+                        showFilterSheet = true
+                    }
                 )
             }
         },
@@ -227,20 +204,31 @@ fun HistoryScreen(
                 .padding(top = scaffoldPadding.calculateTopPadding())
                 .padding(bottom = navInsets.calculateBottomPadding())
         ) {
-            PeriodTabRow(selectedTab, headerBg, headerText) { tabIndex ->
+            PeriodTabRow(selectedTab) { tabIndex ->
                 selectedTab = tabIndex
             }
-
-            if (pendingCaptures > 0) {
-                CaptureBanner(count = pendingCaptures, onClick = onNavigateToCaptureInbox)
+            if (filterChips.isNotEmpty()) {
+                FilterChipsRow(chips = filterChips, onRemove = vm::removeFilter, onClear = vm::clearFilter)
             }
+
+            ActiveTripBanner(onOpenTrip = onOpenTrip, onAddExpense = onAddTripExpense)
 
             // Single pinned summary row below tabs
             val pinnedSummary = when (selectedTab) {
-                2 -> monthlyState.summary
+                2 -> monthly.summary
                 else -> state.summary
             }
             SummaryBar(pinnedSummary)
+            // Waiting Captured transactions: a compact chip, not a full-width banner.
+            Ledger.captureChipLabel(pendingCaptures)?.let { label ->
+                AssistChip(
+                    onClick = onNavigateToCaptureInbox,
+                    label = { Text(label) },
+                    leadingIcon = { Icon(Icons.Filled.Inbox, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    // Announced when the count changes, without moving focus.
+                    modifier = Modifier.padding(horizontal = 12.dp).semantics { liveRegion = LiveRegionMode.Polite }
+                )
+            }
             HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
 
             Box(modifier = Modifier.weight(1f)) {
@@ -249,26 +237,60 @@ fun HistoryScreen(
                     modifier = Modifier.fillMaxSize()
                 ) { page ->
                     when (page) {
-                        1 -> CalendarContent(
-                            cells        = state.calendarCells,
+                        1 -> Column {
+                            // A filtered month with nothing in it says so, here as on Daily.
+                            if (!filter.isEmpty && state.days.isEmpty()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "No transactions match",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    TextButton(onClick = vm::clearFilter) { Text("Clear") }
+                                }
+                            }
+                            CalendarContent(
+                            cells        = state.calendar,
                             selectedDate = vm.selectedDate,
-                            isLight      = isLight,
-                            onDaySelect  = vm::selectDate
+                            onDaySelect  = vm::openDay
                         )
+                        }
                         2 -> MonthlyTabScreen(
-                            monthGroups = monthlyState.monthGroups,
-                            onToggleExpand = monthlyVm::toggleMonthExpanded,
+                            year = monthly,
+                            expanded = expandedMonths,
+                            onOpenMonth = { month ->
+                                vm.openMonth(month)
+                                selectedTab = 0
+                            },
+                            onOpenWeek = { month, week ->
+                                vm.openWeek(month, week)
+                                selectedTab = 0
+                            },
+                            onToggleExpand = vm::toggleMonthExpanded,
                             modifier = Modifier.fillMaxSize()
                         )
                         else -> DailyContent(
-                            groups = state.groups,
-                            accountsById = accountsById,
+                            days = state.days,
+                            monthLabel = state.monthLabel,
+                            // From an empty month: start logging in it (today in the current month, else its 1st).
+                            onAdd = {
+                                val today = LocalDate.now()
+                                onAddOnDate(if (YearMonth.from(today) == state.month) today else state.month.atDay(1))
+                            },
+                            isFiltered = !filter.isEmpty,
+                            onClearFilter = vm::clearFilter,
+                            scrollTo = scrollTo,
+                            onScrolled = vm::onScrolled,
                             selectedIds = selectedIdSet,
                             onTransactionClick = { record ->
                                 if (vm.isSelectionMode()) {
                                     vm.toggleTransactionSelection(record.id)
                                 } else {
-                                    selectedTransaction = record
+                                    sheetTransactionId = record.id
                                 }
                             },
                             onTransactionLongClick = { record ->
@@ -279,195 +301,96 @@ fun HistoryScreen(
                     }
                 }
 
-                // Primary add-transaction FAB
-                if (!vm.isSelectionMode()) {
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(end = 16.dp, bottom = 16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
+                // The add FAB, lifted clear of the Undo snackbar while one shows.
+                Column(
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    if (!vm.isSelectionMode()) {
                         FloatingActionButton(
                             onClick         = onNavigateToLog,
                             shape           = CircleShape,
                             containerColor  = MaterialTheme.colorScheme.primary,
                             contentColor    = MaterialTheme.colorScheme.onPrimary,
                             elevation       = FloatingActionButtonDefaults.elevation(6.dp),
-                            modifier        = Modifier.size(58.dp)
-                        ) { Icon(Icons.Filled.Add, null, modifier = Modifier.size(28.dp)) }
+                            modifier        = Modifier.padding(end = 16.dp, bottom = 16.dp).size(58.dp)
+                        ) { Icon(Icons.Filled.Add, contentDescription = "Add transaction", modifier = Modifier.size(28.dp)) }
                     }
+                    SnackbarHost(snackbarHostState)
                 }
             }
         }
     }
 
     if (showMonthPicker) {
-        AlertDialog(
-            onDismissRequest = { showMonthPicker = false },
-            title = { Text("Select Month") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    DropdownField(
-                        label = "Month",
-                        options = monthNames,
-                        selected = monthNames[pickerMonth - 1],
-                        onSelect = { selected ->
-                            pickerMonth = monthNames.indexOf(selected) + 1
-                        }
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        IconButton(onClick = { pickerYear -= 1 }) {
-                            Icon(Icons.Filled.ChevronLeft, contentDescription = "Previous year")
-                        }
-                        Text(pickerYear.toString(), style = MaterialTheme.typography.titleMedium)
-                        IconButton(onClick = { pickerYear += 1 }) {
-                            Icon(Icons.Filled.ChevronRight, contentDescription = "Next year")
-                        }
-                    }
-                }
+        MonthGridDialog(
+            selected = state.month,
+            onPick = { month ->
+                vm.setMonthYear(year = month.year, month = month.monthValue)
+                showMonthPicker = false
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.setMonthYear(year = pickerYear, month = pickerMonth)
-                    showMonthPicker = false
-                }) {
-                    Text("OK")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showMonthPicker = false }) {
-                    Text("Cancel")
-                }
-            }
+            onDismiss = { showMonthPicker = false }
         )
     }
 
-    selectedTransaction?.let { record ->
-        ModalBottomSheet(
-            onDismissRequest = { selectedTransaction = null },
-            sheetState = bottomSheetState
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(
-                    text = record.description.ifBlank { record.category },
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+    allVisibleRecords.firstOrNull { it.id == sheetTransactionId }?.let { record ->
+        TransactionSheet(
+            details = Ledger.details(record, accounts),
+            actions = TransactionSheetActions(
+                onEdit = { onNavigateToEditTransaction(record.id) },
+                onToggleBookmark = { vm.toggleBookmark(record) },
+                onCopy = { useToday -> onNavigateToCopyTransaction(record.id, useToday) },
+                onDelete = { vm.delete(record) }
+            ),
+            onDismiss = { sheetTransactionId = null }
+        )
+    }
 
-                TextButton(
-                    onClick = {
-                        selectedTransaction = null
-                        onNavigateToEditTransaction(record.id)
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Edit", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
-                }
-
-                TextButton(
-                    onClick = {
-                        vm.toggleBookmark(record)
-                        selectedTransaction = null
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "Toggle Bookmark",
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Start
-                    )
-                }
-
-                TextButton(
-                    onClick = {
-                        selectedTransaction = null
-                        pendingCopyTransaction = record
-                        showCopyDateDialog = true
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Copy", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
-                }
-
-                TextButton(
-                    onClick = {
-                        vm.delete(record)
-                        sheetScope.launch {
-                            bottomSheetState.hide()
-                            selectedTransaction = null
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Delete", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-            }
+    if (showFilterSheet) {
+        val draft by vm.filterDraft.collectAsStateWithLifecycle()
+        val options by vm.filterOptions.collectAsStateWithLifecycle()
+        options?.let {
+            LedgerFilterSheet(
+                monthLabel = state.monthLabel,
+                options = it,
+                draft = draft,
+                onToggleExpense = vm::toggleExpenseCategory,
+                onToggleIncome = vm::toggleIncomeCategory,
+                onToggleAccount = vm::toggleAccount,
+                onAnyCategory = vm::clearDraftCategories,
+                onAnyAccount = vm::clearDraftAccounts,
+                onClear = vm::clearDraft,
+                onShow = {
+                    vm.applyFilterDraft()
+                    showFilterSheet = false
+                },
+                onDismiss = { showFilterSheet = false }
+            )
         }
     }
 
-    if (showCopyDateDialog) {
-        val record = pendingCopyTransaction
-        AlertDialog(
-            onDismissRequest = {
-                showCopyDateDialog = false
-                pendingCopyTransaction = null
+    vm.selectedDate?.let { date ->
+        DaySheet(
+            day = Ledger.day(state, date),
+            detailsOf = { Ledger.details(it, accounts) },
+            actionsFor = { record ->
+                TransactionSheetActions(
+                    onEdit = { onNavigateToEditTransaction(record.id) },
+                    onToggleBookmark = { vm.toggleBookmark(record) },
+                    onCopy = { useToday -> onNavigateToCopyTransaction(record.id, useToday) },
+                    onDelete = { vm.delete(record) }
+                )
             },
-            title = { Text("Which date to use?") },
-            text = { Text("Choose whether the copied transaction keeps its original date or uses today.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        record?.let { onNavigateToCopyTransaction(it.id, false) }
-                        showCopyDateDialog = false
-                        pendingCopyTransaction = null
-                    }
-                ) {
-                    Text("Original Date")
-                }
-            },
-            dismissButton = {
-                Row {
-                    TextButton(
-                        onClick = {
-                            record?.let { onNavigateToCopyTransaction(it.id, true) }
-                            showCopyDateDialog = false
-                            pendingCopyTransaction = null
-                        }
-                    ) {
-                        Text("Today")
-                    }
-                    TextButton(
-                        onClick = {
-                            showCopyDateDialog = false
-                            pendingCopyTransaction = null
-                        }
-                    ) {
-                        Text("Cancel")
-                    }
-                }
-            }
+            onAdd = { onAddOnDate(date) },
+            onDismiss = vm::closeDay
         )
     }
 
     if (showDeleteSelectedDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteSelectedDialog = false },
-            title = { Text("Delete selected transactions?") },
-            text = { Text("This action will remove all selected transactions.") },
+            title = { Text(Ledger.deleteConfirm(vm.selectedTransactions())) },
+            text = { Text("This can't be undone.") },
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteSelectedDialog = false
@@ -484,117 +407,142 @@ fun HistoryScreen(
         )
     }
 
-    if (pendingBatchAction == BatchAction.EDIT_DATES) {
+    if (batchDialog == BatchDialog.DATE) {
         SingleDatePickerDialog(
-            initialDate = LocalDate.now(),
-            confirmText = "Update",
-            onDismiss = { pendingBatchAction = null },
+            // Starts where the selection is when it all shares one date.
+            initialDate = Ledger.sharedDate(vm.selectedTransactions()) ?: LocalDate.now(),
+            confirmText = "Change",
+            onDismiss = { batchDialog = null },
             onConfirm = {
-                vm.updateSelectedDates(it.toString())
-                pendingBatchAction = null
+                vm.applyBatch(BatchAction.ChangeDate(it.toString()))
+                batchDialog = null
             }
         )
     }
 
-    if (pendingBatchAction == BatchAction.EDIT_CATEGORIES) {
+    if (batchDialog == BatchDialog.CATEGORY) {
+        val selected = vm.selectedTransactions()
+        val hasExpenses = selected.any { it.type == TransactionType.EXPENSE }
+        val hasIncomes = selected.any { it.type == TransactionType.INCOME }
         AlertDialog(
-            onDismissRequest = { pendingBatchAction = null },
-            title = { Text("Edit All Categories") },
+            onDismissRequest = { batchDialog = null },
+            title = { Text("Change category") },
             text = {
-                DropdownField(
-                    label = "Category",
-                    options = categories,
-                    selected = selectedCategory,
-                    onSelect = { selectedCategory = it }
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.updateSelectedCategories(selectedCategory)
-                    selectedCategory = ""
-                    pendingBatchAction = null
-                }) {
-                    Text("Update")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    selectedCategory = ""
-                    pendingBatchAction = null
-                }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
-    if (pendingBatchAction == BatchAction.EDIT_ASSETS) {
-        val accountNames = accounts.map { it.accountName }
-        val selectedAssetName = accounts.firstOrNull { it.id == selectedAssetId }?.accountName.orEmpty()
-        AlertDialog(
-            onDismissRequest = { pendingBatchAction = null },
-            title = { Text("Edit All Assets") },
-            text = {
-                DropdownField(
-                    label = "Asset Account",
-                    options = accountNames,
-                    selected = selectedAssetName,
-                    onSelect = { selectedName ->
-                        selectedAssetId = accounts.firstOrNull { it.accountName == selectedName }?.id
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        Ledger.categoryPickerNote(selected),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    // Only the kinds the selection has; picking one changes the rows of that type.
+                    if (hasExpenses) {
+                        CategorySection("Expense categories", expenseCategories) { category ->
+                            vm.applyBatch(BatchAction.ChangeCategory(TransactionType.EXPENSE, category))
+                            batchDialog = null
+                        }
                     }
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    selectedAssetId?.let(vm::updateSelectedAssets)
-                    selectedAssetId = null
-                    pendingBatchAction = null
-                }) {
-                    Text("Update")
+                    if (hasIncomes) {
+                        CategorySection("Income categories", incomeCategories) { category ->
+                            vm.applyBatch(BatchAction.ChangeCategory(TransactionType.INCOME, category))
+                            batchDialog = null
+                        }
+                    }
                 }
             },
+            confirmButton = {},
             dismissButton = {
-                TextButton(onClick = {
-                    selectedAssetId = null
-                    pendingBatchAction = null
-                }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { batchDialog = null }) { Text("Cancel") }
             }
         )
     }
 
-    if (pendingBatchAction == BatchAction.EDIT_DESCRIPTIONS) {
+    if (batchDialog == BatchDialog.ACCOUNT) {
+        var chosenAccountId by remember { mutableStateOf<Long?>(null) }
         AlertDialog(
-            onDismissRequest = { pendingBatchAction = null },
-            title = { Text("Edit All Descriptions") },
+            onDismissRequest = { batchDialog = null },
+            title = { Text("Change account") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        Ledger.accountPickerNote(vm.selectedTransactions()),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    DropdownField(
+                        label = "Account",
+                        options = accounts.map { it.accountName },
+                        selected = accounts.firstOrNull { it.id == chosenAccountId }?.accountName.orEmpty(),
+                        onSelect = { name -> chosenAccountId = accounts.firstOrNull { it.accountName == name }?.id }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = chosenAccountId != null,
+                    onClick = {
+                        chosenAccountId?.let { vm.applyBatch(BatchAction.ChangeAccount(it)) }
+                        batchDialog = null
+                    }
+                ) { Text("Change") }
+            },
+            dismissButton = {
+                TextButton(onClick = { batchDialog = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (batchDialog == BatchDialog.DESCRIPTION) {
+        var description by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { batchDialog = null },
+            title = { Text("Change description") },
             text = {
                 OutlinedTextField(
-                    value = updatedDescription,
-                    onValueChange = { updatedDescription = it },
+                    value = description,
+                    onValueChange = { description = it },
                     label = { Text("Description") },
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = false,
                     minLines = 2
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    vm.updateSelectedDescriptions(updatedDescription)
-                    updatedDescription = ""
-                    pendingBatchAction = null
-                }) {
-                    Text("Update")
-                }
+                TextButton(
+                    enabled = description.isNotBlank(),
+                    onClick = {
+                        vm.applyBatch(BatchAction.ChangeDescription(description.trim()))
+                        batchDialog = null
+                    }
+                ) { Text("Change") }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    updatedDescription = ""
-                    pendingBatchAction = null
-                }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { batchDialog = null }) { Text("Cancel") }
             }
+        )
+    }
+}
+
+/** One kind of Category in the Change category picker; tapping one applies it. */
+@Composable
+private fun CategorySection(title: String, categories: List<String>, onPick: (String) -> Unit) {
+    Text(
+        title,
+        style = MaterialTheme.typography.titleSmall,
+        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+    )
+    categories.forEach { category ->
+        Text(
+            category,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onPick(category) }
+                .heightIn(min = 48.dp)
+                .wrapContentHeight(Alignment.CenterVertically)
+                .padding(horizontal = 8.dp)
         )
     }
 }
@@ -603,12 +551,11 @@ fun HistoryScreen(
 
 @Composable
 private fun CalendarContent(
-    cells: List<CalendarCell>,
+    cells: List<LedgerCalendarCell>,
     selectedDate: LocalDate?,
-    isLight: Boolean,
     onDaySelect: (LocalDate) -> Unit
 ) {
-    val borderColor = if (isLight) Color(0xFFE0E0E0) else Color(0xFF333333)
+    val borderColor = MaterialTheme.colorScheme.outlineVariant
     val dayHeaders  = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -618,18 +565,15 @@ private fun CalendarContent(
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surface)
         ) {
-            dayHeaders.forEachIndexed { idx, day ->
+            dayHeaders.forEach { day ->
                 Text(
                     text      = day,
                     modifier  = Modifier.weight(1f).padding(vertical = 7.dp),
                     textAlign = TextAlign.Center,
                     fontSize  = 11.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = when (idx) {
-                        0    -> Color(0xFFEF5350)
-                        6    -> IncomeBlue
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    }
+                    // Neutral for every day: blue only ever means money in.
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -640,19 +584,25 @@ private fun CalendarContent(
                 CircularProgressIndicator()
             }
         } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(7),
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 96.dp)
+            // Week by week, each week as tall as its tallest day, so large text never leaves gaps.
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = 96.dp)
             ) {
-                items(cells, key = { it.date.toString() }) { cell ->
-                    CalendarCellView(
-                        cell        = cell,
-                        isSelected  = cell.date == selectedDate,
-                        isLight     = isLight,
-                        borderColor = borderColor,
-                        onTap       = { if (cell.isCurrentMonth) onDaySelect(cell.date) }
-                    )
+                cells.chunked(7).forEach { week ->
+                    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+                        week.forEach { cell ->
+                            CalendarCellView(
+                                cell        = cell,
+                                isSelected  = cell.date == selectedDate,
+                                borderColor = borderColor,
+                                onTap       = { if (cell.isInMonth) onDaySelect(cell.date) },
+                                modifier    = Modifier.weight(1f).fillMaxHeight()
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -663,58 +613,55 @@ private fun CalendarContent(
 
 @Composable
 private fun CalendarCellView(
-    cell: CalendarCell,
+    cell: LedgerCalendarCell,
     isSelected: Boolean,
-    isLight: Boolean,
     borderColor: Color,
-    onTap: () -> Unit
+    onTap: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    // ── Colours based on selection + theme ────────────────────────────────────
-    val selectedBg        = if (isLight) SelectedNavy else Color.White
-    val selectedTextColor = if (isLight) Color.White   else Color.Black
-
-    val cellBg = if (isSelected) selectedBg else Color.Transparent
-
-    val isSunday   = cell.date.dayOfWeek == DayOfWeek.SUNDAY
-    val isSaturday = cell.date.dayOfWeek == DayOfWeek.SATURDAY
+    // The chosen day takes the theme's container colour; weekends look like any other day.
+    val selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer
+    val cellBg = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
 
     val dateNumColor = when {
-        isSelected           -> selectedTextColor
-        !cell.isCurrentMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
-        isSunday             -> Color(0xFFEF5350)
-        isSaturday           -> IncomeBlue
-        else                 -> MaterialTheme.colorScheme.onBackground
+        isSelected      -> selectedTextColor
+        !cell.isInMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+        else            -> MaterialTheme.colorScheme.onBackground
     }
 
     val normalTextColor = if (isSelected) selectedTextColor else MaterialTheme.colorScheme.onBackground
     val incomeColor     = if (isSelected) selectedTextColor else IncomeBlue
     val expenseColor    = if (isSelected) selectedTextColor else ExpenseOrange
 
-    // "07/01" for 1st of a month, plain number otherwise
-    val dateLabel = if (cell.date.dayOfMonth == 1)
-        "${cell.date.monthValue.toString().padStart(2, '0')}/01"
-    else cell.date.dayOfMonth.toString()
+    // The month is in the title, so the 1st is just "1".
+    val dateLabel = cell.date.dayOfMonth.toString()
 
-    // Pre-compute daily amounts
-    val hasIncome  = cell.dayIncome  > 0.005
-    val hasExpense = cell.dayExpense > 0.005
-    val hasBoth    = hasIncome && hasExpense
-    val dayNet     = cell.dayIncome - cell.dayExpense
+    val hasBoth = cell.incomeLabel != null && cell.expenseLabel != null
 
-    Box(
-        modifier = Modifier
-            .height(95.dp)
+    // A column, not layers: with large text the date, dots and amounts stack and the cell grows
+    // instead of overlapping or clipping.
+    Column(
+        modifier = modifier
+            .heightIn(min = 95.dp)
             .border(0.5.dp, borderColor)
             .background(cellBg)
-            .clickable(onClick = onTap)
+            // Days outside the month only fill the week: faded, not tappable, and skipped by TalkBack.
+            .clickable(enabled = cell.isInMonth, onClick = onTap)
+            .clearAndSetSemantics {
+                if (cell.isInMonth) {
+                    contentDescription = cell.spokenLabel
+                    if (isSelected) stateDescription = "Selected"
+                    role = Role.Button
+                    onClick(label = "Show this day") { onTap(); true }
+                }
+            }
             .padding(2.dp)
     ) {
-        // Date badge — centered text for selected/today indicators.
+        // Date badge: a circle that grows to fit "30" at any text size.
         Box(
             modifier = Modifier
-                .align(Alignment.TopStart)
                 .padding(start = 3.dp, top = 3.dp)
-                .size(20.dp)
+                .sizeIn(minWidth = 22.dp, minHeight = 22.dp)
                 .then(
                     when {
                         isSelected -> Modifier
@@ -725,25 +672,27 @@ private fun CalendarCellView(
                             .border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
                         else -> Modifier
                     }
-                ),
+                )
+                .padding(horizontal = 3.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = dateLabel,
                 color = if (isSelected) MaterialTheme.colorScheme.onPrimary else dateNumColor,
-                fontSize = if (cell.date.dayOfMonth == 1) 9.sp else 11.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
+                softWrap = false,
                 textAlign = TextAlign.Center
             )
         }
 
-        // ── Category dots — centre ────────────────────────────────────────────
-        if (cell.isCurrentMonth && cell.categories.isNotEmpty()) {
+        // ── Category dots ─────────────────────────────────────────────────────
+        if (cell.isInMonth && cell.categories.isNotEmpty()) {
             val visibleCats = cell.categories.take(4)
             val extra       = cell.categories.size - visibleCats.size
             Row(
-                modifier = Modifier.align(Alignment.Center),
+                modifier = Modifier.padding(start = 5.dp, top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -751,71 +700,73 @@ private fun CalendarCellView(
                     Canvas(modifier = Modifier.size(6.dp)) { drawCircle(categoryDotColor(cat)) }
                 }
                 if (extra > 0) {
-                    Text("+$extra", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("+$extra", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
 
-        // ── Stacked amounts — bottom end ──────────────────────────────────────
-        if (cell.isCurrentMonth && cell.totalTransactions > 0) {
+        Spacer(Modifier.weight(1f, fill = true).heightIn(min = 2.dp))
+
+        // ── Stacked amounts, bottom end ───────────────────────────────────────
+        if (cell.isInMonth && cell.transactionCount > 0) {
             Column(
                 horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.Bottom,
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
+                    .fillMaxWidth()
                     .padding(end = 3.dp, bottom = 3.dp)
             ) {
-                when {
-                    hasBoth -> {
-                        // Income row
-                        Text(
-                            text       = formatCompact(cell.dayIncome),
-                            color      = incomeColor,
-                            fontSize   = 9.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign  = TextAlign.End
-                        )
-                        // Expense row
-                        Text(
-                            text       = formatCompact(cell.dayExpense),
-                            color      = expenseColor,
-                            fontSize   = 9.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign  = TextAlign.End
-                        )
-                        // Net row (bold)
-                        Text(
-                            text       = formatCompact(dayNet),
-                            color      = normalTextColor,
-                            fontSize   = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            textAlign  = TextAlign.End
-                        )
-                    }
-                    hasIncome -> Text(
-                        text       = formatCompact(cell.dayIncome),
-                        color      = incomeColor,
-                        fontSize   = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign  = TextAlign.End
-                    )
-                    hasExpense -> Text(
-                        text       = formatCompact(cell.dayExpense),
-                        color      = expenseColor,
-                        fontSize   = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign  = TextAlign.End
-                    )
-                    else -> Text(
-                        text       = "0",
-                        color      = normalTextColor,
-                        fontSize   = 10.sp,
-                        fontWeight = FontWeight.Normal,
-                        textAlign  = TextAlign.End
-                    )
-                }
+                cell.incomeLabel?.let { CalendarAmount(it, incomeColor, FontWeight.SemiBold) }
+                cell.expenseLabel?.let { CalendarAmount(it, expenseColor, FontWeight.SemiBold) }
+                // The Net only adds something when both sides moved.
+                if (hasBoth) cell.netLabel?.let { CalendarAmount(it, normalTextColor, FontWeight.Bold) }
             }
         }
+    }
+}
+
+@Composable
+private fun CalendarAmount(text: String, color: Color, weight: FontWeight) {
+    Text(
+        text = text,
+        color = color,
+        fontSize = 10.sp,
+        fontWeight = weight,
+        textAlign = TextAlign.End,
+        maxLines = 1,
+        softWrap = false
+    )
+}
+
+/** The active filter under the tabs: one removable chip per section, and Clear. */
+@Composable
+private fun FilterChipsRow(chips: List<FilterChipUi>, onRemove: (FilterSection) -> Unit, onClear: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Says what the numbers are narrowed to, and announces it as one phrase when it changes.
+        Text(
+            "Filtered by",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.semantics {
+                liveRegion = LiveRegionMode.Polite
+                contentDescription = "Filtered by " + chips.joinToString(" and ") { it.label }
+            }
+        )
+        chips.forEach { chip ->
+            InputChip(
+                selected = true,
+                onClick = { onRemove(chip.section) },
+                label = { Text(chip.label) },
+                trailingIcon = { Icon(Icons.Filled.Close, contentDescription = "Remove filter ${chip.label}", modifier = Modifier.size(18.dp)) }
+            )
+        }
+        TextButton(onClick = onClear) { Text("Clear") }
     }
 }
 
@@ -823,32 +774,58 @@ private fun CalendarCellView(
 
 @Composable
 private fun DailyContent(
-    groups: List<DayGroup>,
-    accountsById: Map<Long, String>,
+    days: List<LedgerDay>,
+    monthLabel: String,
+    onAdd: () -> Unit,
+    isFiltered: Boolean,
+    onClearFilter: () -> Unit,
+    scrollTo: LocalDate?,
+    onScrolled: () -> Unit,
     selectedIds: Set<Long>,
     onTransactionClick: (ExpenseRecord) -> Unit,
     onTransactionLongClick: (ExpenseRecord) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    if (groups.isEmpty()) {
+    if (days.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No transactions this month",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyMedium)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(if (isFiltered) "No transactions match" else "No transactions in $monthLabel",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium)
+                if (isFiltered) {
+                    TextButton(onClick = onClearFilter) { Text("Clear") }
+                } else {
+                    // Start logging from an empty month.
+                    FilledTonalButton(onClick = onAdd, modifier = Modifier.padding(top = 8.dp)) {
+                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Add")
+                    }
+                }
+            }
         }
     } else {
-        LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = 96.dp)) {
-            groups.forEach { group ->
-                item(key = group.date.toString()) { DayGroupHeader(group) }
-                itemsIndexed(group.records, key = { _, record -> record.id }) { index, record ->
+        val listState = rememberLazyListState()
+        // A week tapped on Monthly: once its month has loaded, bring its day to the top.
+        LaunchedEffect(scrollTo, days) {
+            val target = scrollTo ?: return@LaunchedEffect
+            val dayIndex = days.indexOfFirst { it.date == target }
+            if (dayIndex < 0) return@LaunchedEffect
+            listState.scrollToItem(days.take(dayIndex).sumOf { 1 + it.rows.size })
+            onScrolled()
+        }
+        LazyColumn(state = listState, modifier = modifier, contentPadding = PaddingValues(bottom = 96.dp)) {
+            days.forEach { day ->
+                item(key = day.date.toString()) { DayHeader(day) }
+                itemsIndexed(day.rows, key = { _, row -> row.id }) { index, row ->
                     TransactionRow(
-                        record = record,
-                        accountLabel = accountLabelForTransaction(record, accountsById),
-                        isSelected = selectedIds.contains(record.id),
-                        onClick = { onTransactionClick(record) },
-                        onLongClick = { onTransactionLongClick(record) }
+                        row = row,
+                        isSelected = selectedIds.contains(row.id),
+                        selectionMode = selectedIds.isNotEmpty(),
+                        onClick = { onTransactionClick(row.record) },
+                        onLongClick = { onTransactionLongClick(row.record) }
                     )
-                    if (index < group.records.lastIndex) {
+                    if (index < day.rows.lastIndex) {
                         HorizontalDivider(
                             color = MaterialTheme.colorScheme.outlineVariant,
                             thickness = 0.5.dp,
@@ -863,66 +840,122 @@ private fun DailyContent(
 
 // ── App Bar ───────────────────────────────────────────────────────────────────
 
+/**
+ * The Ledger's top bar: ‹ month › as the title (tap it for the month grid), Search and Filter, and an
+ * overflow menu with Bookmarks. Theme surface colours in both modes.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MoneyManagerAppBar(
-    bg: Color,
-    contentColor: Color,
+private fun LedgerTopBar(
     periodLabel: String,
+    stepsYears: Boolean,
     onPrevPeriod: () -> Unit,
     onNextPeriod: () -> Unit,
     onPeriodClick: () -> Unit,
     periodClickable: Boolean,
     onBookmarksClick: () -> Unit,
     onSearchClick: () -> Unit,
+    isFilterActive: Boolean,
+    filterCount: Int,
     onFilterClick: () -> Unit
 ) {
-    val compactDevice = LocalConfiguration.current.screenWidthDp < 360
-    val appTitle = if (compactDevice) "l.edgar" else "l.edgar's"
-    val navButtonSize = if (compactDevice) 28.dp else 30.dp
-
+    var isMenuExpanded by remember { mutableStateOf(false) }
+    val unit = if (stepsYears) "year" else "month"
     TopAppBar(
         title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = appTitle,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = contentColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    softWrap = false
-                )
-                Spacer(Modifier.width(6.dp))
-                IconButton(onClick = onPrevPeriod, modifier = Modifier.size(navButtonSize)) {
-                    Icon(Icons.Filled.ChevronLeft, null, tint = contentColor)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onPrevPeriod) {
+                    Icon(Icons.Filled.ChevronLeft, contentDescription = "Previous $unit")
                 }
                 Text(
                     text = periodLabel,
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = contentColor,
-                    modifier = if (periodClickable) Modifier
-                        .widthIn(min = 68.dp, max = 110.dp)
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                    modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onPeriodClick)
-                        .padding(horizontal = 6.dp, vertical = 4.dp) else Modifier.widthIn(min = 68.dp, max = 110.dp),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    softWrap = false
+                        .clickable(enabled = periodClickable, onClickLabel = "Choose month", onClick = onPeriodClick)
+                        .heightIn(min = 48.dp)
+                        .wrapContentHeight(Alignment.CenterVertically)
+                        .padding(horizontal = 6.dp),
+                    maxLines = 1
                 )
-                IconButton(onClick = onNextPeriod, modifier = Modifier.size(navButtonSize)) {
-                    Icon(Icons.Filled.ChevronRight, null, tint = contentColor)
+                IconButton(onClick = onNextPeriod) {
+                    Icon(Icons.Filled.ChevronRight, contentDescription = "Next $unit")
                 }
             }
         },
         actions = {
-            IconButton(onClick = onBookmarksClick) { Icon(Icons.Filled.StarBorder, null, tint = contentColor) }
-            IconButton(onClick = onSearchClick) { Icon(Icons.Filled.Search, null, tint = contentColor) }
-            IconButton(onClick = onFilterClick) { Icon(Icons.Filled.Tune, null, tint = contentColor) }
+            IconButton(onClick = onSearchClick) { Icon(Icons.Filled.Search, contentDescription = "Search") }
+            IconButton(onClick = onFilterClick) {
+                // Marked while a filter is on, so filtered numbers are never mistaken for the month's.
+                BadgedBox(badge = { if (isFilterActive) Badge { Text(filterCount.toString()) } }) {
+                    Icon(Icons.Filled.Tune, contentDescription = if (isFilterActive) "Filter, $filterCount active" else "Filter")
+                }
+            }
+            Box {
+                IconButton(onClick = { isMenuExpanded = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+                }
+                DropdownMenu(expanded = isMenuExpanded, onDismissRequest = { isMenuExpanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Bookmarks") },
+                        leadingIcon = { Icon(Icons.Filled.StarBorder, contentDescription = null) },
+                        onClick = { isMenuExpanded = false; onBookmarksClick() }
+                    )
+                }
+            }
         },
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = bg)
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+    )
+}
+
+/** Tap the month title: 12 months with a year stepper. A tap opens the month; later ones are greyed but allowed. */
+@Composable
+private fun MonthGridDialog(selected: YearMonth, onPick: (YearMonth) -> Unit, onDismiss: () -> Unit) {
+    var year by rememberSaveable { mutableIntStateOf(selected.year) }
+    val months = Ledger.monthGrid(year, selected, LocalDate.now())
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                IconButton(onClick = { year -= 1 }) { Icon(Icons.Filled.ChevronLeft, contentDescription = "Previous year") }
+                Text(year.toString(), style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                IconButton(onClick = { year += 1 }) { Icon(Icons.Filled.ChevronRight, contentDescription = "Next year") }
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                months.chunked(3).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { choice ->
+                            val container = if (choice.isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+                            val content = when {
+                                choice.isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
+                                choice.isFuture -> MaterialTheme.colorScheme.onSurfaceVariant
+                                else -> MaterialTheme.colorScheme.onSurface
+                            }
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(container)
+                                    .clickable { onPick(choice.month) }
+                            ) {
+                                Text(
+                                    choice.name,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = content,
+                                    fontWeight = if (choice.isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
@@ -930,53 +963,55 @@ private fun MoneyManagerAppBar(
 @Composable
 private fun ContextualSelectionAppBar(
     selectedCount: Int,
-    selectedSum: Double,
+    selectedNet: Double,
+    monthLabel: String,
+    onClose: () -> Unit,
     onDeleteClick: () -> Unit,
-    isMenuExpanded: Boolean,
-    onMenuExpandedChange: (Boolean) -> Unit,
-    onSelectBatchAction: (BatchAction) -> Unit
+    onSelectAll: () -> Unit,
+    onOpenDialog: (BatchDialog) -> Unit
 ) {
+    var isMenuExpanded by remember { mutableStateOf(false) }
     TopAppBar(
+        navigationIcon = {
+            IconButton(onClick = onClose) {
+                Icon(Icons.Filled.Close, contentDescription = "Leave selection")
+            }
+        },
         title = {
-            Text(
-                text = "$selectedCount selected",
-                fontWeight = FontWeight.SemiBold
-            )
+            Column(Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
+                Text(text = "$selectedCount selected", fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = "Net ${formatListMoney(selectedNet, signed = true)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         },
         actions = {
-            Text(
-                text = formatSignedMoney(selectedSum),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(end = 6.dp)
-            )
             IconButton(onClick = onDeleteClick) {
                 Icon(Icons.Filled.Delete, contentDescription = "Delete selected")
             }
             Box {
-                IconButton(onClick = { onMenuExpandedChange(true) }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = "Batch actions")
+                IconButton(onClick = { isMenuExpanded = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "More for the selection")
                 }
-                DropdownMenu(
-                    expanded = isMenuExpanded,
-                    onDismissRequest = { onMenuExpandedChange(false) }
-                ) {
+                DropdownMenu(expanded = isMenuExpanded, onDismissRequest = { isMenuExpanded = false }) {
                     DropdownMenuItem(
-                        text = { Text("Edit All Dates") },
-                        onClick = { onSelectBatchAction(BatchAction.EDIT_DATES) }
+                        text = { Text("Select all in $monthLabel") },
+                        onClick = { isMenuExpanded = false; onSelectAll() }
                     )
-                    DropdownMenuItem(
-                        text = { Text("Edit All Categories") },
-                        onClick = { onSelectBatchAction(BatchAction.EDIT_CATEGORIES) }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Edit All Assets") },
-                        onClick = { onSelectBatchAction(BatchAction.EDIT_ASSETS) }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Edit All Descriptions") },
-                        onClick = { onSelectBatchAction(BatchAction.EDIT_DESCRIPTIONS) }
-                    )
+                    HorizontalDivider()
+                    listOf(
+                        "Change date…" to BatchDialog.DATE,
+                        "Change category…" to BatchDialog.CATEGORY,
+                        "Change account…" to BatchDialog.ACCOUNT,
+                        "Change description…" to BatchDialog.DESCRIPTION
+                    ).forEach { (label, dialog) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = { isMenuExpanded = false; onOpenDialog(dialog) }
+                        )
+                    }
                 }
             }
         }
@@ -986,14 +1021,11 @@ private fun ContextualSelectionAppBar(
 // ── Period Tabs ───────────────────────────────────────────────────────────────
 
 @Composable
-private fun PeriodTabRow(
-    selected: Int, bg: Color, textColor: Color,
-    onSelect: (Int) -> Unit
-) {
+private fun PeriodTabRow(selected: Int, onSelect: (Int) -> Unit) {
     SecondaryTabRow(
         selectedTabIndex = selected,
-        containerColor   = bg,
-        contentColor     = textColor,
+        containerColor   = MaterialTheme.colorScheme.surface,
+        contentColor     = MaterialTheme.colorScheme.onSurface,
         indicator = {
             TabRowDefaults.SecondaryIndicator(
                 modifier = Modifier.tabIndicatorOffset(selected),
@@ -1012,11 +1044,7 @@ private fun PeriodTabRow(
                         label,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = if (selected == idx) FontWeight.Bold else FontWeight.Normal,
-                        fontSize   = responsiveTextSize(baseSp = 14f, minSp = 13f, maxSp = 15f),
-                        color      = if (selected == idx) textColor else textColor.copy(alpha = 0.55f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        softWrap = false
+                        color = if (selected == idx) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             )
@@ -1027,200 +1055,93 @@ private fun PeriodTabRow(
 // ── Summary Bar ───────────────────────────────────────────────────────────────
 
 @Composable
-private fun SummaryBar(summary: PeriodSummary) {
+private fun SummaryBar(summary: LedgerSummary) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 8.dp, vertical = 12.dp)
     ) {
-        SummaryColumn("Income",   formatMoney(summary.income),  IncomeBlue,    Modifier.weight(1f))
-        SummaryColumn("Expenses", formatMoney(summary.expense), ExpenseOrange, Modifier.weight(1f))
-        SummaryColumn("Total",    formatMoney(summary.total),   MaterialTheme.colorScheme.onBackground, Modifier.weight(1f))
+        SummaryColumn("Income",   summary.income,   IncomeBlue,    Modifier.weight(1f))
+        SummaryColumn("Expenses", summary.expenses, ExpenseOrange, Modifier.weight(1f))
+        SummaryColumn("Net",      summary.net,      MaterialTheme.colorScheme.onBackground, Modifier.weight(1f))
     }
 }
 
 @Composable
 private fun SummaryColumn(label: String, amount: String, color: Color, modifier: Modifier) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+    // One stop per column: "Income ₹12,000".
+    Column(modifier = modifier.semantics(mergeDescendants = true) {}, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // Never cut short: a big amount wraps rather than losing digits.
         Text(
             amount,
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
             color = color,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            softWrap = false
+            textAlign = TextAlign.Center
         )
     }
 }
 
-// ── Day Group Header ──────────────────────────────────────────────────────────
+// ── Day Header ──────────────────────────────────────────────────────────────
 
 @Composable
-private fun DayGroupHeader(group: DayGroup) {
-    val dateMetaSpacing = if (group.dayNumber.length >= 2) 10.dp else 8.dp
-
+private fun DayHeader(day: LedgerDay) {
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface)
+            // A heading TalkBack can jump between: "Friday 9 October, Expenses ₹212".
+            .clearAndSetSemantics {
+                heading()
+                contentDescription = day.spokenLabel
+            }
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = group.dayNumber,
-            fontSize = responsiveTextSize(baseSp = 32f, minSp = 28f, maxSp = 34f),
+            text = day.dayNumber,
+            style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Clip,
-            modifier = Modifier.widthIn(min = 40.dp, max = 56.dp)
+            color = MaterialTheme.colorScheme.onBackground
         )
-        Spacer(Modifier.width(dateMetaSpacing))
-        Column(modifier = Modifier.widthIn(min = 78.dp, max = 112.dp)) {
+        Spacer(Modifier.width(10.dp))
+        Box(
+            modifier = Modifier.clip(RoundedCornerShape(4.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
             Text(
-                text = group.date.let { "${it.year}/${it.monthValue.toString().padStart(2,'0')}" },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                softWrap = false
+                text = day.weekday,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Box(
-                modifier = Modifier.clip(RoundedCornerShape(3.dp))
-                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f))
-                    .padding(horizontal = 5.dp, vertical = 1.dp)
-            ) {
-                Text(
-                    text = group.dayOfWeekBadge,
-                    fontSize = responsiveTextSize(baseSp = 10f, minSp = 10f, maxSp = 11f),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Clip,
-                    softWrap = false
-                )
-            }
         }
         Spacer(Modifier.weight(1f))
-        Text(
-            text = formatMoney(group.dayIncome),
-            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-            color = if (group.dayIncome > 0) IncomeBlue else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-            modifier = Modifier.widthIn(min = 72.dp, max = 96.dp),
-            textAlign = TextAlign.End,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            softWrap = false
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = formatMoney(group.dayExpense),
-            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-            color = if (group.dayExpense > 0) ExpenseOrange else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-            modifier = Modifier.widthIn(min = 72.dp, max = 96.dp),
-            textAlign = TextAlign.End,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            softWrap = false
-        )
+        // Only the sides that moved, each in full.
+        day.income?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                color = IncomeBlue,
+                textAlign = TextAlign.End
+            )
+        }
+        if (day.income != null && day.expense != null) Spacer(Modifier.width(8.dp))
+        day.expense?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                color = ExpenseOrange,
+                textAlign = TextAlign.End
+            )
+        }
     }
     HorizontalDivider(
         modifier = Modifier.padding(horizontal = 16.dp),
         color = MaterialTheme.colorScheme.outlineVariant,
         thickness = 0.5.dp
     )
-}
-
-// ── Transaction Row ───────────────────────────────────────────────────────────
-
-@Composable
-@OptIn(ExperimentalFoundationApi::class)
-private fun TransactionRow(
-    record: ExpenseRecord,
-    accountLabel: String,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit
-) {
-    val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val categoryColumnWidth = if (screenWidthDp >= 600) 128.dp else 96.dp
-    val isIncome  = record.type == "Income"
-    val isExpense = record.type == "Expense"
-    val isTransfer = record.type == "Transfer"
-    val amountColor = when {
-        isIncome -> IncomeBlue
-        isExpense -> ExpenseOrange
-        else -> TransferGray
-    }
-    val selectedBg = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.32f)
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(if (isSelected) selectedBg else MaterialTheme.colorScheme.background)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(record.category,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(categoryColumnWidth),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            softWrap = true,
-            lineHeight = responsiveTextSize(baseSp = 14f, minSp = 13f, maxSp = 15f))
-        Spacer(Modifier.width(8.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(record.description.ifBlank { record.category },
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(accountLabel,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                softWrap = false)
-        }
-        Spacer(Modifier.width(8.dp))
-        Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(min = 72.dp, max = 96.dp)) {
-            Text(
-                text = formatMoney(record.amount),
-                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                color = amountColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                softWrap = false
-            )
-        }
-    }
-}
-
-@Composable
-private fun CaptureBanner(count: Int, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.primaryContainer)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = if (count == 1) "1 captured transaction to review" else "$count captured transactions to review",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-            modifier = Modifier.weight(1f)
-        )
-        Text(
-            text = "Review",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onPrimaryContainer
-        )
-    }
 }

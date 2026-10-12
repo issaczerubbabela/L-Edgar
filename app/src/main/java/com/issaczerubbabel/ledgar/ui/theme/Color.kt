@@ -1,6 +1,10 @@
 package com.issaczerubbabel.ledgar.ui.theme
 
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 
 // ── Brand ─────────────────────────────────────────────────────────────────
 val LavenderPrimary   = Color(0xFFD0BCFF)
@@ -25,12 +29,29 @@ val RedTertiaryContainer = Color(0xFF5B2B1A)
 
 val TealDark      = Color(0xFF005B4F)
 val TealLight     = Color(0xFF4EBAAA)
-val HeaderGreen   = Color(0xFF20C997)  // explicit alias for readability
-val SelectedNavy  = Color(0xFF1A3A5C)  // calendar selected-cell bg in light theme
 
 // ── Transaction colours (Money Manager palette) ───────────────────────────────
-val IncomeBlue    = Color(0xFF1976D2)   // income amounts
-val ExpenseOrange = Color(0xFFF57C00)  // expense amounts
+/**
+ * Income and expense amounts. A dark background gets the lighter shade and a light one the darker,
+ * so the amount text stays at 4.5:1 contrast or better in every theme.
+ */
+internal val IncomeBlueOnDark = Color(0xFF64B5F6)
+internal val IncomeBlueOnLight = Color(0xFF1565C0)
+internal val ExpenseOrangeOnDark = Color(0xFFFFB74D)
+internal val ExpenseOrangeOnLight = Color(0xFFB35A00)
+
+val IncomeBlue: Color
+    @Composable @ReadOnlyComposable
+    get() = if (isDarkBackground()) IncomeBlueOnDark else IncomeBlueOnLight
+
+val ExpenseOrange: Color
+    @Composable @ReadOnlyComposable
+    get() = if (isDarkBackground()) ExpenseOrangeOnDark else ExpenseOrangeOnLight
+
+@Composable
+@ReadOnlyComposable
+private fun isDarkBackground(): Boolean = MaterialTheme.colorScheme.background.luminance() < 0.5f
+
 val TransferGray  = Color(0xFF9E9E9E)  // transfer / neutral amount
 val FabRed        = Color(0xFFE53935)  // large action FAB
 val IncomeGreen   = Color(0xFF4CAF7D)  // kept for InsightsScreen cards

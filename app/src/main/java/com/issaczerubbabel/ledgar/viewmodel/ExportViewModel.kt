@@ -8,6 +8,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
+import com.issaczerubbabel.ledgar.util.TransactionType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -120,12 +121,17 @@ class ExportViewModel @Inject constructor(
             OutputStreamWriter(stream).use { writer ->
                 writer.appendLine("Date,Type,Category/Account,Amount,Note")
                 records.forEach { record ->
-                    val categoryOrAccount = if (record.type == "Transfer") {
-                        val from = record.fromAccountId?.let { accountMap[it]?.accountName } ?: "Unknown"
-                        val to = record.toAccountId?.let { accountMap[it]?.accountName } ?: "Unknown"
-                        "Transfer: $from -> $to"
-                    } else {
-                        record.category
+                    val categoryOrAccount = when (record.type) {
+                        TransactionType.TRANSFER -> {
+                            val from = record.fromAccountId?.let { accountMap[it]?.accountName } ?: "Unknown"
+                            val to = record.toAccountId?.let { accountMap[it]?.accountName } ?: "Unknown"
+                            "Transfer: $from -> $to"
+                        }
+                        TransactionType.ADJUSTMENT -> {
+                            val account = record.accountId?.let { accountMap[it]?.accountName } ?: record.accountName ?: "Unknown"
+                            "${TransactionType.label(record.type)}: $account"
+                        }
+                        else -> record.category
                     }
                     val note = record.remarks.ifBlank { record.description }
                     writer.appendLine(

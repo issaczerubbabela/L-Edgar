@@ -42,24 +42,28 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Tune
 import com.issaczerubbabel.ledgar.ui.screens.BucketDetailScreen
 import com.issaczerubbabel.ledgar.ui.screens.BudgetHomeScreen
 import com.issaczerubbabel.ledgar.ui.screens.HistoryScreen
+import com.issaczerubbabel.ledgar.viewmodel.HistoryViewModel
+import com.issaczerubbabel.ledgar.ui.screens.TripExpenseScreen
+import com.issaczerubbabel.ledgar.ui.screens.TripReviewScreen
+import com.issaczerubbabel.ledgar.ui.screens.TripScreen
+import com.issaczerubbabel.ledgar.ui.screens.TripsScreen
 import com.issaczerubbabel.ledgar.ui.screens.PlanBucketsScreen
 import com.issaczerubbabel.ledgar.ui.screens.StartCycleScreen
 import com.issaczerubbabel.ledgar.ui.screens.InsightsScreen
 import com.issaczerubbabel.ledgar.ui.screens.LogScreen
 import com.issaczerubbabel.ledgar.ui.screens.AccountDetailScreen
 import com.issaczerubbabel.ledgar.ui.screens.AccountsScreen
-import com.issaczerubbabel.ledgar.ui.screens.AddAccountScreen
+import com.issaczerubbabel.ledgar.ui.screens.AccountFormScreen
 import com.issaczerubbabel.ledgar.ui.screens.BookmarksScreen
 import com.issaczerubbabel.ledgar.ui.screens.DropdownManagementScreen
-import com.issaczerubbabel.ledgar.ui.screens.FilterSelectionScreen
-import com.issaczerubbabel.ledgar.ui.screens.FilteredTransactionsScreen
-import com.issaczerubbabel.ledgar.ui.screens.OverallAccountStatsScreen
+import com.issaczerubbabel.ledgar.ui.screens.NetWorthScreen
 import com.issaczerubbabel.ledgar.ui.screens.SearchScreen
+import com.issaczerubbabel.ledgar.ui.screens.MoreScreen
 import com.issaczerubbabel.ledgar.ui.screens.SettingsScreen
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.issaczerubbabel.ledgar.ui.screens.AppsScriptSetupScreen
 import com.issaczerubbabel.ledgar.ui.screens.ChangelogScreen
 import com.issaczerubbabel.ledgar.ui.screens.CaptureInboxScreen
@@ -67,24 +71,19 @@ import com.issaczerubbabel.ledgar.ui.screens.CaptureSettingsScreen
 import com.issaczerubbabel.ledgar.ui.screens.UnparsedAlertsScreen
 import com.issaczerubbabel.ledgar.viewmodel.CaptureBadgeViewModel
 import com.issaczerubbabel.ledgar.data.preferences.AppLockAuthMode
+import com.issaczerubbabel.ledgar.viewmodel.AccountFormResult
 import com.issaczerubbabel.ledgar.viewmodel.AppLockViewModel
-import com.issaczerubbabel.ledgar.viewmodel.ACCOUNT_ROUTE_ADD
 import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
     object Log : Screen(
-        "log?transactionId={transactionId}&copyTransactionId={copyTransactionId}&copyDateMode={copyDateMode}",
+        "log?transactionId={transactionId}&copyTransactionId={copyTransactionId}&copyDateMode={copyDateMode}" +
+            "&prefillType={prefillType}&prefillAccountId={prefillAccountId}&prefillDate={prefillDate}",
         "Log",
         Icons.Filled.AddCircle
     )
-    object Trans : Screen("trans", "Trans.", Icons.AutoMirrored.Filled.MenuBook)
+    object Trans : Screen("trans", "Ledger", Icons.AutoMirrored.Filled.MenuBook)
     object Search : Screen("search", "Search", Icons.Filled.MoreHoriz)
-    object FilterSelection : Screen("filter_selection", "Filter", Icons.Filled.Tune)
-    object FilteredTransactions : Screen(
-        "filtered_transactions?year={year}&month={month}&incomeIds={incomeIds}&expenseIds={expenseIds}&accountIds={accountIds}",
-        "Filtered",
-        Icons.Filled.Tune
-    )
     object Bookmarks : Screen("bookmarks", "Bookmarks", Icons.Filled.Star)
     object Stats : Screen("stats", "Stats", Icons.Filled.BarChart)
     object Budget : Screen("budget", "Budget", Icons.Filled.AccountBalanceWallet)
@@ -93,22 +92,38 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object BucketDetail : Screen("bucket/{bucketId}", "BucketDetail", Icons.Filled.AccountBalanceWallet)
     object Accounts : Screen("accounts", "Accounts", Icons.Filled.Paid)
     object AccountDetail : Screen("account_detail/{accountId}", "AccountDetail", Icons.Filled.Paid)
-    object OverallAccountStats : Screen("overall_account_stats", "OverallAccountStats", Icons.Filled.BarChart)
-    object AddAccount : Screen(ACCOUNT_ROUTE_ADD, "AddAccount", Icons.Filled.Paid)
+    object NetWorth : Screen("net_worth", "NetWorth", Icons.Filled.BarChart)
+    object AccountForm : Screen("account_form?accountId={accountId}", "AccountForm", Icons.Filled.Paid)
     object More : Screen("more", "More", Icons.Filled.MoreHoriz)
+    object Settings : Screen("settings", "Settings", Icons.Filled.Settings)
     object DropdownManagement : Screen("dropdown_management", "DropdownManagement", Icons.Filled.Settings)
     object AppsScriptSetup : Screen("apps_script_setup", "AppsScriptSetup", Icons.Filled.Settings)
     object Changelog : Screen("changelog", "Changelog", Icons.Filled.Settings)
     object CaptureInbox : Screen("capture_inbox", "CaptureInbox", Icons.Filled.Settings)
     object CaptureSettings : Screen("capture_settings", "CaptureSettings", Icons.Filled.Settings)
     object CaptureUnparsed : Screen("capture_unparsed", "CaptureUnparsed", Icons.Filled.Settings)
+    object Trips : Screen("trips", "Trips", Icons.Filled.Settings)
+    object Trip : Screen("trip/{tripId}", "Trip", Icons.Filled.Settings)
+    object TripExpense : Screen("trip_expense/{tripId}?expenseId={expenseId}&captureId={captureId}", "TripExpense", Icons.Filled.Settings)
+    object TripReview : Screen("trip_review/{tripId}", "TripReview", Icons.Filled.Settings)
 }
+
+private fun tripExpenseRoute(tripId: Long, expenseId: Long = 0L, captureId: Long = 0L) =
+    "trip_expense/$tripId?expenseId=$expenseId&captureId=$captureId"
+
+/** Screens reached from More (trips and settings); the tab stays highlighted while you are on them. */
+private val MORE_SUB_ROUTES = setOf(
+    Screen.Settings.route,
+    Screen.Trips.route,
+    Screen.Trip.route,
+    Screen.TripExpense.route,
+    Screen.TripReview.route
+)
 
 private const val LOG_BASE_ROUTE = "log"
 
 /** Screens reached from the Budget tab; the tab stays highlighted while you are on them. */
 private val BUDGET_SUB_ROUTES = setOf(Screen.StartCycle.route, Screen.PlanBuckets.route, Screen.BucketDetail.route)
-private const val FILTERED_BASE_ROUTE = "filtered_transactions"
 private const val APP_LOCK_AUTHENTICATORS =
     BiometricManager.Authenticators.BIOMETRIC_WEAK or
         BiometricManager.Authenticators.DEVICE_CREDENTIAL
@@ -168,7 +183,11 @@ private fun Context.openSystemSecuritySettings() {
 private fun logRoute(
     transactionId: Long? = null,
     copyTransactionId: Long? = null,
-    useTodayDateForCopy: Boolean = false
+    useTodayDateForCopy: Boolean = false,
+    prefillType: String? = null,
+    prefillAccountId: Long? = null,
+    /** A date for this one Transaction (the Calendar's "Add on <day>"); it never pins the date. */
+    prefillDate: java.time.LocalDate? = null
 ): String {
     val params = mutableListOf<String>()
     transactionId?.let { params += "transactionId=$it" }
@@ -176,27 +195,27 @@ private fun logRoute(
         params += "copyTransactionId=$it"
         params += "copyDateMode=${if (useTodayDateForCopy) "today" else "original"}"
     }
+    prefillType?.let { params += "prefillType=$it" }
+    prefillAccountId?.let { params += "prefillAccountId=$it" }
+    prefillDate?.let { params += "prefillDate=$it" }
     return if (params.isEmpty()) LOG_BASE_ROUTE else "$LOG_BASE_ROUTE?${params.joinToString("&")}" 
 }
 
-private fun filteredTransactionsRoute(
-    year: Int,
-    month: Int,
-    incomeIds: Set<Long>,
-    expenseIds: Set<Long>,
-    accountIds: Set<Long>
-): String {
-    val income = incomeIds.sorted().joinToString(",")
-    val expense = expenseIds.sorted().joinToString(",")
-    val accounts = accountIds.sorted().joinToString(",")
-    return "$FILTERED_BASE_ROUTE?year=$year&month=$month&incomeIds=$income&expenseIds=$expense&accountIds=$accounts"
-}
+/** Screens reached from the Ledger: its tab stays highlighted on them. */
+private val LEDGER_SUB_ROUTES = setOf(Screen.Search.route, Screen.Bookmarks.route, Screen.CaptureInbox.route)
 
 val bottomNavItems = listOf(Screen.Trans, Screen.Stats, Screen.Budget, Screen.Accounts, Screen.More)
 
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
+    // What a transaction sheet's Edit and Copy buttons open, wherever the sheet is.
+    val editTransaction: (Long) -> Unit = { id ->
+        navController.navigate(logRoute(transactionId = id)) { launchSingleTop = true }
+    }
+    val copyTransaction: (Long, Boolean) -> Unit = { id, useToday ->
+        navController.navigate(logRoute(copyTransactionId = id, useTodayDateForCopy = useToday)) { launchSingleTop = true }
+    }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
@@ -221,8 +240,8 @@ fun AppNavigation() {
         currentDest?.route?.startsWith(LOG_BASE_ROUTE) == true && navController.previousBackStackEntry == null
 
     val showBottomBar =
-        currentDest?.route != Screen.FilteredTransactions.route &&
-            currentDest?.route != Screen.Log.route
+        currentDest?.route != Screen.Log.route &&
+            currentDest?.route != Screen.AccountForm.route
 
     val navigateToTransactionsAfterUnlock = {
         appLockViewModel.markUnlocked()
@@ -455,10 +474,16 @@ fun AppNavigation() {
                     bottomNavItems.forEach { screen ->
                         val selected = currentDest?.hierarchy?.any { it.route == screen.route } == true ||
                             (screen == Screen.Budget && currentDest?.route in BUDGET_SUB_ROUTES) ||
-                            (screen == Screen.Trans && currentDest?.route == Screen.CaptureInbox.route)
+                            (screen == Screen.Trans && currentDest?.route in LEDGER_SUB_ROUTES) ||
+                            (screen == Screen.More && currentDest?.route in MORE_SUB_ROUTES)
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
+                                if (screen != Screen.Trans) {
+                                    // Leaving the Ledger clears its filter, even if Back later returns to it.
+                                    runCatching { navController.getBackStackEntry(Screen.Trans.route) }.getOrNull()
+                                        ?.savedStateHandle?.set(HistoryViewModel.LEFT_LEDGER, true)
+                                }
                                 navController.navigate(screen.route) {
                                     popUpTo(screen.route) { inclusive = true }
                                     launchSingleTop = true
@@ -533,6 +558,18 @@ fun AppNavigation() {
                     navArgument("copyDateMode") {
                         type = NavType.StringType
                         defaultValue = "original"
+                    },
+                    navArgument("prefillType") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    },
+                    navArgument("prefillAccountId") {
+                        type = NavType.LongType
+                        defaultValue = -1L
+                    },
+                    navArgument("prefillDate") {
+                        type = NavType.StringType
+                        defaultValue = ""
                     }
                 )
             ) {
@@ -567,18 +604,11 @@ fun AppNavigation() {
                             launchSingleTop = true; restoreState = true
                         }
                     },
-                    onNavigateToEditTransaction = { transactionId ->
-                        navController.navigate(logRoute(transactionId)) {
-                            launchSingleTop = true
-                        }
+                    onAddOnDate = { date ->
+                        navController.navigate(logRoute(prefillDate = date)) { launchSingleTop = true }
                     },
-                    onNavigateToCopyTransaction = { transactionId, useToday ->
-                        navController.navigate(
-                            logRoute(copyTransactionId = transactionId, useTodayDateForCopy = useToday)
-                        ) {
-                            launchSingleTop = true
-                        }
-                    },
+                    onNavigateToEditTransaction = editTransaction,
+                    onNavigateToCopyTransaction = copyTransaction,
                     onNavigateToBookmarks = {
                         navController.navigate(Screen.Bookmarks.route) {
                             launchSingleTop = true
@@ -589,16 +619,13 @@ fun AppNavigation() {
                             launchSingleTop = true
                         }
                     },
-                    onNavigateToFilterSelection = {
-                        navController.navigate(Screen.FilterSelection.route) {
-                            launchSingleTop = true
-                        }
-                    },
                     onNavigateToCaptureInbox = {
                         navController.navigate(Screen.CaptureInbox.route) {
                             launchSingleTop = true
                         }
-                    }
+                    },
+                    onOpenTrip = { tripId -> navController.navigate("trip/$tripId") { launchSingleTop = true } },
+                    onAddTripExpense = { tripId -> navController.navigate(tripExpenseRoute(tripId)) { launchSingleTop = true } }
                 )
             }
             composable(Screen.Stats.route) {
@@ -655,28 +682,67 @@ fun AppNavigation() {
                     onOpenAccountDetail = { accountId ->
                         navController.navigate("account_detail/$accountId")
                     },
-                    onOpenOverallStats = {
-                        navController.navigate(Screen.OverallAccountStats.route) {
+                    onOpenNetWorth = {
+                        navController.navigate(Screen.NetWorth.route) {
                             launchSingleTop = true
                         }
                     },
+                    onAddAccount = { navController.navigate("account_form") { launchSingleTop = true } },
+                    onOpenTransaction = { transactionId ->
+                        navController.navigate(logRoute(transactionId = transactionId)) { launchSingleTop = true }
+                    },
                 )
             }
-            composable(Screen.AddAccount.route) {
-                AddAccountScreen(
-                    innerPadding = innerPadding,
-                    onBack = { navController.popBackStack() },
-                    onSaved = { navController.popBackStack() }
+            composable(
+                route = Screen.AccountForm.route,
+                arguments = listOf(
+                    navArgument("accountId") {
+                        type = NavType.LongType
+                        defaultValue = -1L
+                    }
+                )
+            ) {
+                AccountFormScreen(
+                    onClose = { navController.popBackStack() },
+                    onFinished = { result ->
+                        // An archived or deleted Account's page is gone too: go back to the Accounts tab.
+                        val backToAccounts = result != AccountFormResult.Saved &&
+                            navController.popBackStack(Screen.Accounts.route, inclusive = false)
+                        if (!backToAccounts) navController.popBackStack()
+                    }
                 )
             }
             composable(Screen.More.route) {
-                SettingsScreen(
+                MoreScreen(
                     innerPadding = innerPadding,
+                    onNavigateToSettings = {
+                        navController.navigate(Screen.Settings.route) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onNavigateToFeature = { route ->
+                        navController.navigate(route) {
+                            launchSingleTop = true
+                        }
+                    },
                     onNavigateToDropdownManagement = {
                         navController.navigate(Screen.DropdownManagement.route) {
                             launchSingleTop = true
                         }
                     },
+                    onNavigateToAppsScriptSetup = {
+                        navController.navigate(Screen.AppsScriptSetup.route) {
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
+            composable(Screen.Settings.route) { entry ->
+                // Share More's SettingsViewModel so a running backup or restore keeps its state across both screens.
+                val moreEntry = remember(entry) { navController.getBackStackEntry(Screen.More.route) }
+                SettingsScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
                     onNavigateToAppsScriptSetup = {
                         navController.navigate(Screen.AppsScriptSetup.route) {
                             launchSingleTop = true
@@ -687,17 +753,59 @@ fun AppNavigation() {
                             launchSingleTop = true
                         }
                     },
-                    onNavigateToCaptureSettings = {
-                        navController.navigate(Screen.CaptureSettings.route) {
-                            launchSingleTop = true
-                        }
-                    }
+                    vm = hiltViewModel(moreEntry)
                 )
             }
             composable(Screen.CaptureInbox.route) {
                 CaptureInboxScreen(
                     innerPadding = innerPadding,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onAddToTrip = { tripId, captureId ->
+                        navController.navigate(tripExpenseRoute(tripId, captureId = captureId)) { launchSingleTop = true }
+                    }
+                )
+            }
+            composable(Screen.Trips.route) {
+                TripsScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
+                    onOpenTrip = { tripId -> navController.navigate("trip/$tripId") { launchSingleTop = true } }
+                )
+            }
+            composable(
+                route = Screen.Trip.route,
+                arguments = listOf(navArgument("tripId") { type = NavType.LongType })
+            ) { entry ->
+                val tripId = entry.arguments?.getLong("tripId") ?: 0L
+                TripScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
+                    onAddExpense = { navController.navigate(tripExpenseRoute(tripId)) { launchSingleTop = true } },
+                    onEditExpense = { expenseId -> navController.navigate(tripExpenseRoute(tripId, expenseId)) { launchSingleTop = true } },
+                    onReview = { navController.navigate("trip_review/$tripId") { launchSingleTop = true } }
+                )
+            }
+            composable(
+                route = Screen.TripExpense.route,
+                arguments = listOf(
+                    navArgument("tripId") { type = NavType.LongType },
+                    navArgument("expenseId") { type = NavType.LongType; defaultValue = 0L },
+                    navArgument("captureId") { type = NavType.LongType; defaultValue = 0L }
+                )
+            ) {
+                TripExpenseScreen(
+                    innerPadding = innerPadding,
+                    onDone = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = Screen.TripReview.route,
+                arguments = listOf(navArgument("tripId") { type = NavType.LongType })
+            ) {
+                TripReviewScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
+                    onPosted = { navController.popBackStack() }
                 )
             }
             composable(Screen.CaptureSettings.route) {
@@ -739,71 +847,36 @@ fun AppNavigation() {
                 BookmarksScreen(
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() },
-                    onTransactionClick = { transactionId ->
-                        navController.navigate(logRoute(transactionId = transactionId)) {
-                            launchSingleTop = true
-                        }
-                    }
+                    onEditTransaction = editTransaction,
+                    onCopyTransaction = copyTransaction
                 )
             }
             composable(Screen.Search.route) {
                 SearchScreen(
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() },
-                    onTransactionClick = { transactionId ->
-                        navController.navigate(logRoute(transactionId = transactionId)) {
-                            launchSingleTop = true
-                        }
-                    }
-                )
-            }
-            composable(Screen.FilterSelection.route) {
-                FilterSelectionScreen(
-                    innerPadding = innerPadding,
-                    onBack = { navController.popBackStack() },
-                    onApplyFilters = { year, month, incomeIds, expenseIds, accountIds ->
-                        navController.navigate(
-                            filteredTransactionsRoute(
-                                year = year,
-                                month = month,
-                                incomeIds = incomeIds,
-                                expenseIds = expenseIds,
-                                accountIds = accountIds
-                            )
-                        ) {
-                            launchSingleTop = true
-                        }
-                    }
-                )
-            }
-            composable(
-                route = Screen.FilteredTransactions.route,
-                arguments = listOf(
-                    navArgument("year") { type = NavType.IntType; defaultValue = 0 },
-                    navArgument("month") { type = NavType.IntType; defaultValue = 0 },
-                    navArgument("incomeIds") { type = NavType.StringType; defaultValue = "" },
-                    navArgument("expenseIds") { type = NavType.StringType; defaultValue = "" },
-                    navArgument("accountIds") { type = NavType.StringType; defaultValue = "" }
-                )
-            ) {
-                FilteredTransactionsScreen(
-                    navInsets = innerPadding,
-                    onBack = { navController.popBackStack() },
-                    onNavigateToEditTransaction = { transactionId ->
-                        navController.navigate(logRoute(transactionId = transactionId)) {
-                            launchSingleTop = true
-                        }
-                    }
+                    onEditTransaction = editTransaction,
+                    onCopyTransaction = copyTransaction
                 )
             }
             composable("account_detail/{accountId}") {
                 AccountDetailScreen(
                     innerPadding = innerPadding,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onEditTransaction = editTransaction,
+                    onCopyTransaction = copyTransaction,
+                    onAddTransaction = { type, accountId ->
+                        navController.navigate(logRoute(prefillType = type, prefillAccountId = accountId)) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onEditAccount = { accountId ->
+                        navController.navigate("account_form?accountId=$accountId") { launchSingleTop = true }
+                    }
                 )
             }
-            composable(Screen.OverallAccountStats.route) {
-                OverallAccountStatsScreen(
+            composable(Screen.NetWorth.route) {
+                NetWorthScreen(
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() },
                 )

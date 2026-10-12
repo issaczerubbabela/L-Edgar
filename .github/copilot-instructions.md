@@ -64,7 +64,9 @@ Skills are available as:
 For every prompt that results in any repository change (feature, fix, refactor, UI tweak, schema update, sync logic update, docs/instruction updates), the agent MUST:
 
 1. Update `app/src/main/java/com/issaczerubbabel/ledgar/ui/screens/ChangelogData.kt` in the same run.
-2. Add entries under the latest release (`features`, `fixes`, or `qol`) or create a new release when scope is significant.
+2. Add entries to the top (unreleased) `ChangelogRelease` under `added`, `changed`, `fixed` or `developer`, and regenerate `CHANGELOG.md` (`UPDATE_CHANGELOG=1 ./gradlew testDebugUnitTest --tests "*ChangelogMarkdownTest"`). Create a new release only when asked to bump the version.
 3. Perform this before finalizing the response.
 
 If no repository files were changed, changelog update is not required.
+
+Follow the "Changelog style" rules in `CLAUDE.md` (short entries, one change each, no repeats, never edit a tagged release). `ChangelogMarkdownTest` enforces the measurable ones.

@@ -48,7 +48,6 @@ fun LogScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var showDatePicker by remember { mutableStateOf(false) }
-    var showDeleteConfirm by remember { mutableStateOf(false) }
     var activeSheet by remember { mutableStateOf<LogSheet?>(null) }
     var savePulseSignal by remember { mutableIntStateOf(0) }
     val accounts by vm.accounts.collectAsStateWithLifecycle()
@@ -57,7 +56,7 @@ fun LogScreen(
     val bucketContext by vm.bucketContext.collectAsStateWithLifecycle()
 
     BackHandler(
-        enabled = !showDatePicker && !showDeleteConfirm && activeSheet == null,
+        enabled = !showDatePicker && activeSheet == null,
         onBack = onBack
     )
 
@@ -104,7 +103,7 @@ fun LogScreen(
                 onRetrySync = vm::retrySync,
                 onBack = onBack,
                 onEnterApp = onEnterApp,
-                onDeleteClick = { showDeleteConfirm = true }
+                onDeleteClick = vm::deleteCurrent
             )
 
             val transferContext = if (vm.selectedType == TransactionType.TRANSFER) {
@@ -124,7 +123,15 @@ fun LogScreen(
 
             BucketPreviewSlot(preview = vm.bucketPreview(bucketContext))
 
-            TypeRow(
+            val isAdjustment = vm.selectedType == TransactionType.ADJUSTMENT
+            if (isAdjustment) {
+                Text(
+                    text = TransactionType.label(TransactionType.ADJUSTMENT),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            } else TypeRow(
                 selectedType = vm.selectedType,
                 onSelect = { type ->
                     vm.selectedType = type
@@ -156,6 +163,12 @@ fun LogScreen(
                         },
                         ChipSpec(toName ?: "To account", toName != null) {
                             activeSheet = LogSheet.Account(AccountTarget.To)
+                        }
+                    )
+                } else if (isAdjustment) {
+                    listOf(
+                        ChipSpec(accountName ?: "Account", accountName != null) {
+                            activeSheet = LogSheet.Account(AccountTarget.Account)
                         }
                     )
                 } else {
@@ -230,27 +243,6 @@ fun LogScreen(
         )
 
         null -> Unit
-    }
-
-    if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete Transaction?") },
-            text = { Text("This transaction will be removed locally now and deleted from Google Sheets on next sync.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showDeleteConfirm = false
-                    vm.deleteCurrent()
-                }) {
-                    Text("Delete")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
     }
 
     if (showDatePicker) {

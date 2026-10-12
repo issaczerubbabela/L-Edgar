@@ -5,7 +5,7 @@ An offline-first Android expense tracker. Each user keeps their data on their ph
 ## Money
 
 **Transaction**:
-One movement of money: an Expense, an Income or a Transfer. Stored as `ExpenseRecord` in `expense_records`.
+One movement of money: an Expense, an Income, a Transfer or a Balance adjustment. Stored as `ExpenseRecord` in `expense_records`.
 _Avoid_: record, entry, expense (when you mean any type)
 
 **Transfer**:
@@ -13,14 +13,44 @@ A Transaction that moves money from one Account to another. It has a from-accoun
 _Avoid_: payment between accounts
 
 **Account**:
-A place money is held, such as a bank account, card or cash wallet. Its balance is its Initial balance plus the Transactions dated on or after its As-of date.
+A place money is held or owed, such as a bank account, card, loan or cash wallet. Its balance is its Initial balance plus the Transactions dated after its As-of date. A balance below zero means money owed.
 _Avoid_: asset (the UI's "Edit All Assets" means Accounts), payment mode
+
+**Balance adjustment**:
+A Transaction that only corrects one Account's balance to match the bank, for the difference found when Reconciling. It is never Earned, Spent or Saved.
+_Avoid_: correction, manual balance edit
+
+**Reconcile**:
+Typing in what the bank shows for an Account today, so the app adds a Balance adjustment for any difference. The Initial balance stays as it was.
+_Avoid_: edit balance, sync (for this)
 
 **Account group**:
 The named group an Account belongs to, picked from the `ACCOUNT_GROUP` Dropdown options.
 
+**Liability**:
+An Account in an Account group with the Liability role, such as a credit card or loan. Liabilities are the money owed across them: minus the sum of their balances, so an overpaid card lowers it.
+_Avoid_: debt group (keywords in a group's name no longer decide this)
+
+**Net worth**:
+The sum of the balances of every Account included in totals: Assets minus Liabilities. It is the "Total" on the Accounts tab.
+_Avoid_: balance (for the total), total assets
+
+**Cash flow**:
+Money moving into and out of the Accounts Included in totals in a period. A Transfer counts only when it crosses that boundary; Balance adjustments are shown apart from it.
+_Avoid_: income/expense (for this; those are Earned and Spent)
+
+**Included in totals**:
+Whether an Account counts towards Assets, Liabilities and Net worth. It doesn't affect whether the Account is shown.
+
+**Hidden**:
+An Account left out of the Accounts list and the account pickers. A Hidden Account still counts in totals unless it is also not Included in totals.
+
+**Archived**:
+An Account that is both Hidden and not Included in totals, kept so its Transactions still have an Account.
+_Avoid_: deleted (for an account that still exists)
+
 **Initial balance**:
-An Account's balance on its As-of date (`initialBalanceDate`). Transactions dated before the As-of date don't count towards the Account's balance.
+An Account's balance at the end of its As-of date (`initialBalanceDate`), as the bank would show it that evening. Transactions dated on or before the As-of date are already in it, so they don't count again.
 _Avoid_: opening balance, starting balance
 
 **Category**:
@@ -41,7 +71,7 @@ _Avoid_: envelope, budget (the legacy per-category plan)
 The routing of one expense Category into one Bucket for one cycle. A Category sits in at most one Bucket per cycle; Categories in none count as Unbucketed.
 
 **Stats role**:
-The part a Dropdown option plays in Stats, stored in its `role`: an expense Category can be **Saving**, an income Category can be **Refund**, and an Account group can be **Savings**. Most options have no role.
+The part a Dropdown option plays in Stats, stored in its `role`: an expense Category can be **Saving**, an income Category can be **Refund**, and an Account group can be **Savings** or **Liability**. Most options have no role.
 _Avoid_: flag, tag
 
 **Earned**:
@@ -62,6 +92,14 @@ An Income in a Refund Category. It reduces Spent instead of adding to Earned, an
 **Left over**:
 Earned minus Spent minus Saved, for a week, month, year or custom range.
 _Avoid_: kept, balance, savings
+
+**Net**:
+Income minus Expenses for the Transactions on screen, counted as they are: Saving Categories count as Expenses and Refunds as Income. Transfers and Balance adjustments are left out. It's what the Ledger shows, so it adds up to the rows you can see; Stats uses Earned, Spent and Left over instead.
+_Avoid_: total, balance, left over (for this)
+
+**Ledger**:
+The tab that lists every Transaction, one month at a time: day by day, on a calendar, or as a year of months.
+_Avoid_: Trans., history
 
 **Left to spend**:
 A Salary cycle's spendable amount minus every Expense in it, Saving Categories included and Refunds not taken off: the same figure the Budget tab shows, because a Bucket can hold savings. Once the cycle is over, the Stats tab calls it "Left unspent".
@@ -155,6 +193,51 @@ A Transaction changed differently on the phone and in the Sheet since they last 
 
 **Held deletion**:
 A Transaction a Pull found missing from the Sheet but didn't delete from the phone, because too many went missing at once. The user decides whether to delete it or put it back in the Sheet.
+
+## Trips
+
+**Trip**:
+A named, time-bound outing whose shared costs are recorded and split between its Members. It is Active while being recorded and Archived once Posted.
+_Avoid_: group, event, split (as a noun)
+
+**Member**:
+A named person on a Trip. The user is always one of them; the others don't use the app.
+_Avoid_: participant, friend, person
+
+**Trip expense**:
+One payment made during a Trip: an amount, date, purpose, the one Member who paid, and how it is split between Members. It is not a Transaction.
+_Avoid_: trip transaction, bill
+
+**Share**:
+The part of a Trip expense that one Member owes.
+_Avoid_: portion, cut
+
+**Balance**:
+What a Member paid on a Trip minus their Shares and adjusted by Settlements. Positive means they are owed money.
+
+**Settlement**:
+A repayment between two Members that moves their Balances towards zero. It never counts as spending.
+_Avoid_: reimbursement, payback
+
+**Settle-up plan**:
+The fewest Suggested payments between Members that bring every Balance to zero.
+_Avoid_: simplified debts
+
+**Suggested payment**:
+One payment in the Settle-up plan, from a Member who owes to a Member who is owed. It becomes a Settlement once the user marks it paid.
+_Avoid_: settlement (for a payment not yet made), debt
+
+**Member colour**:
+The colour that identifies a Member everywhere in a Trip. It never means money direction; gets back and owes keep their own colours.
+_Avoid_: payer colour, tag
+
+**Locked amount**:
+A Share the user typed for one Member in a Custom split. Members without a Locked amount split what is left equally.
+_Avoid_: adjustment, exact amount, override
+
+**Post**:
+Turning the user's Shares of a Trip into Transactions, after the user reviews and edits them. Posting archives the Trip.
+_Avoid_: push (that word means sending Transactions to the Sheet), export, sync
 
 ## Entry points
 
