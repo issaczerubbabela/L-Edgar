@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.reminder
 
+import com.issaczerubbabel.ledgar.util.formatRupees
 import java.time.Instant
 import java.time.ZoneId
 
@@ -26,4 +27,22 @@ object ReminderRules {
     /** True when [lastLoggedEpochDay] isn't today, i.e. nothing has been logged on the phone yet. */
     fun shouldRemind(todayEpochDay: Long, lastLoggedEpochDay: Long?): Boolean =
         lastLoggedEpochDay != todayEpochDay
+
+    /**
+     * The notification's text: "₹X left to spend this cycle" while a Salary cycle is running with
+     * money left, otherwise one of a few short lines picked by the day so it doesn't go stale.
+     */
+    fun message(todayEpochDay: Long, leftToSpend: Double?): String {
+        if (leftToSpend != null && leftToSpend > 0.0) {
+            return "${formatRupees(leftToSpend)} left to spend this cycle. Add today's spending to keep it right."
+        }
+        return MESSAGES[Math.floorMod(todayEpochDay, MESSAGES.size.toLong()).toInt()]
+    }
+
+    private val MESSAGES = listOf(
+        "Add today's spending before you forget.",
+        "A minute now beats guessing later. Log today's spends.",
+        "Nothing logged yet today. Quick Add takes a few taps.",
+        "Keep Left to spend accurate. Add what you spent today."
+    )
 }

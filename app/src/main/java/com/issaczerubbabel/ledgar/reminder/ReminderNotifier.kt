@@ -7,6 +7,7 @@ import android.content.Intent
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.issaczerubbabel.ledgar.MainActivity
 import com.issaczerubbabel.ledgar.QuickLogActivity
 import com.issaczerubbabel.ledgar.R
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -41,7 +42,7 @@ class ReminderNotifier @Inject constructor(
             .setStyle(NotificationCompat.BigTextStyle().bigText(bodyText))
             .setAutoCancel(true)
             .setOnlyAlertOnce(true)
-            .setContentIntent(logNowIntent())
+            .setContentIntent(addTransactionIntent())
             .addAction(NotificationCompat.Action.Builder(0, "Log now", logNowIntent()).build())
             .addAction(NotificationCompat.Action.Builder(0, "Nothing today", dismissTodayIntent()).build())
             .build()
@@ -67,6 +68,17 @@ class ReminderNotifier @Inject constructor(
         )
     }
 
+    /** Opens the app on Add Transaction; App Lock still applies, as on any launch. */
+    private fun addTransactionIntent(): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            putExtra(MainActivity.EXTRA_OPEN_ADD_TRANSACTION, true)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        return PendingIntent.getActivity(
+            context, REQUEST_CODE_OPEN_ADD, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+    }
+
     private fun dismissTodayIntent(): PendingIntent {
         val intent = Intent(context, DailyReminderReceiver::class.java).setAction(ACTION_DISMISS_TODAY)
         return PendingIntent.getBroadcast(
@@ -81,16 +93,6 @@ class ReminderNotifier @Inject constructor(
         private const val NOTIFICATION_ID = 1
         private const val REQUEST_CODE_LOG_NOW = 9101
         private const val REQUEST_CODE_DISMISS = 9102
-
-        // A few short lines so the text doesn't go stale; picked deterministically by the day.
-        private val MESSAGES = listOf(
-            "Add today's spending before you forget.",
-            "A minute now beats guessing later — log today's spends.",
-            "Nothing logged yet today. Quick Add takes a few taps.",
-            "Keep Left to spend accurate — add what you spent today."
-        )
-
-        fun messageFor(epochDay: Long): String =
-            MESSAGES[(((epochDay % MESSAGES.size) + MESSAGES.size) % MESSAGES.size).toInt()]
+        private const val REQUEST_CODE_OPEN_ADD = 9103
     }
 }

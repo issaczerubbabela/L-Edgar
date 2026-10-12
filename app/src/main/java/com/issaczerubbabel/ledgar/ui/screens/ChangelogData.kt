@@ -18,8 +18,12 @@ val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
         version = "v1.6.0",
         date = "2026-10-12",
+        added = listOf(
+            "Daily reminder: an evening nudge if nothing was logged today, showing Left to spend, with a Log now button"
+        ),
         developer = listOf(
-            "CONTEXT.md defines Repeat rule and Repeating transaction, and Merchant rules remember a renamed description"
+            "CONTEXT.md defines Repeat rule and Repeating transaction, and Merchant rules remember a renamed description",
+            "Daily reminder: ReminderRules.message is pure and unit tested; MainActivity takes an open-Add-Transaction extra"
         )
     ),
     ChangelogRelease(

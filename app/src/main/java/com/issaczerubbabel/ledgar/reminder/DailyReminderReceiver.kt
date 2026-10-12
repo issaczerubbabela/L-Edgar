@@ -3,6 +3,7 @@ package com.issaczerubbabel.ledgar.reminder
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewSource
 import com.issaczerubbabel.ledgar.data.preferences.ReminderPreferences
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -13,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDate
 
 /**
@@ -32,6 +34,7 @@ class DailyReminderReceiver : BroadcastReceiver() {
         fun reminderPreferences(): ReminderPreferences
         fun reminderNotifier(): ReminderNotifier
         fun reminderScheduler(): DailyReminderScheduler
+        fun reminderCycleSource(): BucketPreviewSource
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -53,7 +56,11 @@ class DailyReminderReceiver : BroadcastReceiver() {
         val today = LocalDate.now().toEpochDay()
         val lastLogged = deps.reminderPreferences().lastLoggedEpochDay.first()
         if (ReminderRules.shouldRemind(today, lastLogged)) {
-            deps.reminderNotifier().notify(ReminderNotifier.messageFor(today))
+            // Left to spend as the Budget tab shows it; a failed read just means the plain message.
+            val leftToSpend = runCatching {
+                withTimeoutOrNull(5_000) { deps.reminderCycleSource().context.first() }?.summary?.leftToSpend
+            }.getOrNull()
+            deps.reminderNotifier().notify(ReminderRules.message(today, leftToSpend))
         }
         // This is a one-shot alarm: line up tomorrow's firing now that this one has run.
         deps.reminderScheduler().reschedule()

@@ -112,15 +112,7 @@ fun SettingsScreen(
                     message = "Notifications are off for L.Edgar",
                     actionLabel = "Open settings"
                 )
-                if (result == SnackbarResult.ActionPerformed) {
-                    runCatching {
-                        context.startActivity(
-                            Intent(AndroidSettings.ACTION_APP_NOTIFICATION_SETTINGS)
-                                .putExtra(AndroidSettings.EXTRA_APP_PACKAGE, context.packageName)
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        )
-                    }
-                }
+                if (result == SnackbarResult.ActionPerformed) openNotificationSettings(context)
             }
         }
     }
@@ -445,11 +437,18 @@ fun SettingsScreen(
                     )
                 }
                 if (!notificationsAllowed) {
-                    Text(
-                        text = "Notifications are blocked for L.Edgar",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = ExpenseRed
-                    )
+                    SettingsListItem(
+                        title = "Notifications are blocked",
+                        icon = Icons.Filled.NotificationsOff,
+                        iconTint = MaterialTheme.colorScheme.error,
+                        onClick = { openNotificationSettings(context) }
+                    ) {
+                        Text(
+                            text = "Open settings",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
 
@@ -1078,3 +1077,14 @@ private fun sheetCategory(dto: ImportRecordDto): String {
 }
 
 private fun approximatelyEqual(a: Double, b: Double): Boolean = kotlin.math.abs(a - b) < 0.000001
+
+/** The system page where the user can turn L.Edgar's notifications back on. */
+private fun openNotificationSettings(context: Context) {
+    runCatching {
+        context.startActivity(
+            Intent(AndroidSettings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(AndroidSettings.EXTRA_APP_PACKAGE, context.packageName)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+    }
+}

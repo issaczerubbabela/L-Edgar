@@ -8,9 +8,14 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 ## [1.6.0] - 2026-10-12
 
+### Added
+
+- Daily reminder: an evening nudge if nothing was logged today, showing Left to spend, with a Log now button
+
 ### Developer
 
 - CONTEXT.md defines Repeat rule and Repeating transaction, and Merchant rules remember a renamed description
+- Daily reminder: ReminderRules.message is pure and unit tested; MainActivity takes an open-Add-Transaction extra
 
 ## [1.5.0] - 2026-10-12
 

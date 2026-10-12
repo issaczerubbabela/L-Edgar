@@ -80,4 +80,21 @@ class ReminderRulesTest {
         assertTrue(ReminderRules.shouldRemind(todayEpochDay = 100L, lastLoggedEpochDay = 99L))
         assertTrue(ReminderRules.shouldRemind(todayEpochDay = 100L, lastLoggedEpochDay = null))
     }
+
+    @Test
+    fun `message shows Left to spend while a cycle has money left`() {
+        val text = ReminderRules.message(todayEpochDay = 100L, leftToSpend = 12_500.0)
+        assertTrue(text, text.startsWith("₹12,500 left to spend this cycle"))
+    }
+
+    @Test
+    fun `message falls back to a rotating line with no cycle or nothing left`() {
+        val plain = ReminderRules.message(todayEpochDay = 100L, leftToSpend = null)
+        assertEquals(plain, ReminderRules.message(todayEpochDay = 100L, leftToSpend = -40.0))
+        assertEquals(plain, ReminderRules.message(todayEpochDay = 100L, leftToSpend = 0.0))
+        assertFalse(plain.contains("left to spend this cycle"))
+        // A different day picks a different line, and negative epoch days don't crash.
+        assertTrue(plain != ReminderRules.message(todayEpochDay = 101L, leftToSpend = null))
+        ReminderRules.message(todayEpochDay = -3L, leftToSpend = null)
+    }
 }
