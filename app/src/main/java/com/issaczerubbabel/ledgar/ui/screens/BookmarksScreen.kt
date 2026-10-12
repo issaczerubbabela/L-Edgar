@@ -1,5 +1,8 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
+import com.issaczerubbabel.ledgar.ui.components.UndoDeleteSnackbar
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarHost
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -46,8 +49,12 @@ fun BookmarksScreen(
     val accounts by actionsVm.accounts.collectAsStateWithLifecycle()
     val rows = remember(transactions, accounts) { transactions.map { Ledger.row(it, accounts) } }
     var sheetTransactionId by remember { mutableStateOf<Long?>(null) }
+    val pendingDelete by actionsVm.pendingDelete.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    UndoDeleteSnackbar(pendingDelete, snackbarHostState, onUndo = actionsVm::undoDelete, onCommit = actionsVm::commitPendingDelete)
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState, Modifier.padding(bottom = innerPadding.calculateBottomPadding())) },
         topBar = {
             TopAppBar(
                 title = { Text("Bookmarks") },

@@ -15,6 +15,8 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
+import com.issaczerubbabel.ledgar.data.repository.UndoableDeletes
+import com.issaczerubbabel.ledgar.ledger.Ledger
 import com.issaczerubbabel.ledgar.sync.SyncScheduler
 import com.issaczerubbabel.ledgar.sync.SyncStatus
 import com.issaczerubbabel.ledgar.util.TransactionType
@@ -37,7 +39,8 @@ class LogViewModel @Inject constructor(
     private val dropdownOptionRepository: DropdownOptionRepository,
     private val syncScheduler: SyncScheduler,
     bucketPreviewSource: BucketPreviewSource,
-    private val savedStateHandle: SavedStateHandle
+    private val savedStateHandle: SavedStateHandle,
+    private val undoableDeletes: UndoableDeletes
 ) : ViewModel() {
 
     val accounts: StateFlow<List<AccountRecord>> = accountRepository
@@ -256,7 +259,8 @@ class LogViewModel @Inject constructor(
                 return@launch
             }
 
-            repository.delete(current)
+            // The screen closes; the one underneath offers Undo.
+            undoableDeletes.delete(current, Ledger.deletedMessage(current, accounts.value))
 
             saveSuccess = true
         }

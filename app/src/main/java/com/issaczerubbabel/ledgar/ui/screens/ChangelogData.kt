@@ -35,13 +35,14 @@ val changelogReleases: List<ChangelogRelease> = listOf(
         ),
         added = listOf(
             "Ledger: TalkBack reads each transaction, day and Calendar cell as one sentence that says Income or Expense",
-            "Ledger: Undo a deleted transaction for 5 seconds; nothing reaches the Sheet until the delete is final",
+            "Undo a deleted transaction for 5 seconds on the Ledger, Search, Bookmarks, Account pages and Edit",
             "Ledger: ✕ or Back leaves selection, and Select all in <month> picks every row on screen",
             "Ledger: filter the month on screen by category and account, shown as removable chips under the tabs",
             "Search: pick a date range instead of typing dates, and see your words highlighted in the results",
             "Calendar: tap a day to see its transactions, open one in place, or Add on that day without pinning the date"
         ),
         fixed = listOf(
+            "Search: the keyboard stays down after you close a transaction, so it never covers Undo",
             "Ledger: big amounts show in full instead of being cut off",
             "Ledger: a day's transactions keep their order after a Sync",
             "Ledger: a Calendar day where you spent more than you earned shows a minus, in short readable amounts",
@@ -54,7 +55,7 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Glossary: Net (the Ledger's raw Income minus Expenses) and Ledger (the tab that lists every Transaction)",
             "Ledger: a pure Ledger module builds the summary, day groups and Calendar cells off the main thread, with tests",
             "Ledger: one shared Transaction row and transaction sheet in ui/components; the Ledger module builds their contents",
-            "Ledger: a pending delete lives only in the Ledger ViewModel until final, so Undo never races a Sync",
+            "A delete offering Undo lives in the UndoableDeletes singleton until final, so Undo never races a Sync",
             "Ledger: a pure batch plan decides which selected rows a change fits; the DAO guards category and account writes",
             "Ledger: filter matching, options and chips live in the Ledger module, with tests; old filter screens deleted",
             "Ledger: Search's date groups, range label and match highlighting come from the Ledger module, with tests",

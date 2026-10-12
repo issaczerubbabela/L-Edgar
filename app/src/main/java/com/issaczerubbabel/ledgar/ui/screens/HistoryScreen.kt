@@ -32,6 +32,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.ui.components.DropdownField
 import com.issaczerubbabel.ledgar.ui.components.SingleDatePickerDialog
 import com.issaczerubbabel.ledgar.ui.components.TransactionRow
+import com.issaczerubbabel.ledgar.ui.components.UndoDeleteSnackbar
 import com.issaczerubbabel.ledgar.ui.components.TransactionSheet
 import com.issaczerubbabel.ledgar.ui.components.TransactionSheetActions
 import com.issaczerubbabel.ledgar.ledger.Ledger
@@ -61,17 +62,9 @@ import com.issaczerubbabel.ledgar.ledger.sharedDate
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.platform.LocalContext
-import android.app.Activity
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.issaczerubbabel.ledgar.ui.theme.*
 import com.issaczerubbabel.ledgar.ledger.LedgerCalendarCell
 import com.issaczerubbabel.ledgar.ledger.LedgerDay
@@ -133,31 +126,11 @@ fun HistoryScreen(
     val pendingDelete by vm.pendingDelete.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // One snackbar per pending delete. A newer delete, or the delete becoming final, restarts this
-    // effect, which cancels the snackbar showing; Undo brings the row back.
-    LaunchedEffect(pendingDelete) {
-        val pending = pendingDelete ?: return@LaunchedEffect
-        val result = snackbarHostState.showSnackbar(pending.message, actionLabel = "Undo", duration = SnackbarDuration.Indefinite)
-        if (result == SnackbarResult.ActionPerformed) vm.undoDelete(pending)
-    }
+    UndoDeleteSnackbar(pendingDelete, snackbarHostState, onUndo = vm::undoDelete, onCommit = vm::commitPendingDelete)
     // Back leaves selection before it leaves the tab.
     BackHandler(enabled = selectedCount > 0) { vm.clearSelection() }
     LaunchedEffect(Unit) {
         vm.batchMessages.collect { snackbarHostState.showSnackbar(it) }
-    }
-    // A pending delete becomes final when the Ledger is left or the app goes to the background.
-    // Rotating the phone isn't leaving: the ViewModel survives and the Undo stays open.
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val activity = LocalContext.current as? Activity
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP && activity?.isChangingConfigurations != true) vm.commitPendingDelete()
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            if (activity?.isChangingConfigurations != true) vm.commitPendingDelete()
-        }
     }
 
     // Follow settledPage, not currentPage. currentPage changes on every page an animation passes,

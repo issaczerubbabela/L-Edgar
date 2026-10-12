@@ -7,6 +7,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
+import com.issaczerubbabel.ledgar.data.repository.UndoableDeletes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -79,7 +80,8 @@ private data class SearchDataState(
 class SearchViewModel @Inject constructor(
     expenseRepository: ExpenseRepository,
     accountRepository: AccountRepository,
-    dropdownOptionRepository: DropdownOptionRepository
+    dropdownOptionRepository: DropdownOptionRepository,
+    undoableDeletes: UndoableDeletes
 ) : ViewModel() {
 
     private val query = MutableStateFlow("")
@@ -125,6 +127,7 @@ class SearchViewModel @Inject constructor(
                 )
             }
         }
+        .combine(undoableDeletes.hiddenIds) { records, hidden -> records.filterNot { it.id in hidden } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val headerState = combine(

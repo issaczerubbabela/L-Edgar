@@ -1,5 +1,9 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
+import androidx.compose.ui.platform.LocalFocusManager
+import com.issaczerubbabel.ledgar.ui.components.UndoDeleteSnackbar
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.animation.AnimatedVisibility
@@ -67,8 +71,14 @@ fun SearchScreen(
     val accounts by actionsVm.accounts.collectAsStateWithLifecycle()
     val days = remember(state.results, accounts) { Ledger.searchDays(state.results, accounts) }
     var sheetTransactionId by remember { mutableStateOf<Long?>(null) }
+    // Opening a row drops the search box's focus, or the keyboard comes back over the Undo snackbar.
+    val focusManager = LocalFocusManager.current
+    val pendingDelete by actionsVm.pendingDelete.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    UndoDeleteSnackbar(pendingDelete, snackbarHostState, onUndo = actionsVm::undoDelete, onCommit = actionsVm::commitPendingDelete)
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState, Modifier.padding(bottom = innerPadding.calculateBottomPadding())) },
         topBar = {
             TopAppBar(
                 navigationIcon = {
@@ -143,7 +153,7 @@ fun SearchScreen(
                         items(day.rows, key = { it.id }) { row ->
                             TransactionRow(
                                 row = row,
-                                onClick = { sheetTransactionId = row.id },
+                                onClick = { focusManager.clearFocus(); sheetTransactionId = row.id },
                                 highlight = state.query
                             )
                             HorizontalDivider(

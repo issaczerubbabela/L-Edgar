@@ -6,6 +6,9 @@ import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
+import com.issaczerubbabel.ledgar.data.repository.UndoableDelete
+import com.issaczerubbabel.ledgar.data.repository.UndoableDeletes
+import com.issaczerubbabel.ledgar.ledger.Ledger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -17,7 +20,8 @@ import javax.inject.Inject
 @HiltViewModel
 class TransactionActionsViewModel @Inject constructor(
     private val repository: ExpenseRepository,
-    accountRepository: AccountRepository
+    accountRepository: AccountRepository,
+    private val undoableDeletes: UndoableDeletes
 ) : ViewModel() {
 
     /** For the Account names a Transaction's rows and sheet show. */
@@ -29,7 +33,18 @@ class TransactionActionsViewModel @Inject constructor(
         viewModelScope.launch { repository.setBookmarked(id = transaction.id, isBookmarked = !transaction.isBookmarked) }
     }
 
-    fun delete(transaction: ExpenseRecord) {
-        viewModelScope.launch { repository.delete(transaction) }
+    /** The delete the Undo snackbar is offering, if any. */
+    val pendingDelete: StateFlow<UndoableDelete?> = undoableDeletes.pending
+
+    /** Hides [transaction] everywhere at once and offers Undo; see [UndoableDeletes]. */
+    fun delete(transaction: ExpenseRecord) =
+        undoableDeletes.delete(transaction, Ledger.deletedMessage(transaction, accounts.value))
+
+    fun undoDelete(delete: UndoableDelete) = undoableDeletes.undo(delete)
+
+    fun commitPendingDelete() = undoableDeletes.commit()
+
+    override fun onCleared() {
+        commitPendingDelete()
     }
 }

@@ -1,5 +1,7 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
+import com.issaczerubbabel.ledgar.viewmodel.TransactionActionsViewModel
+import com.issaczerubbabel.ledgar.ui.components.UndoDeleteSnackbar
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -73,19 +75,22 @@ fun AccountDetailScreen(
     onAddTransaction: (type: String, accountId: Long) -> Unit,
     onEditAccount: (Long) -> Unit,
     vm: AccountDetailViewModel = hiltViewModel(),
-    reconcileVm: ReconcileViewModel = hiltViewModel()
+    reconcileVm: ReconcileViewModel = hiltViewModel(),
+    actionsVm: TransactionActionsViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
     var showReconcile by remember { mutableStateOf(false) }
     var sheetTransactionId by remember { mutableStateOf<Long?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val pendingDelete by actionsVm.pendingDelete.collectAsStateWithLifecycle()
+    UndoDeleteSnackbar(pendingDelete, snackbarHostState, onUndo = actionsVm::undoDelete, onCommit = actionsVm::commitPendingDelete)
 
     LaunchedEffect(Unit) {
         reconcileVm.messages.collect { snackbarHostState.showSnackbar(it) }
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { SnackbarHost(snackbarHostState, Modifier.padding(bottom = innerPadding.calculateBottomPadding())) },
         topBar = {
             TopAppBar(
                 title = {
@@ -210,7 +215,8 @@ fun AccountDetailScreen(
             transaction = row.transaction,
             onDismiss = { sheetTransactionId = null },
             onEdit = onEditTransaction,
-            onCopy = onCopyTransaction
+            onCopy = onCopyTransaction,
+            vm = actionsVm
         )
     }
 }
