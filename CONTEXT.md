@@ -93,6 +93,14 @@ An Income in a Refund Category. It reduces Spent instead of adding to Earned, an
 Earned minus Spent minus Saved, for a week, month, year or custom range.
 _Avoid_: kept, balance, savings
 
+**Net**:
+Income minus Expenses for the Transactions on screen, counted as they are: Saving Categories count as Expenses and Refunds as Income. Transfers and Balance adjustments are left out. It's what the Ledger shows, so it adds up to the rows you can see; Stats uses Earned, Spent and Left over instead.
+_Avoid_: total, balance, left over (for this)
+
+**Ledger**:
+The tab that lists every Transaction, one month at a time: day by day, on a calendar, or as a year of months.
+_Avoid_: Trans., history
+
 **Left to spend**:
 A Salary cycle's spendable amount minus every Expense in it, Saving Categories included and Refunds not taken off: the same figure the Budget tab shows, because a Bucket can hold savings. Once the cycle is over, the Stats tab calls it "Left unspent".
 _Avoid_: left over (which is based on Earned, not the spendable amount)
@@ -110,6 +118,14 @@ A user-editable choice for Categories and Account groups. `PAYMENT_MODE` options
 **Bookmark**:
 A flag the user puts on a Transaction to find it again in the Bookmarks list.
 
+**Repeat rule**:
+A saved Transaction template with a cadence (weekly, every 2 weeks, monthly, every 3 months or yearly). On each due date it either adds a Repeating transaction by itself or, if set to Ask me first, waits for the user. Changing or deleting a Repeat rule never touches the Transactions it already added.
+_Avoid_: recurring rule, schedule, scheduled transaction
+
+**Repeating transaction**:
+A Transaction a Repeat rule added. Once added it is an ordinary Transaction: it syncs, counts and can be edited or deleted like any other.
+_Avoid_: recurring transaction, upcoming transaction
+
 ## Auto-capture
 
 **Captured transaction**:
@@ -121,7 +137,7 @@ Turning a Captured transaction into a real Transaction. Only the user confirms; 
 _Avoid_: auto-log, auto-add
 
 **Merchant rule**:
-A saved mapping from a normalized merchant name to a Category, used to categorize future Captured transactions from the same merchant. Either set by the user or learned from repeated confirmations.
+A saved mapping from a normalized merchant name to a Category, and to the description the user last renamed it to, used for future Captured transactions from the same merchant. The Category is either set by the user or learned from repeated confirmations.
 _Avoid_: category rule
 
 **Account alias**:

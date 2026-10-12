@@ -6,16 +6,73 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `app/src/main/java/com/issaczerubbabel/ledgar/ui/screens/ChangelogData.kt`,
 which is also what the app shows under More > Changelog. Developer notes appear here only.
 
-## [1.4.1] - 2026-10-09
+## [1.6.0] - 2026-10-12
 
 ### Added
 
-- Add Transaction: a Repeat chip for rent, SIPs and salary, adding itself when due while the app was closed
-- Editing a transaction a Repeat rule made offers Stop repeating; past transactions are untouched
+- Daily reminder: an evening nudge if nothing was logged today, showing Left to spend, with a Log now button
+- Add Transaction: a Repeat chip for rent, SIPs or salary, which then adds itself on each date
+- Repeating (in More): see what's coming, pause, edit or delete a repeat, and set it to Ask me first
+- Ledger: a chip shows Ask me first repeats waiting for Add, Edit & add or Skip
+- Repeats stay on this phone for now: a reinstall keeps the transactions they added but not the repeats
 
 ### Developer
 
-- Recurring transactions: local-only Room table (migration 24 → 25), a pure RecurrenceCalculator and RecurringRepository, with tests
+- CONTEXT.md defines Repeat rule and Repeating transaction, and Merchant rules remember a renamed description
+- Daily reminder: ReminderRules.message is pure and unit tested; MainActivity takes an open-Add-Transaction extra
+- Repeat rules: local-only recurring_rules table (Room 24 → 25), pure RepeatSchedule, repository and migration tests
+
+## [1.5.0] - 2026-10-12
+
+### Added
+
+- Ledger: TalkBack reads each transaction, day and Calendar cell as one sentence that says Income or Expense
+- Undo a deleted transaction for 5 seconds on the Ledger, Search, Bookmarks, Account pages and Edit
+- Ledger: ✕ or Back leaves selection, and Select all in <month> picks every row on screen
+- Ledger: filter the month on screen by category and account, shown as removable chips under the tabs
+- Search: pick a date range instead of typing dates, and see your words highlighted in the results
+- Calendar: tap a day to see its transactions, open one in place, or Add on that day without pinning the date
+
+### Changed
+
+- Ledger (was Trans.): the month is the title; tap it for a 12-month grid. Bookmarks moves to the ⋮ menu
+- Ledger: theme colours throughout, plain weekday headers, and day headers without the repeated month
+- Ledger: waiting captures show as a small chip, the Trip card is compact, and an empty month offers Add
+- Ledger: the Ledger tab stays highlighted on Search, Bookmarks and the capture inbox
+- Monthly: shows the year of the Ledger's month, and its arrows step a year keeping the month
+- Monthly: tap a month or week to open it on Daily, with a separate arrow to show its weeks
+- Search: results are grouped by date, with the month in each header since they span all time
+- Ledger: Filter opens over the month you're looking at; the separate Filter and Filtered screens are gone
+- Ledger: the summary reads Income, Expenses and Net, and amounts use Indian grouping without ".00"
+- Ledger: transactions look the same here, in Search, Bookmarks and on Account pages, and a tap opens one sheet
+- Ledger: a transaction's sheet has Copy for today and Copy for its date, and Bookmark says what it'll do
+- Ledger: the confirm before deleting several transactions names how many and their Net
+- Ledger: Change date, category, account or description say what they'll change and what they skip
+
+### Fixed
+
+- Search: the keyboard stays down after you close a transaction, so it never covers Undo
+- Ledger: big amounts show in full instead of being cut off
+- Ledger: a day's transactions keep their order after a Sync
+- Ledger: a Calendar day where you spent more than you earned shows a minus, in short readable amounts
+- Ledger: Change category no longer gives a Transfer a category or an Expense an income one
+- Ledger: with large text, Calendar days and rows grow instead of cutting off dates and amounts
+- Monthly: amounts are stacked so none are cut off, weeks run Sunday to Saturday, and a future year says so
+- Ledger: Filter finds Food paid from HDFC, not every Food and every HDFC one, and finds renamed categories
+
+### Developer
+
+- Glossary: Net (the Ledger's raw Income minus Expenses) and Ledger (the tab that lists every Transaction)
+- Ledger: a pure Ledger module builds the summary, day groups and Calendar cells off the main thread, with tests
+- Ledger: one shared Transaction row and transaction sheet in ui/components; the Ledger module builds their contents
+- A delete offering Undo lives in the UndoableDeletes singleton until final, so Undo never races a Sync
+- Ledger: a pure batch plan decides which selected rows a change fits; the DAO guards category and account writes
+- Ledger: filter matching, options and chips live in the Ledger module, with tests; old filter screens deleted
+- Ledger: Search's date groups, range label and match highlighting come from the Ledger module, with tests
+- Ledger: Add transaction takes an optional prefillDate for one Transaction; a shared DaySheet hosts the day
+- Ledger: Monthly's months and weeks come from the Ledger module, with tests; MonthlyViewModel merged away
+- Ledger: the month grid and capture chip text come from the Ledger module; hard-coded header colours removed
+- Ledger: spoken labels for rows, days, cells and Monthly come from the Ledger module, with tests
 
 ## [1.4.0] - 2026-10-09
 
@@ -220,7 +277,8 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - Room database, Vico charts and date-parsing tests
 
-[1.4.1]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.4.1
+[1.6.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.6.0
+[1.5.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.5.0
 [1.4.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.4.0
 [1.3.2]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.3.2
 [1.3.1]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.3.1

@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
+import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.RecurringRule
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -121,5 +122,75 @@ class RecurringRepositoryImplTest {
 
         assertNull(repository.getById(ruleId))
         assertEquals(1, db.expenseDao().getAllRecordsSnapshot().size)
+    }
+
+    @Test
+    fun `an Ask me first rule is never added automatically, only by Add`() = runBlocking {
+        val ruleId = repository.createRule(monthlyRule(nextDate = "2026-08-01", autoAdd = false))
+        val today = LocalDate.of(2026, 9, 1)
+
+        assertEquals(0, repository.materializeDue(today))
+        val added = repository.addDueOccurrence(ruleId, today)
+
+        val records = db.expenseDao().getAllRecordsSnapshot()
+        assertEquals(listOf(added), records.map { it.id })
+        assertEquals("2026-08-01", records.single().date)
+        assertEquals("2026-09-01", repository.getById(ruleId)!!.nextDate)
+    }
+
+    @Test
+    fun `Skip moves past the due occurrence without adding it`() = runBlocking {
+        val ruleId = repository.createRule(monthlyRule(nextDate = "2026-09-01", autoAdd = false))
+
+        repository.skipDueOccurrence(ruleId, LocalDate.of(2026, 9, 1))
+
+        assertTrue(db.expenseDao().getAllRecordsSnapshot().isEmpty())
+        assertEquals("2026-10-01", repository.getById(ruleId)!!.nextDate)
+    }
+
+    @Test
+    fun `Edit and add saves the user's version and advances the rule once`() = runBlocking {
+        val ruleId = repository.createRule(monthlyRule(nextDate = "2026-09-01", autoAdd = false))
+        val edited = ExpenseRecord(
+            date = "2026-09-02", type = "Expense", category = "Rent", description = "Rent + maintenance",
+            amount = 15400.0, accountId = accountId, remarks = "", isSynced = false, syncAction = "INSERT"
+        )
+
+        repository.saveEditedOccurrence(ruleId, LocalDate.of(2026, 9, 1), edited)
+        // A second save for the same occurrence (a double tap) adds the record but doesn't skip a month.
+        repository.saveEditedOccurrence(ruleId, LocalDate.of(2026, 9, 1), edited)
+
+        val saved = db.expenseDao().getAllRecordsSnapshot()
+        assertEquals(15400.0, saved.first().amount, 0.0)
+        assertTrue(saved.all { it.recurringRuleId == ruleId })
+        assertEquals("2026-10-01", repository.getById(ruleId)!!.nextDate)
+    }
+
+    @Test
+    fun `resuming a paused rule skips the paused months instead of back-filling them`() = runBlocking {
+        val ruleId = repository.createRule(monthlyRule(nextDate = "2026-06-01"))
+        repository.setPaused(ruleId, paused = true, today = LocalDate.of(2026, 5, 20))
+        assertEquals(0, repository.materializeDue(LocalDate.of(2026, 9, 10)))
+
+        repository.setPaused(ruleId, paused = false, today = LocalDate.of(2026, 9, 10))
+
+        val rule = repository.getById(ruleId)!!
+        assertEquals(false, rule.isPaused)
+        assertEquals("2026-10-01", rule.nextDate)
+        assertEquals(0, repository.materializeDue(LocalDate.of(2026, 9, 10)))
+    }
+
+    @Test
+    fun `Undo after delete brings the rule back under the same id`() = runBlocking {
+        val ruleId = repository.createRule(monthlyRule(nextDate = "2026-07-01"))
+        repository.materializeDue(LocalDate.of(2026, 7, 1))
+        val rule = repository.getById(ruleId)!!
+
+        repository.deleteRule(rule)
+        assertNull(repository.getById(ruleId))
+        repository.restoreRule(rule)
+
+        assertEquals(rule, repository.getById(ruleId))
+        assertTrue(db.expenseDao().getAllRecordsSnapshot().all { it.recurringRuleId == ruleId })
     }
 }

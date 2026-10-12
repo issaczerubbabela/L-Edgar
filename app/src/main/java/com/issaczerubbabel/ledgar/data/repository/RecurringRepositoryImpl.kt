@@ -8,7 +8,9 @@ import com.issaczerubbabel.ledgar.data.local.dao.RecurringRuleDao
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.RecurringRule
 import com.issaczerubbabel.ledgar.util.RecurrenceCalculator
+import com.issaczerubbabel.ledgar.util.RepeatSchedule
 import com.issaczerubbabel.ledgar.util.TransactionType
+import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -25,13 +27,48 @@ class RecurringRepositoryImpl @Inject constructor(
 
     override suspend fun deleteRule(rule: RecurringRule) = dao.delete(rule)
 
+    override fun observeRules(): Flow<List<RecurringRule>> = dao.observeAll()
+
+    override suspend fun updateRule(rule: RecurringRule) = dao.update(rule)
+
+    override suspend fun restoreRule(rule: RecurringRule) = dao.restore(rule)
+
+    override suspend fun setPaused(ruleId: Long, paused: Boolean, today: LocalDate) {
+        db.withTransaction {
+            val rule = dao.getById(ruleId) ?: return@withTransaction
+            dao.update(
+                if (paused) rule.copy(isPaused = true)
+                else rule.copy(isPaused = false, nextDate = RepeatSchedule.resumeDate(rule, today).toString())
+            )
+        }
+    }
+
+    override suspend fun addDueOccurrence(ruleId: Long, today: LocalDate): Long? =
+        db.withTransaction { createNextIfDue(ruleId, today, onlyAutomatic = false) }
+
+    override suspend fun skipDueOccurrence(ruleId: Long, today: LocalDate) {
+        db.withTransaction {
+            val rule = dao.getById(ruleId) ?: return@withTransaction
+            val due = RepeatSchedule.dueDates(rule, today).firstOrNull() ?: return@withTransaction
+            dao.update(advancedPast(rule, due))
+        }
+    }
+
+    override suspend fun saveEditedOccurrence(ruleId: Long, occurrenceDate: LocalDate, record: ExpenseRecord): Long =
+        db.withTransaction {
+            val id = expenseDao.insert(record.copy(recurringRuleId = ruleId))
+            val rule = dao.getById(ruleId)
+            if (rule != null && rule.nextDate == occurrenceDate.toString()) dao.update(advancedPast(rule, occurrenceDate))
+            id
+        }
+
     override suspend fun materializeDue(today: LocalDate): Int {
         var created = 0
         for (ruleId in dao.getDueAutoRuleIds(today.toString())) {
             var guard = 0
             while (guard < MAX_OCCURRENCES_PER_RUN) {
-                val didCreate = db.withTransaction { materializeNextIfDue(ruleId, today) }
-                if (!didCreate) break
+                val createdId = db.withTransaction { createNextIfDue(ruleId, today, onlyAutomatic = true) }
+                if (createdId == null) break
                 created++
                 guard++
             }
@@ -40,36 +77,26 @@ class RecurringRepositoryImpl @Inject constructor(
     }
 
     /**
-     * Creates the rule's next due occurrence, if there is one, and advances it past that date.
-     * Runs inside [db]'s transaction, which SQLite serializes against any other writer, so a second
-     * call racing this one always sees the advanced `nextDate` and can't recreate the same occurrence.
+     * Creates the rule's next due occurrence, if there is one, advances it past that date and returns
+     * the new Transaction's id. Runs inside [db]'s transaction, which SQLite serializes against any
+     * other writer, so a second call racing this one always sees the advanced `nextDate` and can't
+     * recreate the same occurrence. [onlyAutomatic] leaves Ask me first and paused rules alone.
      */
-    private suspend fun materializeNextIfDue(ruleId: Long, today: LocalDate): Boolean {
-        val rule = dao.getById(ruleId) ?: return false
-        if (rule.isPaused || !rule.autoAdd) return false
+    private suspend fun createNextIfDue(ruleId: Long, today: LocalDate, onlyAutomatic: Boolean): Long? {
+        val rule = dao.getById(ruleId) ?: return null
+        if (rule.isPaused || (onlyAutomatic && !rule.autoAdd)) return null
 
-        val nextDate = LocalDate.parse(rule.nextDate)
-        val occurrence = RecurrenceCalculator.dueOccurrences(
-            nextDate = nextDate,
-            frequency = rule.frequency,
-            interval = rule.interval,
-            anchorDay = rule.anchorDay,
-            today = today,
-            endDate = rule.endDate?.let(LocalDate::parse),
-            remainingCount = rule.remainingCount,
-            maxOccurrences = 1
-        ).firstOrNull() ?: return false
-
-        val record = buildRecord(rule, occurrence) ?: return false
-        expenseDao.insert(record)
-        dao.update(
-            rule.copy(
-                nextDate = RecurrenceCalculator.nextAfter(occurrence, rule.frequency, rule.interval, rule.anchorDay).toString(),
-                remainingCount = rule.remainingCount?.minus(1)
-            )
-        )
-        return true
+        val occurrence = RepeatSchedule.dueDates(rule, today).firstOrNull() ?: return null
+        val record = buildRecord(rule, occurrence) ?: return null
+        val id = expenseDao.insert(record)
+        dao.update(advancedPast(rule, occurrence))
+        return id
     }
+
+    private fun advancedPast(rule: RecurringRule, occurrence: LocalDate): RecurringRule = rule.copy(
+        nextDate = RecurrenceCalculator.nextAfter(occurrence, rule.frequency, rule.interval, rule.anchorDay).toString(),
+        remainingCount = rule.remainingCount?.minus(1)
+    )
 
     /** Null when the rule's required account(s) were deleted: skip rather than create a broken row. */
     private suspend fun buildRecord(rule: RecurringRule, date: LocalDate): ExpenseRecord? {

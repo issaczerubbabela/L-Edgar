@@ -1,9 +1,12 @@
 package com.issaczerubbabel.ledgar
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -21,6 +24,9 @@ class MainActivity : FragmentActivity() {
     @Inject
     lateinit var syncScheduler: SyncScheduler
 
+    /** Set when a launch asks for Add Transaction (the daily reminder's tap); cleared once opened. */
+    private var openAddTransaction by mutableStateOf(false)
+
     /** Opening the app pulls edits made in the Sheet since the last Sync (ADR-0003). */
     override fun onStart() {
         super.onStart()
@@ -29,6 +35,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) readLaunchRequest(intent)
         enableEdgeToEdge()
 
         WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -41,8 +48,24 @@ class MainActivity : FragmentActivity() {
             val currentTheme by viewModel.themeState.collectAsStateWithLifecycle()
 
             SheetSyncTheme(themeOption = currentTheme) {
-                AppNavigation()
+                AppNavigation(
+                    openAddTransaction = openAddTransaction,
+                    onAddTransactionOpened = { openAddTransaction = false }
+                )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        readLaunchRequest(intent)
+    }
+
+    private fun readLaunchRequest(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_OPEN_ADD_TRANSACTION, false) == true) openAddTransaction = true
+    }
+
+    companion object {
+        const val EXTRA_OPEN_ADD_TRANSACTION = "open_add_transaction"
     }
 }

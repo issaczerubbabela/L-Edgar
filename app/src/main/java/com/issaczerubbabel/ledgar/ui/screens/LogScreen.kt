@@ -1,5 +1,9 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.text.style.TextOverflow
+import com.issaczerubbabel.ledgar.viewmodel.RepeatEditMode
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -66,12 +70,11 @@ fun LogScreen(
     onEnterApp: () -> Unit = {},
     onBack: () -> Unit = {},
     onSaved: () -> Unit = {},
+    onOpenRepeatRule: (Long) -> Unit = {},
     vm: LogViewModel = hiltViewModel()
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var showDatePicker by remember { mutableStateOf(false) }
-    var showDeleteConfirm by remember { mutableStateOf(false) }
-    var showStopRepeatConfirm by remember { mutableStateOf(false) }
     var activeSheet by remember { mutableStateOf<LogSheet?>(null) }
     var savePulseSignal by remember { mutableIntStateOf(0) }
     val accounts by vm.accounts.collectAsStateWithLifecycle()
@@ -80,7 +83,7 @@ fun LogScreen(
     val bucketContext by vm.bucketContext.collectAsStateWithLifecycle()
 
     BackHandler(
-        enabled = !showDatePicker && !showDeleteConfirm && !showStopRepeatConfirm && activeSheet == null,
+        enabled = !showDatePicker && activeSheet == null,
         onBack = onBack
     )
 
@@ -91,7 +94,7 @@ fun LogScreen(
     LaunchedEffect(vm.saveSuccess) {
         if (vm.saveSuccess) {
             savePulseSignal++
-            if (vm.isEditMode) {
+            if (vm.closesAfterSave) {
                 onSaved()
             } else {
                 val savedDate = vm.lastSavedDate
@@ -121,13 +124,18 @@ fun LogScreen(
                 .padding(scaffoldPadding)
         ) {
             LogTopBar(
+                title = when (vm.repeatEditMode) {
+                    RepeatEditMode.Rule -> "Edit Repeat rule"
+                    RepeatEditMode.Occurrence -> "Add repeating transaction"
+                    RepeatEditMode.None -> null
+                },
                 isEditMode = vm.isEditMode,
                 showEnterAppButton = showEnterAppButton,
                 syncStatus = vm.syncStatus,
                 onRetrySync = vm::retrySync,
                 onBack = onBack,
                 onEnterApp = onEnterApp,
-                onDeleteClick = { showDeleteConfirm = true }
+                onDeleteClick = vm::deleteCurrent
             )
 
             val transferContext = if (vm.selectedType == TransactionType.TRANSFER) {
@@ -180,11 +188,17 @@ fun LogScreen(
             val hasNote = vm.description.isNotBlank() || vm.remarks.isNotBlank()
             val activeRule = vm.editingRule
             val repeatLabel = when {
-                activeRule != null -> "Repeats ${RecurrenceCalculator.label(activeRule.frequency, activeRule.interval)}"
+                activeRule != null -> "Repeats ${RecurrenceCalculator.label(activeRule.frequency, activeRule.interval).lowercase()} · Edit rule"
                 vm.repeatFrequency != null -> RecurrenceCalculator.label(vm.repeatFrequency!!, vm.repeatInterval)
                 else -> "Repeat"
             }
-            val showRepeatChip = !vm.isEditMode || activeRule != null
+            // A new Transaction can start repeating; an edited one only links to the rule it came from.
+            // "Edit & add" saves one occurrence, so it has no Repeat chip of its own.
+            val showRepeatChip = !isAdjustment && when (vm.repeatEditMode) {
+                RepeatEditMode.Rule -> true
+                RepeatEditMode.Occurrence -> false
+                RepeatEditMode.None -> !vm.isEditMode || activeRule != null
+            }
 
             ChipRow(
                 primaryChips = if (isTransfer) {
@@ -216,7 +230,7 @@ fun LogScreen(
                 trailingChips = listOfNotNull(
                     if (showRepeatChip) {
                         ChipSpec(repeatLabel, activeRule != null || vm.repeatFrequency != null) {
-                            if (activeRule != null) showStopRepeatConfirm = true else activeSheet = LogSheet.Repeat
+                            if (activeRule != null) onOpenRepeatRule(activeRule.id) else activeSheet = LogSheet.Repeat
                         }
                     } else null,
                     ChipSpec(if (hasNote) "Note added" else "+ Note", hasNote) {
@@ -282,7 +296,8 @@ fun LogScreen(
 
         LogSheet.Repeat -> OptionPickerSheet(
             title = "Repeat",
-            options = repeatPickerOptions,
+            // A Repeat rule always repeats: it is paused or deleted on its own screen, not set to Never.
+            options = if (vm.repeatEditMode == RepeatEditMode.Rule) repeatPickerOptions.drop(1) else repeatPickerOptions,
             selectedKey = repeatKeyOf(vm.repeatFrequency, vm.repeatInterval),
             onSelect = { key ->
                 val (frequency, interval) = parseRepeatKey(key)
@@ -293,48 +308,6 @@ fun LogScreen(
         )
 
         null -> Unit
-    }
-
-    if (showStopRepeatConfirm) {
-        AlertDialog(
-            onDismissRequest = { showStopRepeatConfirm = false },
-            title = { Text("Stop repeating?") },
-            text = { Text("Transactions already added won't be removed. No new ones will be created from this rule.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showStopRepeatConfirm = false
-                    vm.stopRepeating()
-                }) {
-                    Text("Stop repeating")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showStopRepeatConfirm = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
-    if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete Transaction?") },
-            text = { Text("This transaction will be removed locally now and deleted from Google Sheets on next sync.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showDeleteConfirm = false
-                    vm.deleteCurrent()
-                }) {
-                    Text("Delete")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
     }
 
     if (showDatePicker) {
@@ -351,6 +324,7 @@ private fun List<AccountRecord>.nameOf(id: Long?): String? = firstOrNull { it.id
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LogTopBar(
+    title: String?,
     isEditMode: Boolean,
     showEnterAppButton: Boolean,
     syncStatus: SyncStatus,
@@ -367,6 +341,15 @@ private fun LogTopBar(
     ) {
         IconButton(onClick = onBack) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+        }
+        if (title != null) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { heading() }
+            )
         }
         Spacer(Modifier.weight(1f))
         SyncStatusIndicator(status = syncStatus, onRetry = onRetrySync)

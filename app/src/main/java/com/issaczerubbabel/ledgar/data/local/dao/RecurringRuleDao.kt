@@ -3,6 +3,7 @@ package com.issaczerubbabel.ledgar.data.local.dao
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.issaczerubbabel.ledgar.data.local.entity.RecurringRule
@@ -13,6 +14,10 @@ interface RecurringRuleDao {
 
     @Insert
     suspend fun insert(rule: RecurringRule): Long
+
+    /** Puts back a rule deleted moments ago (Undo), under its old id so its Transactions point at it again. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun restore(rule: RecurringRule)
 
     @Update
     suspend fun update(rule: RecurringRule)

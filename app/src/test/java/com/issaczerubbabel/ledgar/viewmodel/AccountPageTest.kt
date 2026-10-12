@@ -6,6 +6,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountBook
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -57,23 +58,23 @@ class AccountPageTest {
     }
 
     @Test
-    fun rowsAreNewestFirstWithSignedAmountsAndTheBalanceAfter() {
+    fun rowsAreNewestFirstInTheSharedRowWithTheDateAndBalanceAfter() {
         val rows = page(october).months.single().rows
         assertEquals(StatementRowKind.ADJUSTMENT, rows.first().kind)
-        assertEquals("Balance adjustment", rows.first().title)
-        assertEquals("+₹340.00", rows.first().amount)
-        assertEquals("Bal ₹84,250.00", rows.first().balanceAfter)
-        val rent = rows.single { it.title == "Rent" }
-        assertEquals("−₹22,000.00", rent.amount)
-        assertEquals("2 Oct · October rent", rent.subtitle)
-        assertEquals("Bal ₹97,110.00", rent.balanceAfter)
+        assertEquals("Balance adjustment", rows.first().row.category)
+        assertEquals("+₹340", rows.first().row.amount)
+        assertTrue(rows.first().trailingLine.endsWith(" · Bal ₹84,250"))
+        val rent = rows.single { it.row.category == "Rent" }
+        assertEquals("October rent", rent.row.description)
+        assertEquals("₹22,000", rent.row.amount)
+        assertEquals("2 Oct · Bal ₹97,110", rent.trailingLine)
     }
 
     @Test
-    fun transfersNameTheOtherAccount() {
+    fun transfersReadFromAccountToAccount() {
         val rows = page(october).months.single().rows
-        assertEquals("+₹40,000.00", rows.single { it.title == "← SBI Salary" }.amount)
-        assertEquals("−₹12,500.00", rows.single { it.title == "→ HDFC Millennia" }.amount)
+        assertEquals(StatementRowKind.TRANSFER_IN, rows.single { it.row.accountLabel == "SBI Salary → HDFC Savings" }.kind)
+        assertEquals(StatementRowKind.TRANSFER_OUT, rows.single { it.row.accountLabel == "HDFC Savings → HDFC Millennia" }.kind)
     }
 
     @Test
@@ -82,8 +83,7 @@ class AccountPageTest {
         val september = state.months.last()
         val fuel = september.rows.single()
         assertFalse(fuel.counts)
-        assertEquals("30 Sep · Before the As-of date, not counted", fuel.subtitle)
-        assertEquals("", fuel.balanceAfter)
+        assertEquals("30 Sep · Not counted", fuel.trailingLine)
         assertEquals("₹84,250.00", state.balanceToday)
     }
 

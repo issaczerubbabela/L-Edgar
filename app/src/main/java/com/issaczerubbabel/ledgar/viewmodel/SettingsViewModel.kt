@@ -11,10 +11,13 @@ import androidx.work.WorkInfo
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.preferences.AppLockAuthMode
 import com.issaczerubbabel.ledgar.data.preferences.ChartPalette
+import com.issaczerubbabel.ledgar.data.preferences.DEFAULT_REMINDER_MINUTE_OF_DAY
+import com.issaczerubbabel.ledgar.data.preferences.ReminderPreferences
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
 import com.issaczerubbabel.ledgar.data.remote.ApiService
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
 import com.issaczerubbabel.ledgar.data.repository.SyncConflict
+import com.issaczerubbabel.ledgar.reminder.DailyReminderScheduler
 import com.issaczerubbabel.ledgar.sync.BackupWorker
 import com.issaczerubbabel.ledgar.sync.SyncScheduler
 import com.issaczerubbabel.ledgar.sync.SyncStatus
@@ -67,7 +70,9 @@ class SettingsViewModel @Inject constructor(
     private val themeRepository: ThemePreferenceRepository,
     private val apiService: ApiService,
     private val syncScheduler: SyncScheduler,
-    private val syncState: SyncStateRepository
+    private val syncState: SyncStateRepository,
+    private val reminderPreferences: ReminderPreferences,
+    private val reminderScheduler: DailyReminderScheduler
 ) : ViewModel() {
 
     init {
@@ -98,6 +103,31 @@ class SettingsViewModel @Inject constructor(
 
     val chartPalette: StateFlow<ChartPalette> = themeRepository.chartPalette
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChartPalette.STANDARD)
+
+    val reminderEnabled: StateFlow<Boolean> = reminderPreferences.reminderEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val reminderMinuteOfDay: StateFlow<Int> = reminderPreferences.reminderMinuteOfDay
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DEFAULT_REMINDER_MINUTE_OF_DAY)
+
+    /**
+     * Sets the daily-reminder preference and (re)arms or cancels its alarm. The permission request
+     * and the denied-permission snackbar live in the screen, same as Auto-capture's notification
+     * access: this is only called once the caller already knows it's allowed to turn the switch on.
+     */
+    fun setReminderEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            reminderPreferences.setReminderEnabled(enabled)
+            if (enabled) reminderScheduler.reschedule() else reminderScheduler.cancel()
+        }
+    }
+
+    fun setReminderMinuteOfDay(minuteOfDay: Int) {
+        viewModelScope.launch {
+            reminderPreferences.setReminderMinuteOfDay(minuteOfDay)
+            if (reminderEnabled.value) reminderScheduler.reschedule()
+        }
+    }
 
     fun updateTheme(option: AppThemeOption) {
         viewModelScope.launch { themeRepository.updateTheme(option) }

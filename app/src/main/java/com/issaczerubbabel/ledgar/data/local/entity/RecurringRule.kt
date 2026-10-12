@@ -6,9 +6,9 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * A template for a Transaction that recreates itself on a schedule (rent, SIPs, salary). Every rule
- * here is automatic: it always creates its occurrence, with no "ask me first" approval step or
- * management screen yet.
+ * A Repeat rule: a template for a Transaction that recreates itself on a schedule (rent, SIPs,
+ * salary). With [autoAdd] it adds each Repeating transaction on its date; otherwise ("Ask me first")
+ * the occurrence waits on More > Repeating transactions until the user adds or skips it.
  *
  * Deleting the account a rule points at nulls that column (same as [ExpenseRecord]); a rule with a
  * missing required account is skipped by materialization until it is fixed, rather than creating a
