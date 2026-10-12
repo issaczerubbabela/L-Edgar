@@ -17,7 +17,7 @@ data class ChangelogRelease(
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
         version = "v1.5.0",
-        date = "2026-10-09",
+        date = "2026-10-12",
         changed = listOf(
             "Ledger (was Trans.): the month is the title; tap it for a 12-month grid. Bookmarks moves to the ⋮ menu",
             "Ledger: theme colours throughout, plain weekday headers, and day headers without the repeated month",
