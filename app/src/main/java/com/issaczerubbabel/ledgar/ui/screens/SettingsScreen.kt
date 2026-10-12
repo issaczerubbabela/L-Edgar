@@ -110,7 +110,9 @@ fun SettingsScreen(
             coroutineScope.launch {
                 val result = snackbarHostState.showSnackbar(
                     message = "Notifications are off for L.Edgar",
-                    actionLabel = "Open settings"
+                    actionLabel = "Open settings",
+                    // With an action it would otherwise stay until tapped, even after notifications are allowed.
+                    duration = SnackbarDuration.Long
                 )
                 if (result == SnackbarResult.ActionPerformed) openNotificationSettings(context)
             }
@@ -120,6 +122,7 @@ fun SettingsScreen(
         if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationsAllowed) {
             reminderPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
+            if (enabled) snackbarHostState.currentSnackbarData?.dismiss()
             vm.setReminderEnabled(enabled)
         }
     }
