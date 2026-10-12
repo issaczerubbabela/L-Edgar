@@ -19,6 +19,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRule
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRuleOrigin
+import com.issaczerubbabel.ledgar.data.preferences.ReminderPreferences
 import com.issaczerubbabel.ledgar.data.repository.CaptureRepositoryImpl
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepositoryImpl
 import kotlinx.coroutines.runBlocking
@@ -67,7 +68,7 @@ class CaptureNotificationInstrumentedTest {
             CategorizationPipeline(KeywordDictionary(emptyMap())) { db.merchantRuleDao().getByMerchant(it) }, settings, db.unparsedAlertDao()
         )
         val repository = CaptureRepositoryImpl(db, db.captureDao(), db.merchantRuleDao(), db.accountAliasDao(), db.expenseDao(), db.unparsedAlertDao())
-        handler = CaptureActionHandler(db.captureDao(), repository)
+        handler = CaptureActionHandler(db.captureDao(), repository, ReminderPreferences(context))
         notifier = CaptureNotifier(context, db.captureDao(), db.accountDao())
     }
 
