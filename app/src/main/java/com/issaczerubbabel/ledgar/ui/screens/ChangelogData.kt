@@ -16,6 +16,13 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
+        version = "v1.6.0",
+        date = "2026-10-12",
+        developer = listOf(
+            "CONTEXT.md defines Repeat rule and Repeating transaction, and Merchant rules remember a renamed description"
+        )
+    ),
+    ChangelogRelease(
         version = "v1.5.0",
         date = "2026-10-12",
         changed = listOf(
