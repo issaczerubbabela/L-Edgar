@@ -4,9 +4,13 @@ import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.util.formatRupeesExact
 
-/** The name shown for a capture: its merchant or payee, or a plain fallback when it has none. */
-fun CapturedTransaction.displayTitle(): String =
-    merchantRaw?.trim()?.takeIf { it.isNotEmpty() }
+/**
+ * The name shown for a capture: what the user renamed its merchant to ([rename], from the Merchant
+ * rule), else its merchant or payee as the bank wrote it, else a plain fallback.
+ */
+fun CapturedTransaction.displayTitle(rename: String? = null): String =
+    rename?.trim()?.takeIf { it.isNotEmpty() }
+        ?: merchantRaw?.trim()?.takeIf { it.isNotEmpty() }
         ?: if (suggestedType == TransactionType.INCOME) "Money received" else "Payment"
 
 data class CaptureNotificationContent(
@@ -18,10 +22,10 @@ data class CaptureNotificationContent(
 
 object CaptureNotificationText {
 
-    fun build(capture: CapturedTransaction, category: String, accountName: String): CaptureNotificationContent {
+    fun build(capture: CapturedTransaction, title: String, category: String, accountName: String): CaptureNotificationContent {
         val sign = if (capture.suggestedType == TransactionType.INCOME) "+" else "−"
         return CaptureNotificationContent(
-            title = "${capture.displayTitle()}  $sign${formatRupeesExact(capture.amount)}",
+            title = "$title  $sign${formatRupeesExact(capture.amount)}",
             text = "$category · $accountName. Confirm it, or open the app to change it.",
             publicTitle = "A captured transaction is waiting"
         )

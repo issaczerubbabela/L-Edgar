@@ -20,10 +20,12 @@ import com.issaczerubbabel.ledgar.sync.PulledRow
 import com.issaczerubbabel.ledgar.sync.SyncUrlNotConfiguredException
 import com.issaczerubbabel.ledgar.sync.TransactionSyncStore
 import com.issaczerubbabel.ledgar.sync.TransactionSyncer
+import com.issaczerubbabel.ledgar.util.DescriptionUse
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
@@ -110,6 +112,9 @@ class ExpenseRepositoryImpl @Inject constructor(
     override suspend fun delete(record: ExpenseRecord) = dao.markTransactionDeletedById(record.id)
 
     override suspend fun deleteAll() = dao.deleteAll()
+
+    override suspend fun descriptionUses(type: String): List<DescriptionUse> =
+        dao.recentForSuggestions(type, since = LocalDate.now().minusYears(1).toString())
 
     override suspend fun isDuplicate(date: String, type: String, category: String, amount: Double): Boolean =
         dao.findDuplicate(date, type, category, amount) != null

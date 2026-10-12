@@ -15,8 +15,9 @@ object MerchantRuleOrigin {
 }
 
 /**
- * A saved mapping from a normalized merchant name to a Category, used to categorize future
- * Captured transactions from the same merchant. See "Merchant rule" in CONTEXT.md.
+ * A saved mapping from a normalized merchant name to a Category, and to the description the user
+ * last renamed it to, used for future Captured transactions from the same merchant. See "Merchant
+ * rule" in CONTEXT.md.
  */
 @Entity(tableName = "merchant_rules")
 data class MerchantRule(
@@ -29,5 +30,7 @@ data class MerchantRule(
     val hitCount: Int = 0,
     /** CANDIDATE: consecutive same-category confirmations. LEARNED: consecutive overrides. */
     val streak: Int = 0,
-    val updatedAt: Long
+    val updatedAt: Long,
+    /** What the user renamed this merchant to when confirming, shown instead of the bank's text. */
+    val description: String? = null
 )

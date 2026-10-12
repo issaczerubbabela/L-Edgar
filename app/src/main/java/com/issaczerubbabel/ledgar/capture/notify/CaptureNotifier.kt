@@ -10,6 +10,7 @@ import androidx.core.app.NotificationManagerCompat
 import com.issaczerubbabel.ledgar.R
 import com.issaczerubbabel.ledgar.data.local.dao.AccountDao
 import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
+import com.issaczerubbabel.ledgar.data.repository.CaptureRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,7 +24,8 @@ import javax.inject.Singleton
 class CaptureNotifier @Inject constructor(
     @ApplicationContext private val context: Context,
     private val captureDao: CaptureDao,
-    private val accountDao: AccountDao
+    private val accountDao: AccountDao,
+    private val captureRepository: CaptureRepository
 ) {
     private val manager = NotificationManagerCompat.from(context)
 
@@ -41,7 +43,7 @@ class CaptureNotifier @Inject constructor(
                 .build()
         )
 
-        val content = CaptureNotificationText.build(capture, category, account.accountName)
+        val content = CaptureNotificationText.build(capture, captureRepository.titleFor(capture), category, account.accountName)
         val publicVersion = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_qs_log_expense)
             .setContentTitle(content.publicTitle)

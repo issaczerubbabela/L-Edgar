@@ -2,6 +2,7 @@ package com.issaczerubbabel.ledgar.data.local.dao
 
 import androidx.room.*
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.util.DescriptionUse
 import kotlinx.coroutines.flow.Flow
 
 /** Identifies one version of a Transaction that is waiting to Sync. */
@@ -294,6 +295,15 @@ interface ExpenseDao {
         LIMIT 1
     """)
     suspend fun findDuplicate(date: String, type: String, category: String, amount: Double): ExpenseRecord?
+
+    /** Past Descriptions of [type] since [since] (yyyy-MM-dd), newest first, for DescriptionSuggestions. */
+    @Query("""
+        SELECT description, category, accountId, date, id FROM expense_records
+        WHERE type = :type AND date >= :since AND syncAction != 'DELETE' AND TRIM(description) != ''
+        ORDER BY date DESC, id DESC
+        LIMIT :limit
+    """)
+    suspend fun recentForSuggestions(type: String, since: String, limit: Int = 500): List<DescriptionUse>
 
     /**
      * Fetch all records between two dates (inclusive).

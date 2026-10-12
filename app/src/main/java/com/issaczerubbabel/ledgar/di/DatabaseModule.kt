@@ -178,6 +178,13 @@ object DatabaseModule {
         }
     }
 
+    /** A Merchant rule remembers the description the user renamed that merchant to. */
+    internal val MIGRATION_25_26 = object : Migration(25, 26) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE merchant_rules ADD COLUMN description TEXT")
+        }
+    }
+
     private fun columnsOf(db: SupportSQLiteDatabase, table: String): Set<String> =
         db.query("PRAGMA table_info($table)").use { cursor ->
             val nameColumn = cursor.getColumnIndexOrThrow("name")
@@ -325,6 +332,7 @@ object DatabaseModule {
             .addMigrations(MIGRATION_22_23)
             .addMigrations(MIGRATION_23_24)
             .addMigrations(MIGRATION_24_25)
+            .addMigrations(MIGRATION_25_26)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .addCallback(callback)
             .build()

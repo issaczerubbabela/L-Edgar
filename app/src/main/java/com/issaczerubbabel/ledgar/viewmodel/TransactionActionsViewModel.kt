@@ -6,8 +6,8 @@ import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
-import com.issaczerubbabel.ledgar.data.repository.UndoableDelete
-import com.issaczerubbabel.ledgar.data.repository.UndoableDeletes
+import com.issaczerubbabel.ledgar.data.repository.UndoableAction
+import com.issaczerubbabel.ledgar.data.repository.UndoableActions
 import com.issaczerubbabel.ledgar.ledger.Ledger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -21,7 +21,7 @@ import javax.inject.Inject
 class TransactionActionsViewModel @Inject constructor(
     private val repository: ExpenseRepository,
     accountRepository: AccountRepository,
-    private val undoableDeletes: UndoableDeletes
+    private val undoableActions: UndoableActions
 ) : ViewModel() {
 
     /** For the Account names a Transaction's rows and sheet show. */
@@ -34,15 +34,15 @@ class TransactionActionsViewModel @Inject constructor(
     }
 
     /** The delete the Undo snackbar is offering, if any. */
-    val pendingDelete: StateFlow<UndoableDelete?> = undoableDeletes.pending
+    val pendingDelete: StateFlow<UndoableAction?> = undoableActions.pending
 
-    /** Hides [transaction] everywhere at once and offers Undo; see [UndoableDeletes]. */
+    /** Hides [transaction] everywhere at once and offers Undo; see [UndoableActions]. */
     fun delete(transaction: ExpenseRecord) =
-        undoableDeletes.delete(transaction, Ledger.deletedMessage(transaction, accounts.value))
+        undoableActions.delete(transaction, Ledger.deletedMessage(transaction, accounts.value))
 
-    fun undoDelete(delete: UndoableDelete) = undoableDeletes.undo(delete)
+    fun undoDelete(delete: UndoableAction) = undoableActions.undo(delete)
 
-    fun commitPendingDelete() = undoableDeletes.commit()
+    fun commitPendingDelete() = undoableActions.commit()
 
     override fun onCleared() {
         commitPendingDelete()

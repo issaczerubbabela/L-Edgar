@@ -18,7 +18,7 @@ import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
 import com.issaczerubbabel.ledgar.data.repository.RecurringRepository
-import com.issaczerubbabel.ledgar.data.repository.UndoableDeletes
+import com.issaczerubbabel.ledgar.data.repository.UndoableActions
 import com.issaczerubbabel.ledgar.ledger.Ledger
 import com.issaczerubbabel.ledgar.sync.SyncScheduler
 import com.issaczerubbabel.ledgar.sync.SyncStatus
@@ -47,7 +47,7 @@ class LogViewModel @Inject constructor(
     private val reminderPreferences: ReminderPreferences,
     bucketPreviewSource: BucketPreviewSource,
     private val savedStateHandle: SavedStateHandle,
-    private val undoableDeletes: UndoableDeletes
+    private val undoableActions: UndoableActions
 ) : ViewModel() {
 
     val accounts: StateFlow<List<AccountRecord>> = accountRepository
@@ -374,7 +374,7 @@ class LogViewModel @Inject constructor(
             }
 
             // The screen closes; the one underneath offers Undo.
-            undoableDeletes.delete(current, Ledger.deletedMessage(current, accounts.value))
+            undoableActions.delete(current, Ledger.deletedMessage(current, accounts.value))
 
             saveSuccess = true
         }

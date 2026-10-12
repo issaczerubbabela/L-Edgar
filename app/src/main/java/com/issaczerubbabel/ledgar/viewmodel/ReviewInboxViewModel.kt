@@ -14,16 +14,21 @@ import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.CaptureEdits
 import com.issaczerubbabel.ledgar.data.repository.CaptureRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
+import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
+import com.issaczerubbabel.ledgar.data.repository.UndoableAction
+import com.issaczerubbabel.ledgar.data.repository.UndoableActions
+import com.issaczerubbabel.ledgar.util.DescriptionUse
 import com.issaczerubbabel.ledgar.util.TransactionType
+import com.issaczerubbabel.ledgar.util.formatRupeesExact
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -35,6 +40,12 @@ data class CaptureRowUi(
     val accountId: Long?,
     val band: ConfidenceBand,
     val why: String?,
+    /** What Confirm saves as the Description: the user's edit, else the merchant's rename, else the bank's text. */
+    val title: String,
+    /** The title as the bank wrote it, before any rename. */
+    val bankTitle: String,
+    /** What the user has typed in the title field, if they've edited it. */
+    val descriptionDraft: String? = null,
     val categoryPickedByUser: Boolean = false,
     val alwaysUse: Boolean = false
 ) {
@@ -46,27 +57,38 @@ data class CaptureRowUi(
 
     /** Safe to confirm in bulk: a High-confidence guess whose Category and Account are both known. */
     val isBulkCandidate: Boolean get() = band == ConfidenceBand.HIGH && canConfirm
-
-    val title: String get() = capture.displayTitle()
 }
 
-private data class RowEdit(val category: String? = null, val accountId: Long? = null, val alwaysUse: Boolean = false)
+private data class RowEdit(
+    val category: String? = null,
+    val accountId: Long? = null,
+    val alwaysUse: Boolean = false,
+    val description: String? = null
+)
 
 @HiltViewModel
 class ReviewInboxViewModel @Inject constructor(
     private val captureRepository: CaptureRepository,
     private val notifier: CaptureNotifier,
     private val reminderPreferences: ReminderPreferences,
+    private val undoableActions: UndoableActions,
+    expenseRepository: ExpenseRepository,
     accountRepository: AccountRepository,
     dropdownOptionRepository: DropdownOptionRepository
 ) : ViewModel() {
 
+    // Kept until a decision is final, so Undo brings a card back exactly as the user left it.
     private val edits = MutableStateFlow<Map<Long, RowEdit>>(emptyMap())
     private val gson = Gson()
     private val traceType = object : TypeToken<Map<String, String?>>() {}.type
 
-    val rows: StateFlow<List<CaptureRowUi>> = combine(captureRepository.observePending(), edits) { pending, edited ->
-        pending.map { capture ->
+    val rows: StateFlow<List<CaptureRowUi>> = combine(
+        captureRepository.observePending(),
+        captureRepository.observeRenames(),
+        edits,
+        undoableActions.hiddenCaptureIds
+    ) { pending, renames, edited, hidden ->
+        pending.filterNot { it.id in hidden }.map { capture ->
             val edit = edited[capture.id]
             val category = edit?.category ?: capture.suggestedCategory
             val accountId = edit?.accountId ?: capture.accountId
@@ -78,11 +100,18 @@ class ReviewInboxViewModel @Inject constructor(
                 // Picking a Category yourself is a decision, so it no longer needs a second look.
                 band = if (edit?.category != null) ConfidenceBand.HIGH else ConfidenceBand.of(capture.confidence, capture.suggestedCategory != null),
                 why = parseWhy(capture.traceJson),
+                title = edit?.description?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: capture.displayTitle(capture.merchantNorm?.let { renames[it] }),
+                bankTitle = capture.displayTitle(),
+                descriptionDraft = edit?.description,
                 categoryPickedByUser = edit?.category != null,
                 alwaysUse = edit?.alwaysUse ?: false
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** The Confirm or Dismiss the Undo snackbar is offering, if any. */
+    val pending: StateFlow<UndoableAction?> = undoableActions.pending
 
     val accounts: StateFlow<List<AccountRecord>> = accountRepository.getAllVisibleAccounts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -97,33 +126,68 @@ class ReviewInboxViewModel @Inject constructor(
         .map { options -> options.map { it.name } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun setCategory(captureId: Long, category: String) {
-        edits.update { it + (captureId to (it[captureId] ?: RowEdit()).copy(category = category)) }
-    }
+    /** Past Descriptions by type, for the suggestions under a card's title field. */
+    val descriptionUses: StateFlow<Map<String, List<DescriptionUse>>> = flow {
+        emit(
+            listOf(TransactionType.EXPENSE, TransactionType.INCOME)
+                .associateWith { runCatching { expenseRepository.descriptionUses(it) }.getOrDefault(emptyList()) }
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
-    fun setAlwaysUse(captureId: Long, alwaysUse: Boolean) {
-        edits.update { it + (captureId to (it[captureId] ?: RowEdit()).copy(alwaysUse = alwaysUse)) }
-    }
+    fun setCategory(captureId: Long, category: String) = edit(captureId) { it.copy(category = category) }
 
-    fun setAccount(captureId: Long, accountId: Long) {
-        edits.update { it + (captureId to (it[captureId] ?: RowEdit()).copy(accountId = accountId)) }
-    }
+    fun setAlwaysUse(captureId: Long, alwaysUse: Boolean) = edit(captureId) { it.copy(alwaysUse = alwaysUse) }
+
+    fun setAccount(captureId: Long, accountId: Long) = edit(captureId) { it.copy(accountId = accountId) }
+
+    /** What the user typed as the title; blank goes back to the merchant's usual name. */
+    fun setDescription(captureId: Long, description: String) = edit(captureId) { it.copy(description = description) }
 
     fun confirm(row: CaptureRowUi) {
-        viewModelScope.launch { confirmNow(row) }
+        if (!row.canConfirm) return
+        undoableActions.perform(
+            UndoableAction(
+                message = "Confirmed ${row.title} · ${formatRupeesExact(row.capture.amount)} as ${row.category}",
+                hiddenCaptureIds = setOf(row.capture.id)
+            ) { confirmNow(row) }
+        )
     }
 
+    /** Review all: one decision, so one Undo puts every card back. */
     fun confirmAll(rows: List<CaptureRowUi>) {
-        viewModelScope.launch { rows.forEach { confirmNow(it) } }
+        val chosen = rows.filter { it.canConfirm }
+        if (chosen.size <= 1) return chosen.forEach { confirm(it) }
+        undoableActions.perform(
+            UndoableAction(
+                message = "Confirmed ${chosen.size} · ${formatRupeesExact(chosen.sumOf { it.capture.amount })}",
+                hiddenCaptureIds = chosen.map { it.capture.id }.toSet()
+            ) { chosen.forEach { confirmNow(it) } }
+        )
     }
 
-    fun dismiss(captureId: Long) {
-        viewModelScope.launch {
-            captureRepository.dismiss(captureId)
-            notifier.cancel(captureId)
-        }
+    fun dismiss(row: CaptureRowUi) {
+        val captureId = row.capture.id
+        undoableActions.perform(
+            UndoableAction(
+                message = "Dismissed ${row.title} · ${formatRupeesExact(row.capture.amount)}",
+                hiddenCaptureIds = setOf(captureId)
+            ) {
+                captureRepository.dismiss(captureId)
+                notifier.cancel(captureId)
+                edits.update { it - captureId }
+            }
+        )
     }
 
+    fun undo(action: UndoableAction) = undoableActions.undo(action)
+
+    fun commitPending() = undoableActions.commit()
+
+    private fun edit(captureId: Long, change: (RowEdit) -> RowEdit) {
+        edits.update { it + (captureId to change(it[captureId] ?: RowEdit())) }
+    }
+
+    /** Runs once the Undo window is over, on the app's scope: this screen may be gone by then. */
     private suspend fun confirmNow(row: CaptureRowUi) {
         val category = row.category ?: return
         val accountId = row.accountId ?: return
