@@ -9,6 +9,7 @@ import com.issaczerubbabel.ledgar.capture.notify.CaptureNotifier
 import com.issaczerubbabel.ledgar.capture.notify.displayTitle
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
+import com.issaczerubbabel.ledgar.data.preferences.ReminderPreferences
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.CaptureEdits
 import com.issaczerubbabel.ledgar.data.repository.CaptureRepository
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import javax.inject.Inject
 
 /** One pending capture with whatever the user has already changed on it. */
@@ -54,6 +56,7 @@ private data class RowEdit(val category: String? = null, val accountId: Long? = 
 class ReviewInboxViewModel @Inject constructor(
     private val captureRepository: CaptureRepository,
     private val notifier: CaptureNotifier,
+    private val reminderPreferences: ReminderPreferences,
     accountRepository: AccountRepository,
     dropdownOptionRepository: DropdownOptionRepository
 ) : ViewModel() {
@@ -124,13 +127,15 @@ class ReviewInboxViewModel @Inject constructor(
     private suspend fun confirmNow(row: CaptureRowUi) {
         val category = row.category ?: return
         val accountId = row.accountId ?: return
-        captureRepository.confirm(
+        val expenseId = captureRepository.confirm(
             row.capture.id,
             CaptureEdits(
                 type = row.type, category = category, accountId = accountId,
                 description = row.title, alwaysUse = row.alwaysUse
             )
         )
+        // A confirmed capture is something logged today, so the evening reminder stays quiet.
+        if (expenseId != null) reminderPreferences.markLoggedToday(LocalDate.now().toEpochDay())
         notifier.cancel(row.capture.id)
         edits.update { it - row.capture.id }
     }
