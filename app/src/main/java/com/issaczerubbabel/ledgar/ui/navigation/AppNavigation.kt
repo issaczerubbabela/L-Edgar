@@ -42,10 +42,10 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Tune
 import com.issaczerubbabel.ledgar.ui.screens.BucketDetailScreen
 import com.issaczerubbabel.ledgar.ui.screens.BudgetHomeScreen
 import com.issaczerubbabel.ledgar.ui.screens.HistoryScreen
+import com.issaczerubbabel.ledgar.viewmodel.HistoryViewModel
 import com.issaczerubbabel.ledgar.ui.screens.TripExpenseScreen
 import com.issaczerubbabel.ledgar.ui.screens.TripReviewScreen
 import com.issaczerubbabel.ledgar.ui.screens.TripScreen
@@ -59,8 +59,6 @@ import com.issaczerubbabel.ledgar.ui.screens.AccountsScreen
 import com.issaczerubbabel.ledgar.ui.screens.AccountFormScreen
 import com.issaczerubbabel.ledgar.ui.screens.BookmarksScreen
 import com.issaczerubbabel.ledgar.ui.screens.DropdownManagementScreen
-import com.issaczerubbabel.ledgar.ui.screens.FilterSelectionScreen
-import com.issaczerubbabel.ledgar.ui.screens.FilteredTransactionsScreen
 import com.issaczerubbabel.ledgar.ui.screens.NetWorthScreen
 import com.issaczerubbabel.ledgar.ui.screens.SearchScreen
 import com.issaczerubbabel.ledgar.ui.screens.MoreScreen
@@ -80,18 +78,12 @@ import kotlinx.coroutines.launch
 sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
     object Log : Screen(
         "log?transactionId={transactionId}&copyTransactionId={copyTransactionId}&copyDateMode={copyDateMode}" +
-            "&prefillType={prefillType}&prefillAccountId={prefillAccountId}",
+            "&prefillType={prefillType}&prefillAccountId={prefillAccountId}&prefillDate={prefillDate}",
         "Log",
         Icons.Filled.AddCircle
     )
-    object Trans : Screen("trans", "Trans.", Icons.AutoMirrored.Filled.MenuBook)
+    object Trans : Screen("trans", "Ledger", Icons.AutoMirrored.Filled.MenuBook)
     object Search : Screen("search", "Search", Icons.Filled.MoreHoriz)
-    object FilterSelection : Screen("filter_selection", "Filter", Icons.Filled.Tune)
-    object FilteredTransactions : Screen(
-        "filtered_transactions?year={year}&month={month}&incomeIds={incomeIds}&expenseIds={expenseIds}&accountIds={accountIds}",
-        "Filtered",
-        Icons.Filled.Tune
-    )
     object Bookmarks : Screen("bookmarks", "Bookmarks", Icons.Filled.Star)
     object Stats : Screen("stats", "Stats", Icons.Filled.BarChart)
     object Budget : Screen("budget", "Budget", Icons.Filled.AccountBalanceWallet)
@@ -132,7 +124,6 @@ private const val LOG_BASE_ROUTE = "log"
 
 /** Screens reached from the Budget tab; the tab stays highlighted while you are on them. */
 private val BUDGET_SUB_ROUTES = setOf(Screen.StartCycle.route, Screen.PlanBuckets.route, Screen.BucketDetail.route)
-private const val FILTERED_BASE_ROUTE = "filtered_transactions"
 private const val APP_LOCK_AUTHENTICATORS =
     BiometricManager.Authenticators.BIOMETRIC_WEAK or
         BiometricManager.Authenticators.DEVICE_CREDENTIAL
@@ -194,7 +185,9 @@ private fun logRoute(
     copyTransactionId: Long? = null,
     useTodayDateForCopy: Boolean = false,
     prefillType: String? = null,
-    prefillAccountId: Long? = null
+    prefillAccountId: Long? = null,
+    /** A date for this one Transaction (the Calendar's "Add on <day>"); it never pins the date. */
+    prefillDate: java.time.LocalDate? = null
 ): String {
     val params = mutableListOf<String>()
     transactionId?.let { params += "transactionId=$it" }
@@ -204,27 +197,25 @@ private fun logRoute(
     }
     prefillType?.let { params += "prefillType=$it" }
     prefillAccountId?.let { params += "prefillAccountId=$it" }
+    prefillDate?.let { params += "prefillDate=$it" }
     return if (params.isEmpty()) LOG_BASE_ROUTE else "$LOG_BASE_ROUTE?${params.joinToString("&")}" 
 }
 
-private fun filteredTransactionsRoute(
-    year: Int,
-    month: Int,
-    incomeIds: Set<Long>,
-    expenseIds: Set<Long>,
-    accountIds: Set<Long>
-): String {
-    val income = incomeIds.sorted().joinToString(",")
-    val expense = expenseIds.sorted().joinToString(",")
-    val accounts = accountIds.sorted().joinToString(",")
-    return "$FILTERED_BASE_ROUTE?year=$year&month=$month&incomeIds=$income&expenseIds=$expense&accountIds=$accounts"
-}
+/** Screens reached from the Ledger: its tab stays highlighted on them. */
+private val LEDGER_SUB_ROUTES = setOf(Screen.Search.route, Screen.Bookmarks.route, Screen.CaptureInbox.route)
 
 val bottomNavItems = listOf(Screen.Trans, Screen.Stats, Screen.Budget, Screen.Accounts, Screen.More)
 
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
+    // What a transaction sheet's Edit and Copy buttons open, wherever the sheet is.
+    val editTransaction: (Long) -> Unit = { id ->
+        navController.navigate(logRoute(transactionId = id)) { launchSingleTop = true }
+    }
+    val copyTransaction: (Long, Boolean) -> Unit = { id, useToday ->
+        navController.navigate(logRoute(copyTransactionId = id, useTodayDateForCopy = useToday)) { launchSingleTop = true }
+    }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
@@ -249,8 +240,7 @@ fun AppNavigation() {
         currentDest?.route?.startsWith(LOG_BASE_ROUTE) == true && navController.previousBackStackEntry == null
 
     val showBottomBar =
-        currentDest?.route != Screen.FilteredTransactions.route &&
-            currentDest?.route != Screen.Log.route &&
+        currentDest?.route != Screen.Log.route &&
             currentDest?.route != Screen.AccountForm.route
 
     val navigateToTransactionsAfterUnlock = {
@@ -484,11 +474,16 @@ fun AppNavigation() {
                     bottomNavItems.forEach { screen ->
                         val selected = currentDest?.hierarchy?.any { it.route == screen.route } == true ||
                             (screen == Screen.Budget && currentDest?.route in BUDGET_SUB_ROUTES) ||
-                            (screen == Screen.Trans && currentDest?.route == Screen.CaptureInbox.route) ||
+                            (screen == Screen.Trans && currentDest?.route in LEDGER_SUB_ROUTES) ||
                             (screen == Screen.More && currentDest?.route in MORE_SUB_ROUTES)
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
+                                if (screen != Screen.Trans) {
+                                    // Leaving the Ledger clears its filter, even if Back later returns to it.
+                                    runCatching { navController.getBackStackEntry(Screen.Trans.route) }.getOrNull()
+                                        ?.savedStateHandle?.set(HistoryViewModel.LEFT_LEDGER, true)
+                                }
                                 navController.navigate(screen.route) {
                                     popUpTo(screen.route) { inclusive = true }
                                     launchSingleTop = true
@@ -571,6 +566,10 @@ fun AppNavigation() {
                     navArgument("prefillAccountId") {
                         type = NavType.LongType
                         defaultValue = -1L
+                    },
+                    navArgument("prefillDate") {
+                        type = NavType.StringType
+                        defaultValue = ""
                     }
                 )
             ) {
@@ -605,18 +604,11 @@ fun AppNavigation() {
                             launchSingleTop = true; restoreState = true
                         }
                     },
-                    onNavigateToEditTransaction = { transactionId ->
-                        navController.navigate(logRoute(transactionId)) {
-                            launchSingleTop = true
-                        }
+                    onAddOnDate = { date ->
+                        navController.navigate(logRoute(prefillDate = date)) { launchSingleTop = true }
                     },
-                    onNavigateToCopyTransaction = { transactionId, useToday ->
-                        navController.navigate(
-                            logRoute(copyTransactionId = transactionId, useTodayDateForCopy = useToday)
-                        ) {
-                            launchSingleTop = true
-                        }
-                    },
+                    onNavigateToEditTransaction = editTransaction,
+                    onNavigateToCopyTransaction = copyTransaction,
                     onNavigateToBookmarks = {
                         navController.navigate(Screen.Bookmarks.route) {
                             launchSingleTop = true
@@ -624,11 +616,6 @@ fun AppNavigation() {
                     },
                     onNavigateToSearch = {
                         navController.navigate(Screen.Search.route) {
-                            launchSingleTop = true
-                        }
-                    },
-                    onNavigateToFilterSelection = {
-                        navController.navigate(Screen.FilterSelection.route) {
                             launchSingleTop = true
                         }
                     },
@@ -860,70 +847,24 @@ fun AppNavigation() {
                 BookmarksScreen(
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() },
-                    onTransactionClick = { transactionId ->
-                        navController.navigate(logRoute(transactionId = transactionId)) {
-                            launchSingleTop = true
-                        }
-                    }
+                    onEditTransaction = editTransaction,
+                    onCopyTransaction = copyTransaction
                 )
             }
             composable(Screen.Search.route) {
                 SearchScreen(
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() },
-                    onTransactionClick = { transactionId ->
-                        navController.navigate(logRoute(transactionId = transactionId)) {
-                            launchSingleTop = true
-                        }
-                    }
-                )
-            }
-            composable(Screen.FilterSelection.route) {
-                FilterSelectionScreen(
-                    innerPadding = innerPadding,
-                    onBack = { navController.popBackStack() },
-                    onApplyFilters = { year, month, incomeIds, expenseIds, accountIds ->
-                        navController.navigate(
-                            filteredTransactionsRoute(
-                                year = year,
-                                month = month,
-                                incomeIds = incomeIds,
-                                expenseIds = expenseIds,
-                                accountIds = accountIds
-                            )
-                        ) {
-                            launchSingleTop = true
-                        }
-                    }
-                )
-            }
-            composable(
-                route = Screen.FilteredTransactions.route,
-                arguments = listOf(
-                    navArgument("year") { type = NavType.IntType; defaultValue = 0 },
-                    navArgument("month") { type = NavType.IntType; defaultValue = 0 },
-                    navArgument("incomeIds") { type = NavType.StringType; defaultValue = "" },
-                    navArgument("expenseIds") { type = NavType.StringType; defaultValue = "" },
-                    navArgument("accountIds") { type = NavType.StringType; defaultValue = "" }
-                )
-            ) {
-                FilteredTransactionsScreen(
-                    navInsets = innerPadding,
-                    onBack = { navController.popBackStack() },
-                    onNavigateToEditTransaction = { transactionId ->
-                        navController.navigate(logRoute(transactionId = transactionId)) {
-                            launchSingleTop = true
-                        }
-                    }
+                    onEditTransaction = editTransaction,
+                    onCopyTransaction = copyTransaction
                 )
             }
             composable("account_detail/{accountId}") {
                 AccountDetailScreen(
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() },
-                    onOpenTransaction = { transactionId ->
-                        navController.navigate(logRoute(transactionId = transactionId)) { launchSingleTop = true }
-                    },
+                    onEditTransaction = editTransaction,
+                    onCopyTransaction = copyTransaction,
                     onAddTransaction = { type, accountId ->
                         navController.navigate(logRoute(prefillType = type, prefillAccountId = accountId)) {
                             launchSingleTop = true

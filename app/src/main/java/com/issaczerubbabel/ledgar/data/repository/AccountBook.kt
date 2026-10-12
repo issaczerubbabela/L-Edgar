@@ -16,6 +16,14 @@ data class AccountBook(
     val transactions: List<TransactionSnapshot>,
     val transactionRecords: List<ExpenseRecord>
 ) {
+    /** This book with the Transactions in [ids] left out, as if they were already deleted. */
+    fun without(ids: Set<Long>): AccountBook =
+        if (ids.isEmpty()) this
+        else copy(
+            transactions = transactions.filterNot { it.id in ids },
+            transactionRecords = transactionRecords.filterNot { it.id in ids }
+        )
+
     companion object {
         private val EARLIEST = LocalDate.of(1970, 1, 1)
 

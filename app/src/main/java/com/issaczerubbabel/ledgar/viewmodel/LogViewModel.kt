@@ -15,6 +15,8 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
+import com.issaczerubbabel.ledgar.data.repository.UndoableDeletes
+import com.issaczerubbabel.ledgar.ledger.Ledger
 import com.issaczerubbabel.ledgar.sync.SyncScheduler
 import com.issaczerubbabel.ledgar.sync.SyncStatus
 import com.issaczerubbabel.ledgar.util.TransactionType
@@ -37,7 +39,8 @@ class LogViewModel @Inject constructor(
     private val dropdownOptionRepository: DropdownOptionRepository,
     private val syncScheduler: SyncScheduler,
     bucketPreviewSource: BucketPreviewSource,
-    private val savedStateHandle: SavedStateHandle
+    private val savedStateHandle: SavedStateHandle,
+    private val undoableDeletes: UndoableDeletes
 ) : ViewModel() {
 
     val accounts: StateFlow<List<AccountRecord>> = accountRepository
@@ -138,6 +141,12 @@ class LogViewModel @Inject constructor(
                 if (selectedType == TransactionType.TRANSFER) selectedFromAccountId = prefillAccountId
                 else selectedAccountId = prefillAccountId
             }
+            // From the Calendar's "Add on <day>": that date for this Transaction only. Not pinned, so the
+            // next one after saving starts on today again. Not reapplied over a date restored after
+            // the process was killed.
+            savedStateHandle.get<String>("prefillDate")?.takeIf { it.isNotBlank() && !savedStateHandle.contains(KEY_SELECTED_DATE) }
+                ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+                ?.let { selectedDate = it }
         } else {
             viewModelScope.launch {
                 val source = repository.getById(copyTransactionId)
@@ -250,7 +259,8 @@ class LogViewModel @Inject constructor(
                 return@launch
             }
 
-            repository.delete(current)
+            // The screen closes; the one underneath offers Undo.
+            undoableDeletes.delete(current, Ledger.deletedMessage(current, accounts.value))
 
             saveSuccess = true
         }

@@ -16,6 +16,56 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
+        version = "v1.5.0",
+        date = "2026-10-12",
+        changed = listOf(
+            "Ledger (was Trans.): the month is the title; tap it for a 12-month grid. Bookmarks moves to the ⋮ menu",
+            "Ledger: theme colours throughout, plain weekday headers, and day headers without the repeated month",
+            "Ledger: waiting captures show as a small chip, the Trip card is compact, and an empty month offers Add",
+            "Ledger: the Ledger tab stays highlighted on Search, Bookmarks and the capture inbox",
+            "Monthly: shows the year of the Ledger's month, and its arrows step a year keeping the month",
+            "Monthly: tap a month or week to open it on Daily, with a separate arrow to show its weeks",
+            "Search: results are grouped by date, with the month in each header since they span all time",
+            "Ledger: Filter opens over the month you're looking at; the separate Filter and Filtered screens are gone",
+            "Ledger: the summary reads Income, Expenses and Net, and amounts use Indian grouping without \".00\"",
+            "Ledger: transactions look the same here, in Search, Bookmarks and on Account pages, and a tap opens one sheet",
+            "Ledger: a transaction's sheet has Copy for today and Copy for its date, and Bookmark says what it'll do",
+            "Ledger: the confirm before deleting several transactions names how many and their Net",
+            "Ledger: Change date, category, account or description say what they'll change and what they skip"
+        ),
+        added = listOf(
+            "Ledger: TalkBack reads each transaction, day and Calendar cell as one sentence that says Income or Expense",
+            "Undo a deleted transaction for 5 seconds on the Ledger, Search, Bookmarks, Account pages and Edit",
+            "Ledger: ✕ or Back leaves selection, and Select all in <month> picks every row on screen",
+            "Ledger: filter the month on screen by category and account, shown as removable chips under the tabs",
+            "Search: pick a date range instead of typing dates, and see your words highlighted in the results",
+            "Calendar: tap a day to see its transactions, open one in place, or Add on that day without pinning the date"
+        ),
+        fixed = listOf(
+            "Search: the keyboard stays down after you close a transaction, so it never covers Undo",
+            "Ledger: big amounts show in full instead of being cut off",
+            "Ledger: a day's transactions keep their order after a Sync",
+            "Ledger: a Calendar day where you spent more than you earned shows a minus, in short readable amounts",
+            "Ledger: Change category no longer gives a Transfer a category or an Expense an income one",
+            "Ledger: with large text, Calendar days and rows grow instead of cutting off dates and amounts",
+            "Monthly: amounts are stacked so none are cut off, weeks run Sunday to Saturday, and a future year says so",
+            "Ledger: Filter finds Food paid from HDFC, not every Food and every HDFC one, and finds renamed categories"
+        ),
+        developer = listOf(
+            "Glossary: Net (the Ledger's raw Income minus Expenses) and Ledger (the tab that lists every Transaction)",
+            "Ledger: a pure Ledger module builds the summary, day groups and Calendar cells off the main thread, with tests",
+            "Ledger: one shared Transaction row and transaction sheet in ui/components; the Ledger module builds their contents",
+            "A delete offering Undo lives in the UndoableDeletes singleton until final, so Undo never races a Sync",
+            "Ledger: a pure batch plan decides which selected rows a change fits; the DAO guards category and account writes",
+            "Ledger: filter matching, options and chips live in the Ledger module, with tests; old filter screens deleted",
+            "Ledger: Search's date groups, range label and match highlighting come from the Ledger module, with tests",
+            "Ledger: Add transaction takes an optional prefillDate for one Transaction; a shared DaySheet hosts the day",
+            "Ledger: Monthly's months and weeks come from the Ledger module, with tests; MonthlyViewModel merged away",
+            "Ledger: the month grid and capture chip text come from the Ledger module; hard-coded header colours removed",
+            "Ledger: spoken labels for rows, days, cells and Monthly come from the Ledger module, with tests"
+        )
+    ),
+    ChangelogRelease(
         version = "v1.4.0",
         date = "2026-10-09",
         added = listOf(

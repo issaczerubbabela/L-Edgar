@@ -223,9 +223,10 @@ fun ActiveTripBanner(onOpenTrip: (Long) -> Unit, onAddExpense: (Long) -> Unit, v
 @Composable
 private fun ActiveTripBannerContent(trip: ActiveTripSummary, onOpenTrip: (Long) -> Unit, onAddExpense: (Long) -> Unit) {
     TripCard(
-        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+        // Compact on the Ledger, so the list keeps its room.
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
         onClick = { onOpenTrip(trip.tripId) },
-        contentPadding = PaddingValues(start = 18.dp, end = 6.dp, top = 12.dp, bottom = 12.dp),
+        contentPadding = PaddingValues(start = 18.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
         containerColor = MaterialTheme.colorScheme.primaryContainer
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
