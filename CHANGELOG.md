@@ -11,6 +11,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 ### Added
 
 - Daily reminder: an evening nudge if nothing was logged today, showing Left to spend, with a Log now button
+- Daily reminder: confirming an auto-captured transaction counts as logging, so the reminder stays quiet
 
 ### Developer
 

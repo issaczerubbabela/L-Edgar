@@ -1,15 +1,18 @@
 package com.issaczerubbabel.ledgar.capture.notify
 
 import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
+import com.issaczerubbabel.ledgar.data.preferences.ReminderPreferences
 import com.issaczerubbabel.ledgar.data.repository.CaptureEdits
 import com.issaczerubbabel.ledgar.data.repository.CaptureRepository
 import com.issaczerubbabel.ledgar.util.TransactionType
+import java.time.LocalDate
 import javax.inject.Inject
 
 /** What the notification's buttons do. Confirm only ever uses what the capture already suggests. */
 class CaptureActionHandler @Inject constructor(
     private val captureDao: CaptureDao,
-    private val captureRepository: CaptureRepository
+    private val captureRepository: CaptureRepository,
+    private val reminderPreferences: ReminderPreferences
 ) {
 
     /**
@@ -22,7 +25,7 @@ class CaptureActionHandler @Inject constructor(
         val category = capture.suggestedCategory?.takeIf { it.isNotBlank() } ?: return false
         val accountId = capture.accountId ?: return false
 
-        return captureRepository.confirm(
+        val confirmed = captureRepository.confirm(
             captureId,
             CaptureEdits(
                 type = capture.suggestedType ?: TransactionType.EXPENSE,
@@ -31,6 +34,9 @@ class CaptureActionHandler @Inject constructor(
                 description = capture.displayTitle()
             )
         ) != null
+        // A confirmed capture is something logged today, so the evening reminder stays quiet.
+        if (confirmed) reminderPreferences.markLoggedToday(LocalDate.now().toEpochDay())
+        return confirmed
     }
 
     suspend fun dismiss(captureId: Long) = captureRepository.dismiss(captureId)

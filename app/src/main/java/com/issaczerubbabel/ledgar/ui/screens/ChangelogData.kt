@@ -19,7 +19,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
         version = "v1.6.0",
         date = "2026-10-12",
         added = listOf(
-            "Daily reminder: an evening nudge if nothing was logged today, showing Left to spend, with a Log now button"
+            "Daily reminder: an evening nudge if nothing was logged today, showing Left to spend, with a Log now button",
+            "Daily reminder: confirming an auto-captured transaction counts as logging, so the reminder stays quiet"
         ),
         developer = listOf(
             "CONTEXT.md defines Repeat rule and Repeating transaction, and Merchant rules remember a renamed description",
