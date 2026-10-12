@@ -101,7 +101,7 @@ fun RepeatingScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { SnackbarHost(snackbarHostState, Modifier.padding(bottom = innerPadding.calculateBottomPadding())) },
         containerColor = MaterialTheme.colorScheme.background
     ) { scaffoldPadding ->
         val modifier = Modifier

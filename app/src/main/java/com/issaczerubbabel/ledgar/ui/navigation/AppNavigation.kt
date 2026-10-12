@@ -114,9 +114,10 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
 private fun tripExpenseRoute(tripId: Long, expenseId: Long = 0L, captureId: Long = 0L) =
     "trip_expense/$tripId?expenseId=$expenseId&captureId=$captureId"
 
-/** Screens reached from More (trips and settings); the tab stays highlighted while you are on them. */
+/** Screens reached from More (trips, repeats and settings); the tab stays highlighted while you are on them. */
 private val MORE_SUB_ROUTES = setOf(
     Screen.Settings.route,
+    Screen.Repeating.route,
     Screen.Trips.route,
     Screen.Trip.route,
     Screen.TripExpense.route,
