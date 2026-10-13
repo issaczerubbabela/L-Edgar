@@ -13,7 +13,11 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.preferences.ReminderPreferences
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
+import com.issaczerubbabel.ledgar.util.KeypadAction
 import com.issaczerubbabel.ledgar.util.TransactionType
+import com.issaczerubbabel.ledgar.util.amountValue
+import com.issaczerubbabel.ledgar.util.applyKeypadAction
+import com.issaczerubbabel.ledgar.util.isAmountExpression
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -50,6 +54,8 @@ class QuickLogViewModel @Inject constructor(
     val saveSuccess: SharedFlow<Unit> = _saveSuccess.asSharedFlow()
 
     fun save() {
+        // The keypad works a sum out before it saves; this only covers a caller that didn't.
+        if (isAmountExpression(amount)) amount = applyKeypadAction(amount, KeypadAction.Evaluate)
         val parsedAmount = amount.toDoubleOrNull()
         if (parsedAmount == null || parsedAmount <= 0.0) {
             errorMessage = "Enter a valid amount"
@@ -98,7 +104,7 @@ class QuickLogViewModel @Inject constructor(
         type = TransactionType.EXPENSE,
         category = selectedCategory,
         date = LocalDate.now(),
-        draftAmount = amount.toDoubleOrNull() ?: 0.0
+        draftAmount = amountValue(amount) ?: 0.0
     )
 
     fun clearError() {

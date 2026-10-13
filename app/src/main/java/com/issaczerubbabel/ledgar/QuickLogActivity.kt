@@ -22,6 +22,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -41,7 +42,10 @@ import com.issaczerubbabel.ledgar.ui.components.OptionPickerSheet
 import com.issaczerubbabel.ledgar.ui.components.PickerOption
 import com.issaczerubbabel.ledgar.ui.theme.SheetSyncTheme
 import com.issaczerubbabel.ledgar.util.TransactionType
+import com.issaczerubbabel.ledgar.util.KeypadAction
+import com.issaczerubbabel.ledgar.util.amountValue
 import com.issaczerubbabel.ledgar.util.applyKeypadAction
+import com.issaczerubbabel.ledgar.util.isAmountExpression
 import com.issaczerubbabel.ledgar.viewmodel.QuickLogViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -109,9 +113,11 @@ private fun QuickLogSheet(
 
                 BucketPreviewSlot(preview = vm.bucketPreview(bucketContext))
 
+                var evaluatePulse by remember { mutableIntStateOf(0) }
                 AmountDisplay(
                     amount = vm.amount,
                     type = TransactionType.EXPENSE,
+                    pulseSignal = evaluatePulse,
                     modifier = Modifier.weight(1f)
                 )
 
@@ -124,10 +130,20 @@ private fun QuickLogSheet(
                     swapKey = TransactionType.EXPENSE
                 )
 
+                val hasExpression = isAmountExpression(vm.amount)
                 NumericKeypad(
                     onAction = { action -> vm.amount = applyKeypadAction(vm.amount, action) },
-                    onCommit = vm::save,
-                    commitEnabled = vm.amount.isNotBlank()
+                    onCommit = {
+                        // "=" works the sum out first; the next tap saves.
+                        if (hasExpression) {
+                            vm.amount = applyKeypadAction(vm.amount, KeypadAction.Evaluate)
+                            evaluatePulse++
+                        } else {
+                            vm.save()
+                        }
+                    },
+                    commitEnabled = if (hasExpression) amountValue(vm.amount) != null else vm.amount.isNotBlank(),
+                    hasExpression = hasExpression
                 )
             }
 

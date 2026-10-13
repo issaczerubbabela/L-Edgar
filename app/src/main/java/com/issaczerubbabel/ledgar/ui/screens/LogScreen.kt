@@ -30,7 +30,10 @@ import com.issaczerubbabel.ledgar.ui.components.SingleDatePickerDialog
 import com.issaczerubbabel.ledgar.util.RecurrenceCalculator
 import com.issaczerubbabel.ledgar.util.RecurrenceFrequency
 import com.issaczerubbabel.ledgar.util.TransactionType
+import com.issaczerubbabel.ledgar.util.KeypadAction
+import com.issaczerubbabel.ledgar.util.amountValue
 import com.issaczerubbabel.ledgar.util.applyKeypadAction
+import com.issaczerubbabel.ledgar.util.isAmountExpression
 import com.issaczerubbabel.ledgar.viewmodel.AccountTarget
 import com.issaczerubbabel.ledgar.viewmodel.LogViewModel
 import com.issaczerubbabel.ledgar.sync.SyncStatus
@@ -178,6 +181,7 @@ fun LogScreen(
                 amount = vm.amount,
                 type = vm.selectedType,
                 pulseSignal = savePulseSignal,
+                allowNegative = isAdjustment,
                 modifier = Modifier.weight(1f)
             )
 
@@ -239,10 +243,20 @@ fun LogScreen(
                 )
             )
 
+            val hasExpression = isAmountExpression(vm.amount)
             NumericKeypad(
                 onAction = { action -> vm.amount = applyKeypadAction(vm.amount, action) },
-                onCommit = vm::save,
-                commitEnabled = vm.amount.isNotBlank()
+                onCommit = {
+                    // "=" works the sum out first; the next tap saves.
+                    if (hasExpression) {
+                        vm.amount = applyKeypadAction(vm.amount, KeypadAction.Evaluate)
+                        savePulseSignal++
+                    } else {
+                        vm.save()
+                    }
+                },
+                commitEnabled = if (hasExpression) amountValue(vm.amount, allowNegative = isAdjustment) != null else vm.amount.isNotBlank(),
+                hasExpression = hasExpression
             )
         }
     }

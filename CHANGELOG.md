@@ -19,6 +19,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - To review: swipe a card right to Confirm or left to Dismiss, and Undo any decision for 5 seconds
 - To review: tap a card's title to rename it, with descriptions you've used before as suggestions
 - Auto-capture: a merchant you renamed keeps that name on its later captures and their notifications
+- Add Transaction and Quick Add: add, subtract, multiply or divide on the keypad, then = and save the result
 
 ### Developer
 
@@ -28,6 +29,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - UndoableDeletes became UndoableActions on an injected app scope, tested with kotlinx-coroutines-test
 - Merchant rules keep a description (Room 25 → 26); pure DescriptionSuggestions is ready for #82 to reuse
 - CaptureRepositoryImplTest, UndoableActionsTest and DescriptionSuggestionsTest cover renames, Undo and suggestions
+- AmountInput: pure evaluateAmount (× ÷ before + −, BigDecimal, half-up to the paisa) with tests for entry and limits
 
 ## [1.5.0] - 2026-10-12
 
