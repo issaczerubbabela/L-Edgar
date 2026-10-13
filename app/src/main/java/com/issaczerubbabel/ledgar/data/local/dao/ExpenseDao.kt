@@ -317,4 +317,15 @@ interface ExpenseDao {
         """
     )
     fun getTransactionsForAccountInMonth(accountId: Long, startDate: String, endDate: String): Flow<List<ExpenseRecord>>
+
+    /** The Account of the most recent Expense that has one, for Quick Add's default chip. */
+    @Query(
+        """
+        SELECT accountId FROM expense_records
+        WHERE type = 'Expense' AND accountId IS NOT NULL AND syncAction != 'DELETE'
+        ORDER BY date DESC, id DESC
+        LIMIT 1
+        """
+    )
+    suspend fun lastExpenseAccountId(): Long?
 }
