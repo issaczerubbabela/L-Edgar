@@ -269,6 +269,7 @@ erDiagram
         string type
         string origin
         int streak
+        string description "renamed title, nullable"
     }
 
     ACCOUNT_ALIASES {

@@ -25,8 +25,7 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Repeating (in More): see what's coming, pause, edit or delete a repeat, and set it to Ask me first",
             "Ledger: a chip shows Ask me first repeats waiting for Add, Edit & add or Skip",
             "Repeats stay on this phone for now: a reinstall keeps the transactions they added but not the repeats",
-            "To review: swipe a card right to Confirm or left to Dismiss",
-            "To review: Confirm, Dismiss and Review all offer Undo for 5 seconds, and nothing is saved until then",
+            "To review: swipe a card right to Confirm or left to Dismiss, and Undo any decision for 5 seconds",
             "To review: tap a card's title to rename it, with descriptions you've used before as suggestions",
             "Auto-capture: a merchant you renamed keeps that name on its later captures and their notifications"
         ),

@@ -105,7 +105,9 @@ class UndoableActions @Inject constructor(
                 // Nothing to undo: a failed write left Room as it was, and showing the rows again
                 // below is how the user sees that it didn't happen.
             } finally {
-                // Hidden until the write lands, so the rows never flash back.
+                // Hidden a moment longer than the write, until Room's lists have caught up, so the
+                // rows never flash back.
+                delay(SETTLE_MS)
                 show(action)
             }
         }
@@ -123,5 +125,6 @@ class UndoableActions @Inject constructor(
 
     companion object {
         const val UNDO_WINDOW_MS = 5_000L
+        private const val SETTLE_MS = 1_000L
     }
 }

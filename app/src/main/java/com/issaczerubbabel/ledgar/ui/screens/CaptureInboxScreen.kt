@@ -522,7 +522,7 @@ private fun CaptureCard(
 /**
  * The card's title as a "Description" field, with Descriptions used before as suggestions. Picking
  * one only fills the title; the card's Category and Account stay as they are. Left empty, the title
- * goes back to the merchant's usual name.
+ * is the bank's own text, which also stops renaming that merchant.
  */
 @Composable
 private fun TitleField(
@@ -536,7 +536,7 @@ private fun TitleField(
 ) {
     val text = row.descriptionDraft ?: row.title
     val focusRequester = remember { FocusRequester() }
-    val suggestions: List<DescriptionSuggestion> = remember(text, descriptionUses) {
+    val suggestions: List<DescriptionSuggestion> = remember(text, descriptionUses, validCategories, validAccountIds) {
         DescriptionSuggestions.suggest(descriptionUses, text, validCategories, validAccountIds, LocalDate.now())
             .filterNot { it.description.equals(text.trim(), ignoreCase = true) }
     }
@@ -548,7 +548,7 @@ private fun TitleField(
             onValueChange = onDescriptionChange,
             label = { Text("Description") },
             supportingText = if (row.bankTitle != text.trim()) {
-                { Text("From the bank: ${row.bankTitle}", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                { Text("Leave empty for the bank's text: ${row.bankTitle}", maxLines = 1, overflow = TextOverflow.Ellipsis) }
             } else null,
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),

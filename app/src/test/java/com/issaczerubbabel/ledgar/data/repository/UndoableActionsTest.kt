@@ -95,8 +95,10 @@ class UndoableActionsTest {
 
         assertEquals(listOf("first"), writes)
         assertEquals("second", holder.pending.value?.message)
-        // Undo can't bring back a decision that's already final.
+        // Undo can't bring back a decision that's already final; its rows stay hidden until Room catches up.
         holder.undo(first)
+        assertEquals(setOf(1L, 2L), holder.hiddenCaptureIds.value)
+        advanceTimeBy(UndoableActions.UNDO_WINDOW_MS - 1)
         assertEquals(setOf(2L), holder.hiddenCaptureIds.value)
     }
 
@@ -132,6 +134,7 @@ class UndoableActionsTest {
         advanceTimeBy(UndoableActions.UNDO_WINDOW_MS + 1)
 
         assertEquals("DELETE", db.expenseDao().getById(id)!!.syncAction)
+        advanceTimeBy(UndoableActions.UNDO_WINDOW_MS)
         assertTrue(holder.hiddenTransactionIds.value.isEmpty())
     }
 }

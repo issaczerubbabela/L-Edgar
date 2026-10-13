@@ -100,7 +100,8 @@ class ReviewInboxViewModel @Inject constructor(
                 // Picking a Category yourself is a decision, so it no longer needs a second look.
                 band = if (edit?.category != null) ConfidenceBand.HIGH else ConfidenceBand.of(capture.confidence, capture.suggestedCategory != null),
                 why = parseWhy(capture.traceJson),
-                title = edit?.description?.trim()?.takeIf { it.isNotEmpty() }
+                // A cleared field means the bank's own text, which also forgets an earlier rename.
+                title = edit?.description?.trim()?.ifEmpty { capture.displayTitle() }
                     ?: capture.displayTitle(capture.merchantNorm?.let { renames[it] }),
                 bankTitle = capture.displayTitle(),
                 descriptionDraft = edit?.description,
@@ -140,7 +141,7 @@ class ReviewInboxViewModel @Inject constructor(
 
     fun setAccount(captureId: Long, accountId: Long) = edit(captureId) { it.copy(accountId = accountId) }
 
-    /** What the user typed as the title; blank goes back to the merchant's usual name. */
+    /** What the user typed as the title; blank means the bank's own text. */
     fun setDescription(captureId: Long, description: String) = edit(captureId) { it.copy(description = description) }
 
     fun confirm(row: CaptureRowUi) {
@@ -182,6 +183,10 @@ class ReviewInboxViewModel @Inject constructor(
     fun undo(action: UndoableAction) = undoableActions.undo(action)
 
     fun commitPending() = undoableActions.commit()
+
+    override fun onCleared() {
+        commitPending()
+    }
 
     private fun edit(captureId: Long, change: (RowEdit) -> RowEdit) {
         edits.update { it + (captureId to change(it[captureId] ?: RowEdit())) }
