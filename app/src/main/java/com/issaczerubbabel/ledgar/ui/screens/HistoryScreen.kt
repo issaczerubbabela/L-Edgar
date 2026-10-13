@@ -1,5 +1,9 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
+import com.issaczerubbabel.ledgar.util.RepeatSchedule
+import com.issaczerubbabel.ledgar.viewmodel.RepeatBadgeViewModel
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -96,12 +100,15 @@ fun HistoryScreen(
     onNavigateToBookmarks: () -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToCaptureInbox: () -> Unit,
+    onNavigateToRepeating: () -> Unit = {},
     onOpenTrip: (Long) -> Unit = {},
     onAddTripExpense: (Long) -> Unit = {},
     vm: HistoryViewModel = hiltViewModel(),
     captureBadgeVm: com.issaczerubbabel.ledgar.viewmodel.CaptureBadgeViewModel = hiltViewModel(),
 ) {
     val pendingCaptures by captureBadgeVm.pendingCount.collectAsStateWithLifecycle()
+    val repeatBadgeVm: RepeatBadgeViewModel = hiltViewModel()
+    val waitingRepeats by repeatBadgeVm.waitingCount.collectAsStateWithLifecycle()
     val state by vm.uiState.collectAsStateWithLifecycle()
     val accounts by vm.accounts.collectAsStateWithLifecycle()
     val expenseCategories by vm.expenseCategories.collectAsStateWithLifecycle()
@@ -219,15 +226,32 @@ fun HistoryScreen(
                 else -> state.summary
             }
             SummaryBar(pinnedSummary)
-            // Waiting Captured transactions: a compact chip, not a full-width banner.
-            Ledger.captureChipLabel(pendingCaptures)?.let { label ->
-                AssistChip(
-                    onClick = onNavigateToCaptureInbox,
-                    label = { Text(label) },
-                    leadingIcon = { Icon(Icons.Filled.Inbox, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                    // Announced when the count changes, without moving focus.
-                    modifier = Modifier.padding(horizontal = 12.dp).semantics { liveRegion = LiveRegionMode.Polite }
-                )
+            // Waiting Captured transactions and Repeating transactions: compact chips, not full-width banners.
+            val captureLabel = Ledger.captureChipLabel(pendingCaptures)
+            val repeatLabel = RepeatSchedule.waitingChipLabel(waitingRepeats)
+            if (captureLabel != null || repeatLabel != null) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    captureLabel?.let { label ->
+                        AssistChip(
+                            onClick = onNavigateToCaptureInbox,
+                            label = { Text(label) },
+                            leadingIcon = { Icon(Icons.Filled.Inbox, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            // Announced when the count changes, without moving focus.
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                        )
+                    }
+                    repeatLabel?.let { label ->
+                        AssistChip(
+                            onClick = onNavigateToRepeating,
+                            label = { Text(label) },
+                            leadingIcon = { Icon(Icons.Filled.Repeat, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                        )
+                    }
+                }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
 

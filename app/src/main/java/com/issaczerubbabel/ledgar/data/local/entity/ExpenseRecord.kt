@@ -29,7 +29,10 @@ import androidx.room.PrimaryKey
             onDelete = ForeignKey.SET_NULL
         )
     ],
-    indices = [Index("accountId"), Index("fromAccountId"), Index("toAccountId"), Index(value = ["syncId"], unique = true)]
+    indices = [
+        Index("accountId"), Index("fromAccountId"), Index("toAccountId"),
+        Index(value = ["syncId"], unique = true), Index("recurringRuleId")
+    ]
 )
 data class ExpenseRecord(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -56,7 +59,9 @@ data class ExpenseRecord(
     /** The Sheet row's revision when both sides last agreed: the base for merging. */
     val syncedRevision: String? = null,
     /** The Sheet's version as JSON while this Transaction is in a Sync conflict; null otherwise. */
-    val sheetConflictJson: String? = null
+    val sheetConflictJson: String? = null,
+    /** The rule that created this row, if any. Local-only bookkeeping: never sent to the Sheet. */
+    val recurringRuleId: Long? = null
 ) {
     @Ignore
     val paymentMode: String = ""

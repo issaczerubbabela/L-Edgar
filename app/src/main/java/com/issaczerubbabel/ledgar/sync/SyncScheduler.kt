@@ -2,9 +2,11 @@ package com.issaczerubbabel.ledgar.sync
 
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
@@ -62,6 +64,18 @@ class SyncScheduler @Inject constructor(private val workManager: WorkManager) {
     fun requestBackup() = enqueueBackup(BACKUP_DELAY_SECONDS, ExistingWorkPolicy.KEEP)
 
     fun backupNow() = enqueueBackup(0, ExistingWorkPolicy.REPLACE)
+
+    /** Runs once a day, no network needed, so due recurring Transactions land even on days the app never opens. */
+    fun scheduleRecurringMaterialization() {
+        val request = PeriodicWorkRequestBuilder<RecurringMaterializationWorker>(1, TimeUnit.DAYS)
+            .addTag(RecurringMaterializationWorker.TAG)
+            .build()
+        workManager.enqueueUniquePeriodicWork(
+            RecurringMaterializationWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            request
+        )
+    }
 
     private fun enqueueBackup(delaySeconds: Long, policy: ExistingWorkPolicy) {
         val request = OneTimeWorkRequestBuilder<BackupWorker>()

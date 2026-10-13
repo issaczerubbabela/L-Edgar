@@ -3,6 +3,7 @@ package com.issaczerubbabel.ledgar.ui.navigation
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Luggage
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /** A feature shown on the More tab. Add one entry here and More shows it; no other screen changes. */
@@ -18,6 +19,9 @@ object MoreFeatures {
     /** How many features get a tile on More; the rest sit behind "All features". */
     const val MAX_TILES = 4
 
+    /** Repeating transactions with no rule opened; the Ledger's "repeats waiting" chip goes here too. */
+    const val REPEATING_ROUTE = "repeating"
+
     val all: List<MoreFeature> = listOf(
         MoreFeature(
             id = "trips",
@@ -32,6 +36,13 @@ object MoreFeatures {
             subtitle = "Bank and UPI alerts",
             icon = Icons.Filled.Notifications,
             route = Screen.CaptureSettings.route
+        ),
+        MoreFeature(
+            id = "repeating",
+            title = "Repeating",
+            subtitle = "Rent, SIPs, salary",
+            icon = Icons.Filled.Repeat,
+            route = REPEATING_ROUTE
         )
     )
 

@@ -61,6 +61,7 @@ import com.issaczerubbabel.ledgar.ui.screens.BookmarksScreen
 import com.issaczerubbabel.ledgar.ui.screens.DropdownManagementScreen
 import com.issaczerubbabel.ledgar.ui.screens.NetWorthScreen
 import com.issaczerubbabel.ledgar.ui.screens.SearchScreen
+import com.issaczerubbabel.ledgar.ui.screens.RepeatingScreen
 import com.issaczerubbabel.ledgar.ui.screens.MoreScreen
 import com.issaczerubbabel.ledgar.ui.screens.SettingsScreen
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -78,7 +79,8 @@ import kotlinx.coroutines.launch
 sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
     object Log : Screen(
         "log?transactionId={transactionId}&copyTransactionId={copyTransactionId}&copyDateMode={copyDateMode}" +
-            "&prefillType={prefillType}&prefillAccountId={prefillAccountId}&prefillDate={prefillDate}",
+            "&prefillType={prefillType}&prefillAccountId={prefillAccountId}&prefillDate={prefillDate}" +
+            "&repeatRuleId={repeatRuleId}&repeatMode={repeatMode}",
         "Log",
         Icons.Filled.AddCircle
     )
@@ -100,6 +102,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object AppsScriptSetup : Screen("apps_script_setup", "AppsScriptSetup", Icons.Filled.Settings)
     object Changelog : Screen("changelog", "Changelog", Icons.Filled.Settings)
     object CaptureInbox : Screen("capture_inbox", "CaptureInbox", Icons.Filled.Settings)
+    object Repeating : Screen("repeating?ruleId={ruleId}", "Repeating", Icons.Filled.Settings)
     object CaptureSettings : Screen("capture_settings", "CaptureSettings", Icons.Filled.Settings)
     object CaptureUnparsed : Screen("capture_unparsed", "CaptureUnparsed", Icons.Filled.Settings)
     object Trips : Screen("trips", "Trips", Icons.Filled.Settings)
@@ -111,9 +114,10 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
 private fun tripExpenseRoute(tripId: Long, expenseId: Long = 0L, captureId: Long = 0L) =
     "trip_expense/$tripId?expenseId=$expenseId&captureId=$captureId"
 
-/** Screens reached from More (trips and settings); the tab stays highlighted while you are on them. */
+/** Screens reached from More (trips, repeats and settings); the tab stays highlighted while you are on them. */
 private val MORE_SUB_ROUTES = setOf(
     Screen.Settings.route,
+    Screen.Repeating.route,
     Screen.Trips.route,
     Screen.Trip.route,
     Screen.TripExpense.route,
@@ -187,7 +191,10 @@ private fun logRoute(
     prefillType: String? = null,
     prefillAccountId: Long? = null,
     /** A date for this one Transaction (the Calendar's "Add on <day>"); it never pins the date. */
-    prefillDate: java.time.LocalDate? = null
+    prefillDate: java.time.LocalDate? = null,
+    /** With [repeatMode] "occurrence" (Edit & add) or "rule" (edit the Repeat rule). */
+    repeatRuleId: Long? = null,
+    repeatMode: String? = null
 ): String {
     val params = mutableListOf<String>()
     transactionId?.let { params += "transactionId=$it" }
@@ -198,6 +205,10 @@ private fun logRoute(
     prefillType?.let { params += "prefillType=$it" }
     prefillAccountId?.let { params += "prefillAccountId=$it" }
     prefillDate?.let { params += "prefillDate=$it" }
+    repeatRuleId?.let {
+        params += "repeatRuleId=$it"
+        params += "repeatMode=${repeatMode.orEmpty()}"
+    }
     return if (params.isEmpty()) LOG_BASE_ROUTE else "$LOG_BASE_ROUTE?${params.joinToString("&")}" 
 }
 
@@ -583,6 +594,14 @@ fun AppNavigation(
                     navArgument("prefillDate") {
                         type = NavType.StringType
                         defaultValue = ""
+                    },
+                    navArgument("repeatRuleId") {
+                        type = NavType.LongType
+                        defaultValue = -1L
+                    },
+                    navArgument("repeatMode") {
+                        type = NavType.StringType
+                        defaultValue = ""
                     }
                 )
             ) {
@@ -605,7 +624,26 @@ fun AppNavigation(
 
                         startUnlockFromLog()
                     },
-                    onSaved = { navController.popBackStack() }
+                    onSaved = { navController.popBackStack() },
+                    onOpenRepeatRule = { ruleId ->
+                        navController.navigate("repeating?ruleId=$ruleId") { launchSingleTop = true }
+                    }
+                )
+            }
+            composable(
+                route = Screen.Repeating.route,
+                arguments = listOf(navArgument("ruleId") { type = NavType.LongType; defaultValue = -1L })
+            ) { entry ->
+                RepeatingScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
+                    onEditAndAdd = { ruleId ->
+                        navController.navigate(logRoute(repeatRuleId = ruleId, repeatMode = "occurrence")) { launchSingleTop = true }
+                    },
+                    onEditRule = { ruleId ->
+                        navController.navigate(logRoute(repeatRuleId = ruleId, repeatMode = "rule")) { launchSingleTop = true }
+                    },
+                    initialRuleId = entry.arguments?.getLong("ruleId")?.takeIf { it > 0L }
                 )
             }
             composable(Screen.Trans.route) {
@@ -636,6 +674,9 @@ fun AppNavigation(
                         navController.navigate(Screen.CaptureInbox.route) {
                             launchSingleTop = true
                         }
+                    },
+                    onNavigateToRepeating = {
+                        navController.navigate(MoreFeatures.REPEATING_ROUTE) { launchSingleTop = true }
                     },
                     onOpenTrip = { tripId -> navController.navigate("trip/$tripId") { launchSingleTop = true } },
                     onAddTripExpense = { tripId -> navController.navigate(tripExpenseRoute(tripId)) { launchSingleTop = true } }

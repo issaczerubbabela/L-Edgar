@@ -12,14 +12,18 @@ import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewContext
 import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewSource
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.data.local.entity.RecurringRule
 import com.issaczerubbabel.ledgar.data.preferences.ReminderPreferences
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
+import com.issaczerubbabel.ledgar.data.repository.RecurringRepository
 import com.issaczerubbabel.ledgar.data.repository.UndoableDeletes
 import com.issaczerubbabel.ledgar.ledger.Ledger
 import com.issaczerubbabel.ledgar.sync.SyncScheduler
 import com.issaczerubbabel.ledgar.sync.SyncStatus
+import com.issaczerubbabel.ledgar.util.RecurrenceCalculator
+import com.issaczerubbabel.ledgar.util.RepeatSchedule
 import com.issaczerubbabel.ledgar.util.TransactionType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.map
@@ -38,6 +42,7 @@ class LogViewModel @Inject constructor(
     private val repository: ExpenseRepository,
     accountRepository: AccountRepository,
     private val dropdownOptionRepository: DropdownOptionRepository,
+    private val recurringRepository: RecurringRepository,
     private val syncScheduler: SyncScheduler,
     private val reminderPreferences: ReminderPreferences,
     bucketPreviewSource: BucketPreviewSource,
@@ -98,6 +103,23 @@ class LogViewModel @Inject constructor(
     var errorMessage by mutableStateOf<String?>(null)
     var syncStatus by mutableStateOf(SyncStatus.Idle)
 
+    /** Null means Never. Only meaningful for a brand-new Transaction: repeat can't be added while editing. */
+    var repeatFrequency by mutableStateOf<String?>(null)
+    var repeatInterval by mutableStateOf(1)
+
+    /** The rule behind the Transaction being edited, if any, so its cadence can be shown. */
+    var editingRule by mutableStateOf<RecurringRule?>(null)
+        private set
+
+    /**
+     * Opened from More > Repeating transactions: [RepeatEditMode.Occurrence] is "Edit & add" on a
+     * waiting occurrence, [RepeatEditMode.Rule] edits the Repeat rule itself. Both close after saving.
+     */
+    val repeatEditMode: RepeatEditMode =
+        RepeatEditMode.from(savedStateHandle.get<String>("repeatMode"), savedStateHandle.get<Long>("repeatRuleId"))
+    private var repeatRule: RecurringRule? = null
+    private var repeatOccurrenceDate: LocalDate? = null
+
     private var editingRecordId: Long? = null
 
     /** The record being edited, as first loaded: its amount is already in its bucket's spend. */
@@ -105,13 +127,18 @@ class LogViewModel @Inject constructor(
     private var hasStartedSyncObserver = false
     val isEditMode: Boolean get() = editingRecordId != null
 
+    /** Editing, or one of the Repeat modes: the screen closes after Save instead of starting another. */
+    val closesAfterSave: Boolean get() = isEditMode || repeatEditMode != RepeatEditMode.None
+
     init {
         val navId = savedStateHandle.get<Long>("transactionId")
         editingRecordId = navId?.takeIf { it > 0L }
         val copyTransactionId = savedStateHandle.get<Long>("copyTransactionId")?.takeIf { it > 0L }
         val copyDateMode = savedStateHandle.get<String>("copyDateMode") ?: "original"
 
-        if (editingRecordId != null) {
+        if (repeatEditMode != RepeatEditMode.None) {
+            viewModelScope.launch { loadRepeatRule(savedStateHandle.get<Long>("repeatRuleId") ?: return@launch) }
+        } else if (editingRecordId != null) {
             viewModelScope.launch {
                 val record = repository.getById(editingRecordId ?: return@launch)
                 if (record == null) {
@@ -131,6 +158,7 @@ class LogViewModel @Inject constructor(
                 description = record.description
                 amount = if (record.amount % 1.0 == 0.0) record.amount.toInt().toString() else record.amount.toString()
                 remarks = record.remarks
+                editingRule = record.recurringRuleId?.let { recurringRepository.getById(it) }
             }
         } else if (copyTransactionId == null) {
             // Opened from an Account's page: start an Expense, Income or Transfer from that Account.
@@ -181,6 +209,29 @@ class LogViewModel @Inject constructor(
         }
     }
 
+    /** Fills the form from the rule's template, dated on its due occurrence (or its next date, for the rule). */
+    private suspend fun loadRepeatRule(ruleId: Long) {
+        val rule = recurringRepository.getById(ruleId)
+        if (rule == null) {
+            errorMessage = "Repeat rule not found"
+            return
+        }
+        repeatRule = rule
+        val next = LocalDate.parse(rule.nextDate)
+        repeatOccurrenceDate = next
+        if (!savedStateHandle.contains(KEY_SELECTED_DATE)) selectedDate = next
+        selectedType = rule.type
+        selectedCategory = rule.category
+        selectedAccountId = if (rule.type == TransactionType.TRANSFER) null else rule.accountId
+        selectedFromAccountId = rule.fromAccountId
+        selectedToAccountId = rule.toAccountId
+        description = rule.description
+        amount = if (rule.amount % 1.0 == 0.0) rule.amount.toInt().toString() else rule.amount.toString()
+        remarks = rule.remarks
+        repeatFrequency = rule.frequency
+        repeatInterval = rule.interval
+    }
+
     fun save() {
         val parsedAmount = amount.toDoubleOrNull()
         // A Balance adjustment is signed: negative lowers the balance.
@@ -203,7 +254,7 @@ class LogViewModel @Inject constructor(
             val baseRecord = editingRecordId?.let { repository.getById(it) }
             val accountNameById = accounts.value.associate { it.id to it.accountName }
 
-            val record = ExpenseRecord(
+            var record = ExpenseRecord(
                 id = baseRecord?.id ?: 0,
                 date = selectedDate.toString(),
                 type = selectedType,
@@ -229,8 +280,62 @@ class LogViewModel @Inject constructor(
                 isBookmarked = baseRecord?.isBookmarked ?: false,
                 isSynced = false,
                 remoteTimestamp = baseRecord?.remoteTimestamp,
-                syncAction = if (isEditMode) "UPDATE" else "INSERT"
+                syncAction = if (isEditMode) "UPDATE" else "INSERT",
+                recurringRuleId = baseRecord?.recurringRuleId
             )
+
+            val rule = repeatRule
+            if (repeatEditMode == RepeatEditMode.Rule && rule != null) {
+                val frequency = repeatFrequency ?: rule.frequency
+                recurringRepository.updateRule(
+                    rule.copy(
+                        type = record.type,
+                        category = record.category,
+                        description = record.description,
+                        amount = record.amount,
+                        accountId = record.accountId,
+                        remarks = record.remarks,
+                        fromAccountId = record.fromAccountId,
+                        toAccountId = record.toAccountId,
+                        frequency = frequency,
+                        interval = repeatInterval,
+                        anchorDay = RepeatSchedule.anchorDayFor(frequency, selectedDate),
+                        nextDate = selectedDate.toString()
+                    )
+                )
+                saveSuccess = true
+                return@launch
+            }
+            if (repeatEditMode == RepeatEditMode.Occurrence && rule != null) {
+                recurringRepository.saveEditedOccurrence(rule.id, repeatOccurrenceDate ?: selectedDate, record)
+                reminderPreferences.markLoggedToday(LocalDate.now().toEpochDay())
+                saveSuccess = true
+                return@launch
+            }
+
+            val frequency = repeatFrequency
+            if (!isEditMode && frequency != null) {
+                val anchorDay = RepeatSchedule.anchorDayFor(frequency, selectedDate)
+                val ruleId = recurringRepository.createRule(
+                    RecurringRule(
+                        type = record.type,
+                        category = record.category,
+                        description = record.description,
+                        amount = record.amount,
+                        accountId = record.accountId,
+                        remarks = record.remarks,
+                        fromAccountId = record.fromAccountId,
+                        toAccountId = record.toAccountId,
+                        frequency = frequency,
+                        interval = repeatInterval,
+                        anchorDay = anchorDay,
+                        startDate = record.date,
+                        nextDate = RecurrenceCalculator.nextAfter(selectedDate, frequency, repeatInterval, anchorDay).toString(),
+                        createdAt = LocalDate.now().toString()
+                    )
+                )
+                record = record.copy(recurringRuleId = ruleId)
+            }
 
             if (isEditMode) {
                 repository.update(record)
@@ -246,6 +351,11 @@ class LogViewModel @Inject constructor(
             }
             saveSuccess = true
         }
+    }
+
+    fun setRepeat(frequency: String?, interval: Int) {
+        repeatFrequency = frequency
+        repeatInterval = interval
     }
 
     /** Called when the user picks a date from the date pill's picker. */
@@ -326,6 +436,8 @@ class LogViewModel @Inject constructor(
         description = ""
         amount = ""
         remarks = ""
+        repeatFrequency = null
+        repeatInterval = 1
     }
 
     private fun observeSyncStatus() {
@@ -337,5 +449,19 @@ class LogViewModel @Inject constructor(
     private companion object {
         const val KEY_SELECTED_DATE = "logSelectedDate"
         const val KEY_DATE_PINNED = "logDatePinned"
+    }
+}
+
+/** How Add Transaction was opened from More > Repeating transactions, if it was. */
+enum class RepeatEditMode {
+    None, Occurrence, Rule;
+
+    companion object {
+        fun from(mode: String?, ruleId: Long?): RepeatEditMode = when {
+            ruleId == null || ruleId <= 0L -> None
+            mode == "rule" -> Rule
+            mode == "occurrence" -> Occurrence
+            else -> None
+        }
     }
 }

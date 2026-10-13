@@ -20,11 +20,16 @@ val changelogReleases: List<ChangelogRelease> = listOf(
         date = "2026-10-12",
         added = listOf(
             "Daily reminder: an evening nudge if nothing was logged today, showing Left to spend, with a Log now button",
-            "Daily reminder: confirming an auto-captured transaction counts as logging, so the reminder stays quiet"
+            "Daily reminder: confirming an auto-captured transaction counts as logging, so the reminder stays quiet",
+            "Add Transaction: a Repeat chip for rent, SIPs or salary, which then adds itself on each date",
+            "Repeating (in More): see what's coming, pause, edit or delete a repeat, and set it to Ask me first",
+            "Ledger: a chip shows Ask me first repeats waiting for Add, Edit & add or Skip",
+            "Repeats stay on this phone for now: a reinstall keeps the transactions they added but not the repeats"
         ),
         developer = listOf(
             "CONTEXT.md defines Repeat rule and Repeating transaction, and Merchant rules remember a renamed description",
-            "Daily reminder: ReminderRules.message is pure and unit tested; MainActivity takes an open-Add-Transaction extra"
+            "Daily reminder: ReminderRules.message is pure and unit tested; MainActivity takes an open-Add-Transaction extra",
+            "Repeat rules: local-only recurring_rules table (Room 24 → 25), pure RepeatSchedule, repository and migration tests"
         )
     ),
     ChangelogRelease(
