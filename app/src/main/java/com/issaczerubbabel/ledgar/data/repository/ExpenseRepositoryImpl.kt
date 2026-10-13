@@ -74,6 +74,8 @@ class ExpenseRepositoryImpl @Inject constructor(
     override fun getRecordsByDateRange(startDate: String, endDate: String): Flow<List<ExpenseRecord>> =
         dao.getRecordsByDateRange(startDate, endDate)
 
+    override suspend fun lastExpenseAccountId(): Long? = dao.lastExpenseAccountId()
+
     override suspend fun setBookmarked(id: Long, isBookmarked: Boolean) =
         dao.updateBookmarkStatus(id = id, isBookmarked = isBookmarked)
 
