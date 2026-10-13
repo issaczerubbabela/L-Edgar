@@ -83,8 +83,20 @@ fun Ledger.filterOptions(
     month: YearMonth,
     draft: LedgerFilter,
     pendingDeleteIds: Set<Long> = emptySet()
+): FilterOptions = filterOptionsFor(monthTransactions(transactions, month, pendingDeleteIds), accounts, expenseCategories, incomeCategories, draft)
+
+/**
+ * The filter sheet's choices with amounts from [inScope] (Search passes the Transactions its other
+ * filters leave), and [draft] applied to the count and the ticks.
+ */
+fun Ledger.filterOptionsFor(
+    inScope: List<ExpenseRecord>,
+    accounts: List<AccountRecord>,
+    expenseCategories: List<String>,
+    incomeCategories: List<String>,
+    draft: LedgerFilter
 ): FilterOptions {
-    val inMonth = monthTransactions(transactions, month, pendingDeleteIds)
+    val inMonth = inScope
 
     fun categorySection(type: String, listed: List<String>, ticked: Set<String>): FilterOptionsSection {
         val totals = inMonth.filter { it.type == type && it.category.isNotBlank() }

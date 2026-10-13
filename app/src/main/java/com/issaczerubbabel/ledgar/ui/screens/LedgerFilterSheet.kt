@@ -53,7 +53,7 @@ import com.issaczerubbabel.ledgar.ledger.LedgerFilter
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LedgerFilterSheet(
-    monthLabel: String,
+    title: String,
     options: FilterOptions,
     draft: LedgerFilter,
     onToggleExpense: (String) -> Unit,
@@ -63,20 +63,25 @@ fun LedgerFilterSheet(
     onAnyAccount: () -> Unit,
     onClear: () -> Unit,
     onShow: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /** Where the amounts come from, for the folded list: "Not used this month (n)". */
+    unusedLabel: String = "Not used this month",
+    /** Search narrowed to one Type offers only that Type's Categories, or none for a Transfer. */
+    showExpenseCategories: Boolean = true,
+    showIncomeCategories: Boolean = true
 ) {
-    var showIncome by rememberSaveable { mutableStateOf(false) }
+    var showIncome by rememberSaveable { mutableStateOf(!showExpenseCategories) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Filter $monthLabel", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                 TextButton(onClick = onClear) { Text("Clear") }
             }
             LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
-                item {
+                if (showExpenseCategories || showIncomeCategories) item {
                     val listShown = if (showIncome) draft.incomeCategories else draft.expenseCategories
                     SectionHeader("Categories", isAny = listShown.isEmpty(), onAny = { onAnyCategory(showIncome) })
-                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    if (showExpenseCategories && showIncomeCategories) SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                         SegmentedButton(
                             selected = !showIncome,
                             onClick = { showIncome = false },
@@ -89,16 +94,16 @@ fun LedgerFilterSheet(
                         ) { Text("Income") }
                     }
                 }
-                if (showIncome) {
-                    optionList("income", options.income) { onToggleIncome(it.key) }
-                } else {
-                    optionList("expense", options.expense) { onToggleExpense(it.key) }
+                if (showIncome && showIncomeCategories) {
+                    optionList("income", options.income, unusedLabel) { onToggleIncome(it.key) }
+                } else if (!showIncome && showExpenseCategories) {
+                    optionList("expense", options.expense, unusedLabel) { onToggleExpense(it.key) }
                 }
                 item {
-                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                    if (showExpenseCategories || showIncomeCategories) HorizontalDivider(Modifier.padding(vertical = 8.dp))
                     SectionHeader("Accounts", isAny = !draft.hasAccounts, onAny = onAnyAccount)
                 }
-                optionList("accounts", options.accounts) { onToggleAccount(it.key.toLong()) }
+                optionList("accounts", options.accounts, unusedLabel) { onToggleAccount(it.key.toLong()) }
             }
             Button(
                 onClick = onShow,
@@ -126,8 +131,8 @@ private fun SectionHeader(title: String, isAny: Boolean, onAny: () -> Unit) {
     }
 }
 
-/** The used options, then the unused ones under "Not used this month (n)". */
-private fun LazyListScope.optionList(key: String, section: FilterOptionsSection, onToggle: (FilterOptionUi) -> Unit) {
+/** The used options, then the unused ones folded under "[unusedLabel] (n)". */
+private fun LazyListScope.optionList(key: String, section: FilterOptionsSection, unusedLabel: String, onToggle: (FilterOptionUi) -> Unit) {
     items(section.used, key = { "$key-${it.key}" }) { OptionRow(it, onToggle) }
     if (section.unused.isNotEmpty()) {
         item(key = "$key-fold") {
@@ -138,7 +143,7 @@ private fun LazyListScope.optionList(key: String, section: FilterOptionsSection,
                     modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }.heightIn(min = 48.dp)
                 ) {
                     Text(
-                        "Not used this month (${section.unused.size})",
+                        "$unusedLabel (${section.unused.size})",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f)

@@ -375,7 +375,7 @@ fun HistoryScreen(
         val options by vm.filterOptions.collectAsStateWithLifecycle()
         options?.let {
             LedgerFilterSheet(
-                monthLabel = state.monthLabel,
+                title = "Filter ${state.monthLabel}",
                 options = it,
                 draft = draft,
                 onToggleExpense = vm::toggleExpenseCategory,
