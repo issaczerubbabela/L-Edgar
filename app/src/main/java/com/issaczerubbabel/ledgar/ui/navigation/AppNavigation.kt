@@ -207,7 +207,10 @@ private val LEDGER_SUB_ROUTES = setOf(Screen.Search.route, Screen.Bookmarks.rout
 val bottomNavItems = listOf(Screen.Trans, Screen.Stats, Screen.Budget, Screen.Accounts, Screen.More)
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(
+    openAddTransaction: Boolean = false,
+    onAddTransactionOpened: () -> Unit = {}
+) {
     val navController = rememberNavController()
     // What a transaction sheet's Edit and Copy buttons open, wherever the sheet is.
     val editTransaction: (Long) -> Unit = { id ->
@@ -347,6 +350,16 @@ fun AppNavigation() {
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
+    }
+
+    // A launch that asked for Add Transaction. With App Lock on, Add Transaction is already where
+    // the app opens, so the lock gate is unchanged.
+    LaunchedEffect(openAddTransaction, currentDest?.route) {
+        if (!openAddTransaction || currentDest == null) return@LaunchedEffect
+        if (currentDest.route?.startsWith(LOG_BASE_ROUTE) != true) {
+            navController.navigate(logRoute()) { launchSingleTop = true }
+        }
+        onAddTransactionOpened()
     }
 
     LaunchedEffect(lockConfig.enabled, appLockViewModel.isUnlocked, currentDest?.route) {

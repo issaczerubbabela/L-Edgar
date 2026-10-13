@@ -6,6 +6,18 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `app/src/main/java/com/issaczerubbabel/ledgar/ui/screens/ChangelogData.kt`,
 which is also what the app shows under More > Changelog. Developer notes appear here only.
 
+## [1.6.0] - 2026-10-12
+
+### Added
+
+- Daily reminder: an evening nudge if nothing was logged today, showing Left to spend, with a Log now button
+- Daily reminder: confirming an auto-captured transaction counts as logging, so the reminder stays quiet
+
+### Developer
+
+- CONTEXT.md defines Repeat rule and Repeating transaction, and Merchant rules remember a renamed description
+- Daily reminder: ReminderRules.message is pure and unit tested; MainActivity takes an open-Add-Transaction extra
+
 ## [1.5.0] - 2026-10-12
 
 ### Added
@@ -261,6 +273,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - Room database, Vico charts and date-parsing tests
 
+[1.6.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.6.0
 [1.5.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.5.0
 [1.4.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.4.0
 [1.3.2]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.3.2
