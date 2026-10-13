@@ -372,6 +372,10 @@ object StatsReport {
         }
     }
 
+    /** Earned, Spent and Saved for [records] by the rules of ADR-0004, as Stats counts them outside Cycle view. */
+    fun moneyTotals(records: List<ExpenseRecord>, accounts: List<AccountRecord>, roles: StatsRoles): MoneyTotals =
+        Money(roles, groupLookup(accounts), budgetBasis = false).totals(records)
+
     private fun groupLookup(accounts: List<AccountRecord>): (Long?, String?) -> String? {
         val byId = accounts.associate { it.id to it.groupName }
         val byName = accounts.associate { it.accountName.key() to it.groupName }

@@ -22,6 +22,11 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Add Transaction and Quick Add: add, subtract, multiply or divide on the keypad, then = and save the result
 - Add Transaction: the Note sheet suggests descriptions you've used, and fills their usual Category and Account
 
+### Changed
+
+- Search: find Categories, Accounts and amounts, and narrow with Type, Date, Category, Account and Amount chips
+- Search: totals show Spent and Earned the way Stats counts them, and your search stays after rotating
+
 ### Developer
 
 - CONTEXT.md defines Repeat rule and Repeating transaction, and Merchant rules remember a renamed description
@@ -32,6 +37,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - CaptureRepositoryImplTest, UndoableActionsTest and DescriptionSuggestionsTest cover renames, Undo and suggestions
 - AmountInput: pure evaluateAmount (× ÷ before + −, BigDecimal, half-up to the paisa) with tests for entry and limits
 - DescriptionSuggestions.fill keeps the user's own Category and Account choices and never changes them on an edit
+- TransactionSearch: pure matching, chips, date presets and Stats-rule totals, tested; the SQL search query is gone
 
 ## [1.5.0] - 2026-10-12
 

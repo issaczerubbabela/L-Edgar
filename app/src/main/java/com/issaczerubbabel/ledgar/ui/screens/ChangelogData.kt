@@ -31,6 +31,10 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Add Transaction and Quick Add: add, subtract, multiply or divide on the keypad, then = and save the result",
             "Add Transaction: the Note sheet suggests descriptions you've used, and fills their usual Category and Account"
         ),
+        changed = listOf(
+            "Search: find Categories, Accounts and amounts, and narrow with Type, Date, Category, Account and Amount chips",
+            "Search: totals show Spent and Earned the way Stats counts them, and your search stays after rotating"
+        ),
         developer = listOf(
             "CONTEXT.md defines Repeat rule and Repeating transaction, and Merchant rules remember a renamed description",
             "Daily reminder: ReminderRules.message is pure and unit tested; MainActivity takes an open-Add-Transaction extra",
@@ -39,7 +43,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Merchant rules keep a description (Room 25 → 26); pure DescriptionSuggestions is ready for #82 to reuse",
             "CaptureRepositoryImplTest, UndoableActionsTest and DescriptionSuggestionsTest cover renames, Undo and suggestions",
             "AmountInput: pure evaluateAmount (× ÷ before + −, BigDecimal, half-up to the paisa) with tests for entry and limits",
-            "DescriptionSuggestions.fill keeps the user's own Category and Account choices and never changes them on an edit"
+            "DescriptionSuggestions.fill keeps the user's own Category and Account choices and never changes them on an edit",
+            "TransactionSearch: pure matching, chips, date presets and Stats-rule totals, tested; the SQL search query is gone"
         )
     ),
     ChangelogRelease(
