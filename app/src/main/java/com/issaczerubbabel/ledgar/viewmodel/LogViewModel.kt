@@ -3,6 +3,7 @@ package com.issaczerubbabel.ledgar.viewmodel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -22,6 +23,8 @@ import com.issaczerubbabel.ledgar.data.repository.UndoableActions
 import com.issaczerubbabel.ledgar.ledger.Ledger
 import com.issaczerubbabel.ledgar.sync.SyncScheduler
 import com.issaczerubbabel.ledgar.sync.SyncStatus
+import com.issaczerubbabel.ledgar.util.DescriptionSuggestion
+import com.issaczerubbabel.ledgar.util.DescriptionSuggestions
 import com.issaczerubbabel.ledgar.util.KeypadAction
 import com.issaczerubbabel.ledgar.util.RecurrenceCalculator
 import com.issaczerubbabel.ledgar.util.RepeatSchedule
@@ -30,7 +33,15 @@ import com.issaczerubbabel.ledgar.util.amountValue
 import com.issaczerubbabel.ledgar.util.applyKeypadAction
 import com.issaczerubbabel.ledgar.util.isAmountExpression
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -101,6 +112,10 @@ class LogViewModel @Inject constructor(
     var selectedFromAccountId by mutableStateOf<Long?>(null)
     var selectedToAccountId by mutableStateOf<Long?>(null)
     var description by mutableStateOf("")
+
+    /** The user picked the Category or Account themselves, so a Description suggestion leaves it alone. */
+    private var categoryChosenByUser = false
+    private var accountChosenByUser = false
     var amount by mutableStateOf("")
     var remarks by mutableStateOf("")
     var saveSuccess by mutableStateOf(false)
@@ -205,6 +220,8 @@ class LogViewModel @Inject constructor(
                 }
                 selectedFromAccountId = source.fromAccountId
                 selectedToAccountId = source.toAccountId
+                categoryChosenByUser = selectedCategory.isNotBlank()
+                accountChosenByUser = selectedAccountId != null
                 description = source.description
                 val copiedAmount = if (isAdjustment) kotlin.math.abs(source.amount) else source.amount
                 amount = if (copiedAmount % 1.0 == 0.0) copiedAmount.toInt().toString() else copiedAmount.toString()
@@ -408,9 +425,64 @@ class LogViewModel @Inject constructor(
         }
     }
 
+    fun chooseCategory(category: String) {
+        selectedCategory = category
+        categoryChosenByUser = true
+    }
+
+    /** Switching type clears the Category and Accounts, and with them the user's choices. */
+    fun selectType(type: String) {
+        selectedType = type
+        selectedCategory = if (type == TransactionType.TRANSFER) TransactionType.TRANSFER else ""
+        selectedAccountId = null
+        selectedFromAccountId = null
+        selectedToAccountId = null
+        categoryChosenByUser = false
+        accountChosenByUser = false
+    }
+
+    // Bumped after each save, so the Description just used is offered next time.
+    private val descriptionUsesVersion = MutableStateFlow(0)
+
+    /**
+     * Up to five Descriptions used before that match what's typed, for an Expense or Income. The
+     * ranking runs off the main thread, a moment after typing stops.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
+    val descriptionSuggestions: StateFlow<List<DescriptionSuggestion>> = combine(
+        snapshotFlow { selectedType }.combine(descriptionUsesVersion) { type, _ -> type }.mapLatest { type ->
+            type to if (type == TransactionType.EXPENSE || type == TransactionType.INCOME) repository.descriptionUses(type) else emptyList()
+        },
+        snapshotFlow { description }.debounce(150),
+        expenseCategories,
+        incomeCategories,
+        accounts
+    ) { (type, uses), query, expense, income, accountList ->
+        val categories = if (type == TransactionType.INCOME) income else expense
+        DescriptionSuggestions.suggest(uses, query, categories.toSet(), accountList.map { it.id }.toSet(), LocalDate.now())
+            .filterNot { it.description.equals(query.trim(), ignoreCase = true) }
+    }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
+     * Fills the Description from [suggestion], and its Category and Account where the user hasn't
+     * picked one. Returns what else it filled, for TalkBack ("Filled Food and HDFC Savings"), or null.
+     */
+    fun applySuggestion(suggestion: DescriptionSuggestion): String? {
+        val fill = DescriptionSuggestions.fill(suggestion, categoryChosenByUser, accountChosenByUser, isEditMode)
+        description = fill.description
+        fill.category?.let { selectedCategory = it }
+        fill.accountId?.let { selectedAccountId = it }
+        val filled = listOfNotNull(fill.category, fill.accountId?.let { id -> accounts.value.firstOrNull { it.id == id }?.accountName })
+        return filled.takeIf { it.isNotEmpty() }?.joinToString(" and ", prefix = "Filled ")
+    }
+
     fun setAccount(target: AccountTarget, accountId: Long) {
         when (target) {
-            AccountTarget.Account -> selectedAccountId = accountId
+            AccountTarget.Account -> {
+                selectedAccountId = accountId
+                accountChosenByUser = true
+            }
             AccountTarget.From -> selectedFromAccountId = accountId
             AccountTarget.To -> selectedToAccountId = accountId
         }
@@ -444,6 +516,9 @@ class LogViewModel @Inject constructor(
         remarks = ""
         repeatFrequency = null
         repeatInterval = 1
+        categoryChosenByUser = false
+        accountChosenByUser = false
+        descriptionUsesVersion.value++
     }
 
     private fun observeSyncStatus() {

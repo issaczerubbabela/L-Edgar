@@ -82,4 +82,29 @@ class DescriptionSuggestionsTest {
         assertTrue(suggest(listOf(use("Swiggy")), query = "petrol").isEmpty())
         assertTrue(suggest(emptyList()).isEmpty())
     }
+
+    private val swiggy = DescriptionSuggestion("Swiggy", category = "Food", accountId = 1)
+
+    @Test
+    fun pickingASuggestionFillsWhatTheUserHasNotChosen() {
+        val fill = DescriptionSuggestions.fill(swiggy, categoryChosen = false, accountChosen = false, editing = false)
+
+        assertEquals(SuggestionFill("Swiggy", category = "Food", accountId = 1), fill)
+    }
+
+    @Test
+    fun theUsersOwnChoiceIsKept() {
+        val fill = DescriptionSuggestions.fill(swiggy, categoryChosen = true, accountChosen = false, editing = false)
+
+        assertNull(fill.category)
+        assertEquals(1L, fill.accountId)
+    }
+
+    @Test
+    fun editingATransactionOnlyChangesItsDescription() {
+        assertEquals(
+            SuggestionFill("Swiggy", category = null, accountId = null),
+            DescriptionSuggestions.fill(swiggy, categoryChosen = false, accountChosen = false, editing = true)
+        )
+    }
 }
