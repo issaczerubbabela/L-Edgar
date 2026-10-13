@@ -22,9 +22,13 @@ import com.issaczerubbabel.ledgar.data.repository.UndoableActions
 import com.issaczerubbabel.ledgar.ledger.Ledger
 import com.issaczerubbabel.ledgar.sync.SyncScheduler
 import com.issaczerubbabel.ledgar.sync.SyncStatus
+import com.issaczerubbabel.ledgar.util.KeypadAction
 import com.issaczerubbabel.ledgar.util.RecurrenceCalculator
 import com.issaczerubbabel.ledgar.util.RepeatSchedule
 import com.issaczerubbabel.ledgar.util.TransactionType
+import com.issaczerubbabel.ledgar.util.amountValue
+import com.issaczerubbabel.ledgar.util.applyKeypadAction
+import com.issaczerubbabel.ledgar.util.isAmountExpression
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.SharingStarted
@@ -233,6 +237,8 @@ class LogViewModel @Inject constructor(
     }
 
     fun save() {
+        // The keypad works a sum out before it saves; this only covers a caller that didn't.
+        if (isAmountExpression(amount)) amount = applyKeypadAction(amount, KeypadAction.Evaluate)
         val parsedAmount = amount.toDoubleOrNull()
         // A Balance adjustment is signed: negative lowers the balance.
         val isAdjustment = selectedType == TransactionType.ADJUSTMENT
@@ -416,7 +422,7 @@ class LogViewModel @Inject constructor(
         type = selectedType,
         category = selectedCategory,
         date = selectedDate,
-        draftAmount = amount.toDoubleOrNull() ?: 0.0,
+        draftAmount = amountValue(amount, allowNegative = selectedType == TransactionType.ADJUSTMENT) ?: 0.0,
         original = editingOriginal
     )
 

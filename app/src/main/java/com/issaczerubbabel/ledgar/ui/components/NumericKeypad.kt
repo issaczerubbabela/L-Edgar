@@ -36,16 +36,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.issaczerubbabel.ledgar.util.AmountOperator
 import com.issaczerubbabel.ledgar.util.KeypadAction
 
 private val KEY_GAP = 8.dp
 private val KEY_RADIUS_IDLE = 22.dp
 private val KEY_RADIUS_PRESSED = 10.dp
 private const val KEYPAD_ROWS = 4
+private const val OPERATOR_COLUMN_WEIGHT = 0.75f
 
 // Keypad fills a fraction of the actual screen height rather than a fixed dp value, so it
 // reads as a real keypad (roughly half the screen) on any device instead of a fixed-size strip
@@ -55,11 +60,13 @@ private val KEYPAD_MIN_HEIGHT = 300.dp
 private val KEYPAD_MAX_HEIGHT = 460.dp
 
 /**
- * Custom weighted numeric keypad: 7 8 9 [backspace] / 4 5 6 [commit, spans 3 rows] /
- * 1 2 3 / 0 [spans 2 cells] .
+ * Custom weighted numeric keypad: 7 8 9 ÷ [backspace] / 4 5 6 × [commit, spans 3 rows] /
+ * 1 2 3 − / 0 [spans 2 cells] . +
  *
- * Emits [KeypadAction]s for digit/dot/backspace against the caller's amount string, and calls
- * [onCommit] from a dedicated key that spans the right column's lower three rows.
+ * Emits [KeypadAction]s for digits, dot, operators and backspace against the caller's amount
+ * string, and calls [onCommit] from a dedicated key that spans the right column's lower three rows.
+ * While the amount holds an expression ([hasExpression]) that key reads "=": the caller works the
+ * amount out on the first tap and saves on the next, so a half-typed sum is never saved by reflex.
  *
  * The keypad never pads for the system navigation bar itself: whatever hosts it (the screen's
  * Scaffold, or the Quick Add sheet) owns the bottom inset, so it is applied once and cannot eat
@@ -76,7 +83,8 @@ fun NumericKeypad(
     onAction: (KeypadAction) -> Unit,
     onCommit: () -> Unit,
     modifier: Modifier = Modifier,
-    commitEnabled: Boolean = true
+    commitEnabled: Boolean = true,
+    hasExpression: Boolean = false
 ) {
     val haptics = LocalHapticFeedback.current
 
@@ -123,6 +131,32 @@ fun NumericKeypad(
             }
         }
 
+        // Narrower than a digit column, so the digit keys keep their size.
+        Column(
+            modifier = Modifier.weight(OPERATOR_COLUMN_WEIGHT),
+            verticalArrangement = Arrangement.spacedBy(KEY_GAP)
+        ) {
+            listOf(AmountOperator.DIVIDE, AmountOperator.TIMES, AmountOperator.MINUS, AmountOperator.PLUS).forEach { operator ->
+                KeypadKey(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(keyRowHeight)
+                        .semantics { contentDescription = operator.spoken },
+                    background = MaterialTheme.colorScheme.secondaryContainer,
+                    onClick = { act(KeypadAction.Operator(operator)) }
+                ) {
+                    Text(
+                        text = operator.display,
+                        fontSize = keyFontSize.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        // The key reads its name ("Divided by"), not the symbol.
+                        modifier = Modifier.clearAndSetSemantics {}
+                    )
+                }
+            }
+        }
+
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -161,12 +195,22 @@ fun NumericKeypad(
                     onCommit()
                 }
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Check,
-                    contentDescription = "Save transaction",
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(keyIconSize * 1.15f)
-                )
+                if (hasExpression) {
+                    Text(
+                        text = "=",
+                        fontSize = (keyFontSize * 1.2f).sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.semantics { contentDescription = "Work out amount" }
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = "Save transaction",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(keyIconSize * 1.15f)
+                    )
+                }
             }
         }
     }
