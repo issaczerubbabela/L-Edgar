@@ -24,6 +24,9 @@ data class DescriptionSuggestion(
     val accountId: Long?
 )
 
+/** What picking a suggestion changes: always the Description, and a Category or Account only where null isn't. */
+data class SuggestionFill(val description: String, val category: String?, val accountId: Long?)
+
 /**
  * Suggests Descriptions from the user's own Transactions as they type. Derived, never stored: there
  * is nothing to sync or back up. Kept free of Android classes so it runs as a plain JVM test.
@@ -78,6 +81,17 @@ object DescriptionSuggestions {
             .take(MAX_SUGGESTIONS)
             .map { it.suggestion }
     }
+
+    /**
+     * What picking [suggestion] fills: the Description, plus its Category and Account where the user
+     * hasn't chosen one. Editing a Transaction never changes its Category or Account this way.
+     */
+    fun fill(suggestion: DescriptionSuggestion, categoryChosen: Boolean, accountChosen: Boolean, editing: Boolean) =
+        SuggestionFill(
+            description = suggestion.description,
+            category = suggestion.category.takeUnless { categoryChosen || editing },
+            accountId = suggestion.accountId.takeUnless { accountChosen || editing }
+        )
 
     /** What two of the three latest agree on, else the latest. [newestFirst] is never empty. */
     private fun <T> usual(newestFirst: List<T>): T? {

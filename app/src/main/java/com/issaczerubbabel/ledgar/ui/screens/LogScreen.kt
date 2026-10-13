@@ -2,6 +2,17 @@ package com.issaczerubbabel.ledgar.ui.screens
 
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextOverflow
 import com.issaczerubbabel.ledgar.viewmodel.RepeatEditMode
 import androidx.activity.compose.BackHandler
@@ -27,6 +38,7 @@ import com.issaczerubbabel.ledgar.ui.components.NumericKeypad
 import com.issaczerubbabel.ledgar.ui.components.OptionPickerSheet
 import com.issaczerubbabel.ledgar.ui.components.PickerOption
 import com.issaczerubbabel.ledgar.ui.components.SingleDatePickerDialog
+import com.issaczerubbabel.ledgar.util.DescriptionSuggestion
 import com.issaczerubbabel.ledgar.util.RecurrenceCalculator
 import com.issaczerubbabel.ledgar.util.RecurrenceFrequency
 import com.issaczerubbabel.ledgar.util.TransactionType
@@ -83,6 +95,7 @@ fun LogScreen(
     val accounts by vm.accounts.collectAsStateWithLifecycle()
     val expenseCategories by vm.expenseCategories.collectAsStateWithLifecycle()
     val incomeCategories by vm.incomeCategories.collectAsStateWithLifecycle()
+    val descriptionSuggestions by vm.descriptionSuggestions.collectAsStateWithLifecycle()
     val bucketContext by vm.bucketContext.collectAsStateWithLifecycle()
 
     BackHandler(
@@ -168,13 +181,7 @@ fun LogScreen(
                 )
             } else TypeRow(
                 selectedType = vm.selectedType,
-                onSelect = { type ->
-                    vm.selectedType = type
-                    vm.selectedCategory = if (type == TransactionType.TRANSFER) TransactionType.TRANSFER else ""
-                    vm.selectedAccountId = null
-                    vm.selectedFromAccountId = null
-                    vm.selectedToAccountId = null
-                }
+                onSelect = vm::selectType
             )
 
             AmountDisplay(
@@ -269,7 +276,7 @@ fun LogScreen(
                 options = categories.map { PickerOption(it) },
                 selectedKey = vm.selectedCategory,
                 onSelect = {
-                    vm.selectedCategory = it
+                    vm.chooseCategory(it)
                     activeSheet = null
                 },
                 onCreate = {
@@ -303,6 +310,9 @@ fun LogScreen(
         LogSheet.Note -> NoteSheet(
             description = vm.description,
             remarks = vm.remarks,
+            suggestions = descriptionSuggestions,
+            accountNames = accounts.associate { it.id to it.accountName },
+            onPickSuggestion = vm::applySuggestion,
             onDescriptionChange = { vm.description = it },
             onRemarksChange = { vm.remarks = it },
             onDismiss = { activeSheet = null }
@@ -451,11 +461,23 @@ private fun TypeRow(selectedType: String, onSelect: (String) -> Unit) {
 private fun NoteSheet(
     description: String,
     remarks: String,
+    suggestions: List<DescriptionSuggestion>,
+    accountNames: Map<Long, String>,
+    onPickSuggestion: (DescriptionSuggestion) -> String?,
     onDescriptionChange: (String) -> Unit,
     onRemarksChange: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // What the last picked suggestion filled, read out by TalkBack and shown under the chips.
+    var filledNote by remember { mutableStateOf<String?>(null) }
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    // Held here so a picked suggestion puts the cursor after the text, not where the typing stopped.
+    var descriptionField by remember { mutableStateOf(TextFieldValue(description, TextRange(description.length))) }
+    LaunchedEffect(description) {
+        if (description != descriptionField.text) descriptionField = TextFieldValue(description, TextRange(description.length))
+    }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier
@@ -467,12 +489,42 @@ private fun NoteSheet(
         ) {
             Text("Note", style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(
-                value = description,
-                onValueChange = onDescriptionChange,
+                value = descriptionField,
+                onValueChange = {
+                    descriptionField = it
+                    onDescriptionChange(it.text)
+                },
                 label = { Text("Description") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester)
             )
+            if (suggestions.isNotEmpty()) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(suggestions, key = { it.description.lowercase() }) { suggestion ->
+                        val label = listOfNotNull(suggestion.description, suggestion.category).joinToString(" · ")
+                        val spoken = listOfNotNull(suggestion.description, suggestion.category, suggestion.accountId?.let { accountNames[it] })
+                            .joinToString(", ", prefix = "Use ")
+                        SuggestionChip(
+                            onClick = { filledNote = onPickSuggestion(suggestion) },
+                            label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .semantics(mergeDescendants = true) { contentDescription = spoken }
+                        )
+                    }
+                }
+            }
+            filledNote?.let { note ->
+                Text(
+                    note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                )
+            }
             OutlinedTextField(
                 value = remarks,
                 onValueChange = onRemarksChange,
