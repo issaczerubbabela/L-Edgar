@@ -109,6 +109,26 @@ class CaptureMigrationTest {
     }
 
     @Test
+    fun aMerchantRuleKeepsItsCategoryAndCanBeGivenADescription() = runBlocking {
+        createAt(20) { db ->
+            CaptureMigration.createTables(db)
+            db.execSQL(
+                "INSERT INTO merchant_rules (merchantNorm, category, type, origin, hitCount, streak, updatedAt) " +
+                    "VALUES ('SWIGGY INSTAMART', 'Groceries', 'Expense', 'LEARNED', 4, 0, 1)"
+            )
+        }
+
+        val db = DatabaseModule.provideDatabase(context)
+        val rule = db.merchantRuleDao().getByMerchant("SWIGGY INSTAMART")!!
+        assertEquals("Groceries", rule.category)
+        assertEquals(null, rule.description)
+
+        db.merchantRuleDao().upsert(rule.copy(description = "Instamart"))
+        assertEquals("Instamart", db.merchantRuleDao().getByMerchant("SWIGGY INSTAMART")!!.description)
+        db.close()
+    }
+
+    @Test
     fun aDevelopmentBuildsVersion19WithoutTheUnparsedTableIsRepaired() = runBlocking {
         createAt(19) { db ->
             CaptureMigration.createTables(db)

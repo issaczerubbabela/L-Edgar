@@ -16,7 +16,7 @@ class CaptureNotificationTextTest {
 
     @Test
     fun titleNamesTheMerchantAndTheExactAmount() {
-        val content = CaptureNotificationText.build(capture("Swiggy Instamart", 212.4), "Groceries", "HDFC Savings")
+        val content = CaptureNotificationText.build(capture("Swiggy Instamart", 212.4), "Swiggy Instamart", "Groceries", "HDFC Savings")
 
         assertEquals("Swiggy Instamart  −₹212.40", content.title)
         assertTrue(content.text.startsWith("Groceries · HDFC Savings"))
@@ -24,16 +24,16 @@ class CaptureNotificationTextTest {
 
     @Test
     fun incomeIsShownWithAPlus() {
-        val content = CaptureNotificationText.build(capture("ACME", 52000.0, "Income"), "Salary", "Axis")
+        val content = CaptureNotificationText.build(capture("ACME", 52000.0, "Income"), "ACME", "Salary", "Axis")
 
         assertEquals("ACME  +₹52,000", content.title)
     }
 
     @Test
     fun theLockScreenVersionRevealsNeitherMerchantNorAmount() {
-        val content = CaptureNotificationText.build(capture("Swiggy Instamart", 450.0), "Groceries", "HDFC Savings")
+        val content = CaptureNotificationText.build(capture("Swiggy Instamart", 450.0), "Instamart", "Groceries", "HDFC Savings")
 
-        assertFalse(content.publicTitle.contains("Swiggy"))
+        assertFalse(content.publicTitle.contains("Instamart"))
         assertFalse(content.publicTitle.contains("450"))
     }
 
@@ -41,5 +41,11 @@ class CaptureNotificationTextTest {
     fun aMissingMerchantFallsBackToAPlainWord() {
         assertEquals("Payment", capture(null, 10.0).displayTitle())
         assertEquals("Money received", capture("  ", 10.0, "Income").displayTitle())
+    }
+
+    @Test
+    fun aRenamedMerchantIsShownByItsNewName() {
+        assertEquals("Instamart", capture("SWIGGY*BLR INSTAMART", 10.0).displayTitle(rename = "Instamart"))
+        assertEquals("SWIGGY*BLR INSTAMART", capture("SWIGGY*BLR INSTAMART", 10.0).displayTitle(rename = " "))
     }
 }

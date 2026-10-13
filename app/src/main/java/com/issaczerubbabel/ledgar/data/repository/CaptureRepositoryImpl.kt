@@ -3,6 +3,7 @@ package com.issaczerubbabel.ledgar.data.repository
 import androidx.room.withTransaction
 import com.issaczerubbabel.ledgar.capture.categorize.MerchantRuleLearner
 import com.issaczerubbabel.ledgar.capture.categorize.RuleChange
+import com.issaczerubbabel.ledgar.capture.notify.displayTitle
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.dao.AccountAliasDao
 import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
@@ -15,6 +16,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
 import com.issaczerubbabel.ledgar.util.TransactionType
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import java.time.Instant
 import java.time.ZoneId
 import javax.inject.Inject
@@ -33,6 +35,12 @@ class CaptureRepositoryImpl @Inject constructor(
     override fun observePendingCount(): Flow<Int> = captureDao.observePendingCount()
 
     override suspend fun getById(captureId: Long): CapturedTransaction? = captureDao.getById(captureId)
+
+    override fun observeRenames(): Flow<Map<String, String>> =
+        merchantRuleDao.observeRenames().map { renames -> renames.associate { it.merchantNorm to it.description } }
+
+    override suspend fun titleFor(capture: CapturedTransaction): String =
+        capture.displayTitle(capture.merchantNorm?.let { merchantRuleDao.getByMerchant(it)?.description })
 
     override suspend fun confirm(captureId: Long, edits: CaptureEdits): Long? = database.withTransaction {
         val capture = captureDao.getById(captureId) ?: return@withTransaction null
@@ -75,7 +83,9 @@ class CaptureRepositoryImpl @Inject constructor(
                 type = edits.type,
                 finalCategory = category,
                 alwaysUse = edits.alwaysUse,
-                now = System.currentTimeMillis()
+                now = System.currentTimeMillis(),
+                // Renaming is remembered; confirming with the bank's own text forgets an earlier rename.
+                description = edits.description.trim().takeIf { it.isNotEmpty() && it != capture.displayTitle() }
             )
             when (change) {
                 is RuleChange.Upsert -> merchantRuleDao.upsert(change.rule)

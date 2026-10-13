@@ -69,7 +69,7 @@ class CaptureNotificationInstrumentedTest {
         )
         val repository = CaptureRepositoryImpl(db, db.captureDao(), db.merchantRuleDao(), db.accountAliasDao(), db.expenseDao(), db.unparsedAlertDao())
         handler = CaptureActionHandler(db.captureDao(), repository, ReminderPreferences(context))
-        notifier = CaptureNotifier(context, db.captureDao(), db.accountDao())
+        notifier = CaptureNotifier(context, db.captureDao(), db.accountDao(), repository)
     }
 
     @After

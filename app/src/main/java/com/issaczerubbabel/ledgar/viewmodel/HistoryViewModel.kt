@@ -12,8 +12,8 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
-import com.issaczerubbabel.ledgar.data.repository.UndoableDelete
-import com.issaczerubbabel.ledgar.data.repository.UndoableDeletes
+import com.issaczerubbabel.ledgar.data.repository.UndoableAction
+import com.issaczerubbabel.ledgar.data.repository.UndoableActions
 import com.issaczerubbabel.ledgar.ledger.BatchAction
 import com.issaczerubbabel.ledgar.ledger.FilterChipUi
 import com.issaczerubbabel.ledgar.ledger.FilterOptions
@@ -45,12 +45,12 @@ class HistoryViewModel @Inject constructor(
     private val repository: ExpenseRepository,
     accountRepository: AccountRepository,
     dropdownOptionRepository: DropdownOptionRepository,
-    private val undoableDeletes: UndoableDeletes
+    private val undoableActions: UndoableActions
 ) : ViewModel() {
 
     private val _month = MutableStateFlow(YearMonth.now())
     /** Transactions deleted but still offering Undo: hidden from the Ledger, not yet written. */
-    private val pendingDeleteIds = undoableDeletes.hiddenIds
+    private val pendingDeleteIds = undoableActions.hiddenTransactionIds
     private var shouldAutoFocusLatestMonth = true
     val selectedTxIds = mutableStateListOf<Long>()
 
@@ -252,15 +252,15 @@ class HistoryViewModel @Inject constructor(
     // ── Delete with Undo ──────────────────────────────────────────────────────
 
     /** The delete the Undo snackbar is offering, if any. */
-    val pendingDelete: StateFlow<UndoableDelete?> = undoableDeletes.pending
+    val pendingDelete: StateFlow<UndoableAction?> = undoableActions.pending
 
-    /** Hides [record] at once and offers Undo; see [UndoableDeletes]. */
+    /** Hides [record] at once and offers Undo; see [UndoableActions]. */
     fun delete(record: ExpenseRecord) =
-        undoableDeletes.delete(record, Ledger.deletedMessage(record, accounts.value))
+        undoableActions.delete(record, Ledger.deletedMessage(record, accounts.value))
 
-    fun undoDelete(pending: UndoableDelete) = undoableDeletes.undo(pending)
+    fun undoDelete(pending: UndoableAction) = undoableActions.undo(pending)
 
-    fun commitPendingDelete() = undoableDeletes.commit()
+    fun commitPendingDelete() = undoableActions.commit()
 
     override fun onCleared() {
         commitPendingDelete()

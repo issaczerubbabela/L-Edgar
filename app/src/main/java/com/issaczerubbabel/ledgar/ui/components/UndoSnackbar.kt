@@ -13,29 +13,29 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.issaczerubbabel.ledgar.data.repository.UndoableDelete
+import com.issaczerubbabel.ledgar.data.repository.UndoableAction
 
 /**
- * Shows the Undo snackbar for [pending] on [snackbarHostState], and makes the delete final when the
- * screen is left or the app goes to the background. Rotating the phone isn't leaving: the delete
+ * Shows the Undo snackbar for [pending] on [snackbarHostState], and makes the action final when the
+ * screen is left or the app goes to the background. Rotating the phone isn't leaving: the action
  * stays open to Undo.
  */
 @Composable
-fun UndoDeleteSnackbar(
-    pending: UndoableDelete?,
+fun UndoSnackbar(
+    pending: UndoableAction?,
     snackbarHostState: SnackbarHostState,
-    onUndo: (UndoableDelete) -> Unit,
+    onUndo: (UndoableAction) -> Unit,
     onCommit: () -> Unit
 ) {
     val currentOnUndo by rememberUpdatedState(onUndo)
     val currentOnCommit by rememberUpdatedState(onCommit)
 
-    // One snackbar per pending delete. A newer delete, or the delete becoming final, restarts this
-    // effect, which cancels the snackbar showing; Undo brings the row back.
+    // One snackbar per pending action. A newer action, or the action becoming final, restarts this
+    // effect, which cancels the snackbar showing; Undo brings the rows back.
     LaunchedEffect(pending) {
-        val delete = pending ?: return@LaunchedEffect
-        val result = snackbarHostState.showSnackbar(delete.message, actionLabel = "Undo", duration = SnackbarDuration.Indefinite)
-        if (result == SnackbarResult.ActionPerformed) currentOnUndo(delete)
+        val action = pending ?: return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(action.message, actionLabel = "Undo", duration = SnackbarDuration.Indefinite)
+        if (result == SnackbarResult.ActionPerformed) currentOnUndo(action)
     }
 
     val lifecycleOwner = LocalLifecycleOwner.current

@@ -21,8 +21,13 @@ alert) are defined in [CONTEXT.md](../CONTEXT.md).
    ("3 captured transactions to review") and a badge on the Trans tab count them.
 4. **Review.** The inbox shows, per capture: merchant, exact amount, account number, the date (if the alert
    states one), the guessed Category and Account, and why it was guessed. The user picks a Category and
-   Account where missing, then **Confirm** or **Dismiss**. "Original text" shows the alert as received.
-   "Always use X for Y" saves a rule after one confirmation.
+   Account where missing, then **Confirm** or **Dismiss**, with the buttons or by swiping the card right or
+   left. "Original text" shows the alert as received. "Always use X for Y" saves a rule after one
+   confirmation. Tapping the title renames it before confirming, with Descriptions used before as
+   suggestions; the merchant's rule remembers the new name for its next captures.
+   Every Confirm, Dismiss and **Review all** shows a snackbar with **Undo** for 5 seconds. Nothing is written
+   until then (`UndoableActions`, the same holder Delete uses), so Undo leaves no Transaction, nothing to
+   Sync and no rule or alias change. Leaving the screen or the app makes a waiting decision final.
 5. **Confirm from a notification.** A capture that is High confidence and has a known Account also posts a
    notification with **Confirm** and **Not mine**. Everything else waits quietly in the inbox.
 6. **Unreadable alerts.** If a bank changes its wording and an alert can't be read, it appears under
@@ -157,6 +162,13 @@ punctuation and company words are dropped, and a phone-number handle becomes `P2
 
 Confirming from a notification or in bulk never saves a `USER` rule.
 
+A rule also keeps a **description**: what the user renamed the merchant to on Confirm. Confirming with the
+bank's own text clears it. A capture's title is that description, else the bank's merchant text, else
+"Payment" or "Money received"; it is looked up when shown or confirmed (`CaptureRepository.titleFor`), never
+copied onto the capture, so a rename retitles captures already waiting. A `LEARNED` rule with a description
+that would be deleted after two overrides goes back to `CANDIDATE` instead, so the rename outlives the
+Category. Renaming never changes which rule or Category a capture matches.
+
 ## 7. Accounts
 
 An **Account alias** maps the account digits in an alert (`1234`) to one of the user's Accounts. There is no
@@ -171,7 +183,8 @@ only; UPI-address aliases are not built.
 - The lock screen shows "A captured transaction is waiting"; the amount and merchant appear only once unlocked.
 - **Confirm** is marked as needing authentication (`setAuthenticationRequired`), so Android asks for an unlock
   first. It saves only what the capture
-  already suggests; with no Category or Account it does nothing and the capture stays in the inbox.
+  already suggests, with the merchant's renamed title as the Description; with no Category or Account it
+  does nothing and the capture stays in the inbox.
 - **Not mine** dismisses the capture.
 - Tapping the notification opens the app normally, so the app lock still applies before anything is shown.
 - It is cancelled when the capture is resolved in the inbox.

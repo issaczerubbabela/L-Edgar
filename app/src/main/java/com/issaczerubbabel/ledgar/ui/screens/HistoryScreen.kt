@@ -36,7 +36,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.ui.components.DropdownField
 import com.issaczerubbabel.ledgar.ui.components.SingleDatePickerDialog
 import com.issaczerubbabel.ledgar.ui.components.TransactionRow
-import com.issaczerubbabel.ledgar.ui.components.UndoDeleteSnackbar
+import com.issaczerubbabel.ledgar.ui.components.UndoSnackbar
 import com.issaczerubbabel.ledgar.ui.components.TransactionSheet
 import com.issaczerubbabel.ledgar.ui.components.TransactionSheetActions
 import com.issaczerubbabel.ledgar.ledger.Ledger
@@ -133,7 +133,7 @@ fun HistoryScreen(
     val pendingDelete by vm.pendingDelete.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    UndoDeleteSnackbar(pendingDelete, snackbarHostState, onUndo = vm::undoDelete, onCommit = vm::commitPendingDelete)
+    UndoSnackbar(pendingDelete, snackbarHostState, onUndo = vm::undoDelete, onCommit = vm::commitPendingDelete)
     // Back leaves selection before it leaves the tab.
     BackHandler(enabled = selectedCount > 0) { vm.clearSelection() }
     LaunchedEffect(Unit) {

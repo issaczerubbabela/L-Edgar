@@ -31,7 +31,7 @@ class CaptureActionHandler @Inject constructor(
                 type = capture.suggestedType ?: TransactionType.EXPENSE,
                 category = category,
                 accountId = accountId,
-                description = capture.displayTitle()
+                description = captureRepository.titleFor(capture)
             )
         ) != null
         // A confirmed capture is something logged today, so the evening reminder stays quiet.

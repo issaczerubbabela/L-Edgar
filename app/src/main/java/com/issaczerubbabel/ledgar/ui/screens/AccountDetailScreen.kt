@@ -1,7 +1,7 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
 import com.issaczerubbabel.ledgar.viewmodel.TransactionActionsViewModel
-import com.issaczerubbabel.ledgar.ui.components.UndoDeleteSnackbar
+import com.issaczerubbabel.ledgar.ui.components.UndoSnackbar
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -83,7 +83,7 @@ fun AccountDetailScreen(
     var sheetTransactionId by remember { mutableStateOf<Long?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val pendingDelete by actionsVm.pendingDelete.collectAsStateWithLifecycle()
-    UndoDeleteSnackbar(pendingDelete, snackbarHostState, onUndo = actionsVm::undoDelete, onCommit = actionsVm::commitPendingDelete)
+    UndoSnackbar(pendingDelete, snackbarHostState, onUndo = actionsVm::undoDelete, onCommit = actionsVm::commitPendingDelete)
 
     LaunchedEffect(Unit) {
         reconcileVm.messages.collect { snackbarHostState.showSnackbar(it) }

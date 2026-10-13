@@ -2,6 +2,7 @@ package com.issaczerubbabel.ledgar.data.repository
 
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.remote.ImportRecordDto
+import com.issaczerubbabel.ledgar.util.DescriptionUse
 import kotlinx.coroutines.flow.Flow
 
 data class SyncConflict(
@@ -49,6 +50,9 @@ interface ExpenseRepository {
     suspend fun delete(record: ExpenseRecord)
     suspend fun deleteAll()
     suspend fun isDuplicate(date: String, type: String, category: String, amount: Double): Boolean
+
+    /** The last year's Descriptions of [type], for DescriptionSuggestions. */
+    suspend fun descriptionUses(type: String): List<DescriptionUse>
     suspend fun importFromGoogleSheets(): GoogleSheetsImportResult
 
     /** Transactions changed differently on the phone and in the Sheet since their last Sync. */

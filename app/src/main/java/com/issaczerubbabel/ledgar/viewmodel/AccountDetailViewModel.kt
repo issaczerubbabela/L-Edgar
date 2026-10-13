@@ -4,7 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
-import com.issaczerubbabel.ledgar.data.repository.UndoableDeletes
+import com.issaczerubbabel.ledgar.data.repository.UndoableActions
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -17,13 +17,13 @@ import javax.inject.Inject
 class AccountDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     accountRepository: AccountRepository,
-    undoableDeletes: UndoableDeletes
+    undoableActions: UndoableActions
 ) : ViewModel() {
 
     private val accountId: Long = checkNotNull(savedStateHandle.get<String>("accountId")).toLong()
 
     val uiState: StateFlow<AccountPageUiState> = accountRepository.getAccountBook()
-        .combine(undoableDeletes.hiddenIds) { book, hidden -> book.without(hidden) }
+        .combine(undoableActions.hiddenTransactionIds) { book, hidden -> book.without(hidden) }
         .map { book -> accountPage(book, accountId) ?: AccountPageUiState(accountId = accountId, isLoaded = true) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AccountPageUiState(accountId = accountId))
 }
