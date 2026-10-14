@@ -2,6 +2,7 @@ package com.issaczerubbabel.ledgar.util
 
 import android.app.Application
 import android.content.Intent
+import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import java.time.Clock
 import java.time.Instant
@@ -16,6 +17,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /** A [Clock] whose instant and zone can be moved, the way a real device's clock moves across midnight. */
@@ -51,6 +53,7 @@ class SystemCurrentDateTest {
 
         clock.advanceTo(Instant.parse("2026-10-01T00:05:00Z"))
         context.sendBroadcast(Intent(Intent.ACTION_DATE_CHANGED))
+        shadowOf(Looper.getMainLooper()).idle()
         runCurrent()
 
         assertEquals(LocalDate.parse("2026-10-01"), currentDate.today.value)
@@ -68,6 +71,7 @@ class SystemCurrentDateTest {
         // The device's zone changes to one where 02:00 UTC is still the previous day.
         clock.changeZone(ZoneOffset.ofHours(-5))
         context.sendBroadcast(Intent(Intent.ACTION_TIMEZONE_CHANGED))
+        shadowOf(Looper.getMainLooper()).idle()
         runCurrent()
 
         assertEquals(LocalDate.parse("2026-09-30"), currentDate.today.value)
