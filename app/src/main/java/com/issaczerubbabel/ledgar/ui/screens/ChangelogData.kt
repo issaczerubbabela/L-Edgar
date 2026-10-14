@@ -16,6 +16,16 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
+        version = "v1.7.0",
+        date = "2026-10-14",
+        fixed = listOf(
+            "Add Transaction no longer saves on yesterday's date when the app was left open past midnight"
+        ),
+        developer = listOf(
+            "CurrentDate: a live, broadcast-driven today Add Transaction and Quick Add read instead of LocalDate.now(); LogDateStateTest"
+        )
+    ),
+    ChangelogRelease(
         version = "v1.6.0",
         date = "2026-10-13",
         added = listOf(

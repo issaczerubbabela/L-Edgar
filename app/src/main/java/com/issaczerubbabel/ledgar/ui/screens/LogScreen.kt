@@ -164,7 +164,7 @@ fun LogScreen(
 
             DatePillRow(
                 date = vm.selectedDate,
-                isToday = vm.selectedDate == LocalDate.now(),
+                isToday = vm.isSelectedDateToday,
                 contextText = transferContext,
                 onClick = { showDatePicker = true }
             )

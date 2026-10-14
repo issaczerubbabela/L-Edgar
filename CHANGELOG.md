@@ -6,6 +6,16 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `app/src/main/java/com/issaczerubbabel/ledgar/ui/screens/ChangelogData.kt`,
 which is also what the app shows under More > Changelog. Developer notes appear here only.
 
+## [1.7.0] - 2026-10-14
+
+### Fixed
+
+- Add Transaction no longer saves on yesterday's date when the app was left open past midnight
+
+### Developer
+
+- CurrentDate: a live, broadcast-driven today Add Transaction and Quick Add read instead of LocalDate.now(); LogDateStateTest
+
 ## [1.6.0] - 2026-10-13
 
 ### Added
@@ -294,6 +304,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - Room database, Vico charts and date-parsing tests
 
+[1.7.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.7.0
 [1.6.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.6.0
 [1.5.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.5.0
 [1.4.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.4.0

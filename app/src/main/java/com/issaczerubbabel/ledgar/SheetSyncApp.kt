@@ -7,6 +7,7 @@ import com.issaczerubbabel.ledgar.data.repository.RecurringRepository
 import com.issaczerubbabel.ledgar.sync.SyncScheduler
 import com.issaczerubbabel.ledgar.reminder.DailyReminderScheduler
 import com.issaczerubbabel.ledgar.sync.SyncTriggers
+import com.issaczerubbabel.ledgar.util.SystemCurrentDate
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +33,9 @@ class SheetSyncApp : Application(), Configuration.Provider {
     @Inject
     lateinit var reminderScheduler: DailyReminderScheduler
 
+    @Inject
+    lateinit var currentDate: SystemCurrentDate
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
@@ -39,6 +43,7 @@ class SheetSyncApp : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        currentDate.start()
         syncTriggers.start()
         syncScheduler.scheduleRecurringMaterialization()
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
