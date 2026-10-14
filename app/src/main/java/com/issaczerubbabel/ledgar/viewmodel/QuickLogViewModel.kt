@@ -13,6 +13,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.preferences.ReminderPreferences
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
+import com.issaczerubbabel.ledgar.util.CurrentDate
 import com.issaczerubbabel.ledgar.util.KeypadAction
 import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.util.amountValue
@@ -27,7 +28,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.time.LocalDate
 import javax.inject.Inject
 
 @HiltViewModel
@@ -35,7 +35,8 @@ class QuickLogViewModel @Inject constructor(
     private val expenseRepository: ExpenseRepository,
     private val dropdownOptionRepository: DropdownOptionRepository,
     private val reminderPreferences: ReminderPreferences,
-    bucketPreviewSource: BucketPreviewSource
+    bucketPreviewSource: BucketPreviewSource,
+    private val currentDate: CurrentDate
 ) : ViewModel() {
 
     val categories = dropdownOptionRepository
@@ -70,7 +71,7 @@ class QuickLogViewModel @Inject constructor(
             runCatching {
                 expenseRepository.save(
                     ExpenseRecord(
-                        date = LocalDate.now().toString(),
+                        date = currentDate.now().toString(),
                         type = TransactionType.EXPENSE,
                         category = selectedCategory,
                         description = "",
@@ -82,7 +83,7 @@ class QuickLogViewModel @Inject constructor(
                     )
                 )
             }.onSuccess {
-                reminderPreferences.markLoggedToday(LocalDate.now().toEpochDay())
+                reminderPreferences.markLoggedToday(currentDate.now().toEpochDay())
                 _saveSuccess.emit(Unit)
             }.onFailure {
                 errorMessage = it.message ?: "Failed to save transaction"
@@ -103,7 +104,7 @@ class QuickLogViewModel @Inject constructor(
         context = context,
         type = TransactionType.EXPENSE,
         category = selectedCategory,
-        date = LocalDate.now(),
+        date = currentDate.now(),
         draftAmount = amountValue(amount) ?: 0.0
     )
 
