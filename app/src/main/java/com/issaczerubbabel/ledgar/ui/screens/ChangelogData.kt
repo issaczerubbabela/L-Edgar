@@ -35,7 +35,11 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Search: find Categories, Accounts and amounts, and narrow with Type, Date, Category, Account and Amount chips",
             "Search: totals show Spent and Earned the way Stats counts them, and your search stays after rotating"
         ),
+        fixed = listOf(
+            "Auto-capture: a bank alert saying \"debited ... NAME credited\" is filed as an Expense, not Income"
+        ),
         developer = listOf(
+            "ParsingUtils.directionOf picks whichever debit/credit word comes first, shared by Generic/HDFC/Axis parsers",
             "CONTEXT.md defines Repeat rule and Repeating transaction, and Merchant rules remember a renamed description",
             "Daily reminder: ReminderRules.message is pure and unit tested; MainActivity takes an open-Add-Transaction extra",
             "Repeat rules: local-only recurring_rules table (Room 24 → 25), pure RepeatSchedule, repository and migration tests",
