@@ -20,6 +20,25 @@ internal object ParsingUtils {
 
     val OTP = Regex("""\b(otp|one time password)\b""", RegexOption.IGNORE_CASE)
 
+    /**
+     * Indian bank alerts lead with what happened to the user's own account, then mention the
+     * counterparty afterwards (e.g. "Acct XX123 debited for Rs 240; ZOMATO credited"), but a
+     * credited-to-you alert can equally be worded the other way round ("credited ... debited
+     * from"). Whichever of [DEBIT_WORDS] or [CREDIT_WORDS] occurs first in the text wins; null if
+     * neither matches.
+     */
+    fun directionOf(text: String): Direction? {
+        val debitAt = DEBIT_WORDS.find(text)?.range?.first
+        val creditAt = CREDIT_WORDS.find(text)?.range?.first
+        return when {
+            debitAt == null && creditAt == null -> null
+            debitAt == null -> Direction.CREDIT
+            creditAt == null -> Direction.DEBIT
+            debitAt <= creditAt -> Direction.DEBIT
+            else -> Direction.CREDIT
+        }
+    }
+
     /** Matches "A/C *1234", "A/c 1234", "a/c no. XXXXXXXX1234", "Card XX9876", etc. */
     val ACCOUNT = Regex(
         """(?:a\/?c(?:\s*no\.?)?|acct|card)\s*(?:no\.?)?\s*[x*]*(\d{3,4})\b""",
