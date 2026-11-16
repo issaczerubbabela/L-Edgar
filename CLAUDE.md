@@ -37,6 +37,8 @@ Source root: `app/src/main/java/com/issaczerubbabel/ledgar/`
 - `viewmodel` — StateFlow-based ViewModels per feature.
 - `util` — helpers (e.g. date parsing).
 
+`web/` is a separate browser client (Vite + React + TypeScript) on the same Apps Script contract; see `web/README.md`. Its `src/math/` ports `AccountMath`, `CycleSummaryBuilder` and `StatsReport`, so a change to those money rules needs the same change there. Check it with `npm test` and `npm run build` in `web/`.
+
 ### Data flow
 
 UI (Compose) → ViewModel (StateFlow) → Repository → Room (instant local write, marks `isSynced=false`) → `SyncTriggers` sees the unsynced row and calls `SyncScheduler.requestSync()` (ViewModels never schedule sync work themselves) → `SyncWorker` reads unsynced records → Retrofit `ApiService` → Apps Script web app → Google Sheet. Never enqueue `SyncWorker` with `REPLACE` (it cancels a Sync mid-request) or write a synced flag unconditionally: settle rows with `markSyncedIfUnchanged`, which checks the trigger-maintained `localVersion` (see ADR-0003). Deletes are soft (`syncAction=DELETE`) until the remote delete succeeds, then hard-deleted locally. Any change to accounts, dropdown options, budgets or transactions also makes `SyncTriggers` schedule a delayed `BackupWorker` that backs those lists up, which supports Sheets-based restore/import.
@@ -55,7 +57,7 @@ The release build is shrunk with R8, which can break reflection-based code in wa
 2. Expose operations via repository interfaces/impls.
 3. Add ViewModel state + actions (StateFlow).
 4. Build/update Compose screens, wire navigation.
-5. If remote-facing, update `scripts/AppsScript.gs` contract and the Retrofit DTO/API methods together — the two must stay in sync since there's no shared schema. The script also exists as a copy in `ui/screens/AppsScriptSetupScreen.kt` (what users paste into Apps Script): change both, and run `node --test scripts/tests/transaction-sync.test.js` and `node --test scripts/tests/bucket-budgets.test.js`, which fail if they drift. Never send new data in `records`: a script older than your change files `records` as transactions. Bump `SCRIPT_VERSION` in the script and `TransactionSyncer.REQUIRED_SCRIPT_VERSION` together when the app starts depending on a new script behaviour.
+5. If remote-facing, update `scripts/AppsScript.gs` contract and the Retrofit DTO/API methods together — the two must stay in sync since there's no shared schema. The script also exists as a copy in `ui/screens/AppsScriptSetupScreen.kt` (what users paste into Apps Script): change both, and run `node --test scripts/tests/transaction-sync.test.js` and `node --test scripts/tests/bucket-budgets.test.js`, which fail if they drift. Never send new data in `records`: a script older than your change files `records` as transactions. Bump `SCRIPT_VERSION` in the script and `TransactionSyncer.REQUIRED_SCRIPT_VERSION` together when the app starts depending on a new script behaviour. The web client reads and writes the same contract: update `web/src/api.ts` and `web/dev/mock-server.mjs` too.
 6. Validate sync behavior for insert/update/delete and import paths.
 7. A new user-facing feature gets one entry in `ui/navigation/MoreFeatures.kt` (id, title, icon, route); the More tab renders its tiles from that list. Settings holds only app-wide configuration; a feature keeps its own settings inside itself.
 
