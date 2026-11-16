@@ -16,6 +16,16 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
+        version = "v1.6.1",
+        date = "2026-11-16",
+        added = listOf(
+            "Web version (web folder): view and edit transactions, Stats, Budget and Accounts from a PC or iPad browser"
+        ),
+        developer = listOf(
+            "web/: Vite + React client on the Apps Script contract, with ported account, bucket and Stats maths, tests and a mock script"
+        )
+    ),
+    ChangelogRelease(
         version = "v1.6.0",
         date = "2026-10-13",
         added = listOf(
