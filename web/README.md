@@ -33,7 +33,11 @@ web app URL (in the phone app: More → Settings → Database Setup).
 
 ## Put it online
 
-`web/dist/` is a plain static site with relative paths, so any static host works: GitHub Pages,
+`.github/workflows/web.yml` publishes it to GitHub Pages on every push to `main` that touches `web/`.
+Turn it on once: repository Settings → Pages → Source: **GitHub Actions**. The site then lives at
+`https://<your-username>.github.io/L-Edgar/`.
+
+`web/dist/` is a plain static site with relative paths, so any other static host works too:
 Cloudflare Pages, Netlify, or a folder on your own server. Nothing private is in the build. Your
 script URL is typed in on each device and kept in that browser only.
 

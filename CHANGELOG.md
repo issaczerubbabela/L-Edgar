@@ -15,6 +15,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 ### Developer
 
 - web/: Vite + React client on the Apps Script contract, with ported account, bucket and Stats maths, tests and a mock script
+- Web workflow tests and builds web/ on each change and publishes it to GitHub Pages from main
 
 ## [1.6.0] - 2026-10-13
 
