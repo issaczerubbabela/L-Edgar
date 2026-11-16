@@ -17,6 +17,9 @@ There is no server of its own: it builds to static files.
 
 It installs to an iPad home screen (Share → Add to Home Screen) or as a desktop app from Chrome or Edge.
 
+On a touch screen, buttons and rows grow to finger size, and charts answer to touch: tap or drag
+along a chart to read its values, and tap a bar a second time to open its transactions.
+
 ## Run it
 
 ```bash
@@ -50,7 +53,8 @@ script URL is typed in on each device and kept in that browser only.
 - **Balances, bucket spending and Stats** are worked out in the browser from the transactions, with
   the same rules as the app (`src/math/` ports `AccountMath`, `CycleSummaryBuilder` and
   `StatsReport`), so they include edits made on the web straight away.
-- The last read is cached in the browser, so the app opens at once and still shows data offline.
+- The last read is cached in the browser and a service worker (`public/sw.js`) keeps the app itself
+  available, so after one online visit it opens and shows that copy with no connection.
 
 ## What the web version can't do
 

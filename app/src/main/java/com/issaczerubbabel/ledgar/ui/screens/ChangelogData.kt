@@ -23,7 +23,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
         ),
         developer = listOf(
             "web/: Vite + React client on the Apps Script contract, with ported account, bucket and Stats maths, tests and a mock script",
-            "Web workflow tests and builds web/ on each change and publishes it to GitHub Pages from main"
+            "Web workflow tests and builds web/ on each change and publishes it to GitHub Pages from main",
+            "web/: touch-driven chart tooltips, 44px touch targets, PNG home-screen icons and a service worker for opening offline"
         )
     ),
     ChangelogRelease(

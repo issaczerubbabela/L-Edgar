@@ -175,7 +175,8 @@ main { padding: 1rem clamp(1rem, 3vw, 2rem) 3rem; max-width: 1180px; width: 100%
 
 /* Charts */
 .chart { position: relative; min-width: 0; }
-.chart svg { display: block; }
+/* pan-y: a sideways drag scrubs the chart, an up-down drag still scrolls the page. */
+.chart svg { display: block; touch-action: pan-y; -webkit-user-select: none; user-select: none; }
 .chart .gridline { stroke: var(--line); stroke-width: 1; }
 .chart .axis { stroke: var(--muted); stroke-width: 1; }
 .chart .tick { fill: var(--muted); font-size: 11px; }
@@ -224,3 +225,21 @@ main { padding: 1rem clamp(1rem, 3vw, 2rem) 3rem; max-width: 1180px; width: 100%
 
 .setup { min-height: 100dvh; display: grid; place-items: center; padding: 1rem; margin: 0 auto; }
 .setup .card { max-width: 480px; gap: 0.9rem; }
+
+/* Fingers need bigger targets than a mouse pointer: 44px, as Apple's guidelines ask. */
+@media (pointer: coarse) {
+  button, input, select, .chip, .segmented button { min-height: 44px; }
+  input[type="checkbox"] { width: 22px; height: 22px; min-height: 22px; }
+  label.check { min-height: 44px; }
+  .chip { padding-inline: 0.95rem; }
+  .star { min-width: 44px; min-height: 44px; font-size: 1.3rem; }
+  .stepper button { min-width: 44px; }
+  .txn, .row { padding-block: 0.7rem; }
+  .hbar, .sublist button, .bucket-head { min-height: 44px; }
+  .cell { min-height: 0; }
+  .legend i.cell { min-height: 0; }
+  nav a { min-height: 44px; }
+  .table td { padding-block: 0.8rem; }
+  /* iOS zooms the page when a focused field's text is under 16px. */
+  input, select { font-size: 16px; }
+}

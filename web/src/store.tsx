@@ -73,7 +73,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try {
       commit(await fetchSnapshot(target));
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Something went wrong reading the Sheet.");
+      // Offline with a cached copy is a normal way to use a tablet, not a failure.
+      if (!navigator.onLine && dataRef.current) setNotice("You're offline, so this is the last copy read from the Sheet. Adding and editing need a connection.");
+      else setError(e instanceof ApiError ? e.message : "Something went wrong reading the Sheet.");
       throw e;
     } finally {
       setRefreshing(false);

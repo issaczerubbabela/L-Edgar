@@ -1,7 +1,7 @@
 // Small hand-drawn SVG charts. Each draws at the real pixel width of its container, has one y-axis,
 // a legend when it has more than one series, and a hover tooltip.
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useWidth } from "../lib/hooks";
 import { compact, rupees } from "../lib/money";
 
@@ -11,6 +11,41 @@ export interface Series {
   color: string;
   values: (number | null)[];
   dashed?: boolean;
+}
+
+/**
+ * Which point the pointer is on, for mouse and touch alike. A mouse shows the tooltip while it
+ * hovers; a finger shows it on tap or drag and it stays until the next tap elsewhere. With
+ * [onPick], a mouse click picks at once, while a finger picks on a second tap of the same point,
+ * so the first tap can show the value.
+ */
+function usePointer(indexAt: (offsetX: number) => number, onPick?: (index: number) => void) {
+  const [hover, setHover] = useState<number | null>(null);
+  const root = useRef<HTMLDivElement | null>(null);
+  const before = useRef<number | null>(null);
+  useEffect(() => {
+    const away = (event: PointerEvent) => {
+      if (root.current && !root.current.contains(event.target as Node)) setHover(null);
+    };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, []);
+  const at = (event: React.PointerEvent<SVGSVGElement> | React.MouseEvent<SVGSVGElement>) => indexAt(event.clientX - event.currentTarget.getBoundingClientRect().left);
+  const svg = {
+    onPointerDown: (event: React.PointerEvent<SVGSVGElement>) => {
+      before.current = hover;
+      setHover(at(event));
+    },
+    onPointerMove: (event: React.PointerEvent<SVGSVGElement>) => setHover(at(event)),
+    onPointerLeave: (event: React.PointerEvent<SVGSVGElement>) => event.pointerType === "mouse" && setHover(null),
+    onClick: (event: React.MouseEvent<SVGSVGElement>) => {
+      const index = at(event);
+      const touch = (event.nativeEvent as PointerEvent).pointerType === "touch";
+      if (onPick && (!touch || before.current === index)) onPick(index);
+    },
+    style: { cursor: onPick ? "pointer" : undefined } as React.CSSProperties,
+  };
+  return { hover, root, svg };
 }
 
 const HEIGHT = 220;
@@ -78,7 +113,6 @@ const labelEvery = (count: number, plotWidth: number) => Math.max(1, Math.ceil(c
 /** Bars side by side per label, for comparing a few measures over time. */
 export function GroupedBars({ labels, series, onPick, titles }: { labels: string[]; series: Series[]; onPick?: (index: number) => void; titles?: string[] }) {
   const [ref, width] = useWidth<HTMLDivElement>();
-  const [hover, setHover] = useState<number | null>(null);
   const all = series.flatMap((s) => s.values.map((v) => v ?? 0));
   const { low, high, ticks } = scale(Math.min(0, ...all), Math.max(1, ...all));
   const plotWidth = Math.max(width - PAD.left - PAD.right, 1);
@@ -86,17 +120,18 @@ export function GroupedBars({ labels, series, onPick, titles }: { labels: string
   const barWidth = Math.max(Math.min((band * 0.72) / series.length - 2, 24), 1.5);
   const y = (v: number) => PAD.top + (HEIGHT - PAD.top - PAD.bottom) * (1 - (v - low) / (high - low));
   const every = labelEvery(labels.length, plotWidth);
+  const { hover, root, svg } = usePointer((offset) => Math.min(Math.max(Math.floor((offset - PAD.left) / band), 0), labels.length - 1), onPick);
   return (
-    <div className="chart" ref={ref} onMouseLeave={() => setHover(null)}>
+    <div className="chart" ref={(node) => { ref.current = node; root.current = node; }}>
       {series.length > 1 && <Legend series={series} />}
       {width > 0 && (
-        <svg width={width} height={HEIGHT} role="img" aria-label={series.map((s) => s.name).join(", ") + " by period"}>
+        <svg width={width} height={HEIGHT} {...svg} role="img" aria-label={series.map((s) => s.name).join(", ") + " by period"}>
           <Frame width={width} ticks={ticks} y={y}>
             {labels.map((label, i) => {
               const centre = PAD.left + band * (i + 0.5);
               const groupWidth = series.length * (barWidth + 2) - 2;
               return (
-                <g key={i} onMouseEnter={() => setHover(i)} onClick={() => onPick?.(i)} style={onPick ? { cursor: "pointer" } : undefined}>
+                <g key={i}>
                   <rect x={PAD.left + band * i} y={PAD.top} width={band} height={HEIGHT - PAD.top - PAD.bottom} className={hover === i ? "band on" : "band"} />
                   {series.map((s, k) => {
                     const value = s.values[i] ?? 0;
@@ -121,7 +156,6 @@ export function GroupedBars({ labels, series, onPick, titles }: { labels: string
 /** Lines over the same x positions, with a crosshair. A null value breaks the line. */
 export function Lines({ labels, series, titles }: { labels: string[]; series: Series[]; titles?: string[] }) {
   const [ref, width] = useWidth<HTMLDivElement>();
-  const [hover, setHover] = useState<number | null>(null);
   const all = series.flatMap((s) => s.values.filter((v): v is number => v !== null));
   const { low, high, ticks } = scale(Math.min(0, ...all), Math.max(1, ...all));
   const plotWidth = Math.max(width - PAD.left - PAD.right, 1);
@@ -140,15 +174,12 @@ export function Lines({ labels, series, titles }: { labels: string[]; series: Se
     });
     return d;
   };
-  const onMove = (event: React.MouseEvent<SVGSVGElement>) => {
-    const offset = event.clientX - event.currentTarget.getBoundingClientRect().left - PAD.left;
-    setHover(Math.min(Math.max(Math.round((offset / plotWidth) * (labels.length - 1)), 0), labels.length - 1));
-  };
+  const { hover, root, svg } = usePointer((offset) => Math.min(Math.max(Math.round(((offset - PAD.left) / plotWidth) * (labels.length - 1)), 0), labels.length - 1));
   return (
-    <div className="chart" ref={ref} onMouseLeave={() => setHover(null)}>
+    <div className="chart" ref={(node) => { ref.current = node; root.current = node; }}>
       {series.length > 1 && <Legend series={series} />}
       {width > 0 && (
-        <svg width={width} height={HEIGHT} onMouseMove={onMove} role="img" aria-label={series.map((s) => s.name).join(", ") + " over time"}>
+        <svg width={width} height={HEIGHT} {...svg} role="img" aria-label={series.map((s) => s.name).join(", ") + " over time"}>
           <Frame width={width} ticks={ticks} y={y}>
             {labels.map((label, i) => i % every === 0 && <text key={i} x={x(i)} y={HEIGHT - 6} textAnchor="middle" className="tick">{label}</text>)}
             {hover !== null && <line x1={x(hover)} x2={x(hover)} y1={PAD.top} y2={HEIGHT - PAD.bottom} className="crosshair" />}
