@@ -79,10 +79,12 @@ private fun QuickLogSheet(
 ) {
     val context = LocalContext.current
     val categories by vm.categories.collectAsStateWithLifecycle()
+    val accounts by vm.accounts.collectAsStateWithLifecycle()
     val bucketContext by vm.bucketContext.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showCategoryPicker by remember { mutableStateOf(false) }
+    var showAccountPicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         vm.saveSuccess.collect {
@@ -121,10 +123,14 @@ private fun QuickLogSheet(
                     modifier = Modifier.weight(1f)
                 )
 
+                val accountName = accounts.firstOrNull { it.id == vm.selectedAccountId }?.accountName
                 ChipRow(
                     primaryChips = listOf(
                         ChipSpec(vm.selectedCategory.ifBlank { "Category" }, vm.selectedCategory.isNotBlank()) {
                             showCategoryPicker = true
+                        },
+                        ChipSpec(accountName ?: "Account", accountName != null) {
+                            showAccountPicker = true
                         }
                     ),
                     swapKey = TransactionType.EXPENSE
@@ -169,6 +175,20 @@ private fun QuickLogSheet(
             },
             onDismiss = { showCategoryPicker = false },
             manageHint = "Reorder or delete in More → Dropdowns"
+        )
+    }
+
+    if (showAccountPicker) {
+        OptionPickerSheet(
+            title = "Account",
+            options = accounts.map { PickerOption(key = it.id.toString(), label = it.accountName) },
+            selectedKey = vm.selectedAccountId?.toString(),
+            onSelect = { key ->
+                key.toLongOrNull()?.let { vm.selectAccount(it) }
+                showAccountPicker = false
+            },
+            onDismiss = { showAccountPicker = false },
+            manageHint = "Add accounts from the Accounts tab"
         )
     }
 }

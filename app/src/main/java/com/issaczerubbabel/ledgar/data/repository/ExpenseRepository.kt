@@ -32,6 +32,9 @@ interface ExpenseRepository {
     fun getRecordsForAccountInMonth(accountId: Long, startDate: String, endDate: String): Flow<List<ExpenseRecord>>
     fun getTransactionsForAccountInMonth(accountId: Long, startOfMonth: String, endOfMonth: String): Flow<List<ExpenseRecord>>
     fun getRecordsByDateRange(startDate: String, endDate: String): Flow<List<ExpenseRecord>>
+
+    /** The Account of the most recent Expense that has one, for Quick Add's default chip. */
+    suspend fun lastExpenseAccountId(): Long?
     suspend fun setBookmarked(id: Long, isBookmarked: Boolean)
     suspend fun deleteTransactionsByIds(ids: List<Long>)
     suspend fun updateTransactionsDateByIds(ids: List<Long>, newDate: String)

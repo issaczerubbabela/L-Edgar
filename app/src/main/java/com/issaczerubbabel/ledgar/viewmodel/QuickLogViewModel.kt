@@ -9,8 +9,10 @@ import com.issaczerubbabel.ledgar.data.bucket.BucketPreview
 import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewCalculator
 import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewContext
 import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewSource
+import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.preferences.ReminderPreferences
+import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
 import com.issaczerubbabel.ledgar.util.KeypadAction
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -33,6 +36,7 @@ import javax.inject.Inject
 @HiltViewModel
 class QuickLogViewModel @Inject constructor(
     private val expenseRepository: ExpenseRepository,
+    private val accountRepository: AccountRepository,
     private val dropdownOptionRepository: DropdownOptionRepository,
     private val reminderPreferences: ReminderPreferences,
     bucketPreviewSource: BucketPreviewSource
@@ -43,15 +47,32 @@ class QuickLogViewModel @Inject constructor(
         .map { options -> options.map { it.name } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val accounts: StateFlow<List<AccountRecord>> = accountRepository
+        .getAllVisibleAccounts()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val bucketContext: StateFlow<BucketPreviewContext?> = bucketPreviewSource.context
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     var amount by mutableStateOf("")
     var selectedCategory by mutableStateOf("")
+    var selectedAccountId by mutableStateOf<Long?>(null)
     var errorMessage by mutableStateOf<String?>(null)
 
     private val _saveSuccess = MutableSharedFlow<Unit>(replay = 0)
     val saveSuccess: SharedFlow<Unit> = _saveSuccess.asSharedFlow()
+
+    init {
+        viewModelScope.launch {
+            val lastAccountId = expenseRepository.lastExpenseAccountId()
+            val visibleAccounts = accountRepository.getAllVisibleAccounts().first()
+            selectedAccountId = QuickLogAccount.seed(lastAccountId, visibleAccounts)
+        }
+    }
+
+    fun selectAccount(accountId: Long) {
+        selectedAccountId = accountId
+    }
 
     fun save() {
         // The keypad works a sum out before it saves; this only covers a caller that didn't.
@@ -65,6 +86,10 @@ class QuickLogViewModel @Inject constructor(
             errorMessage = "Select a category"
             return
         }
+        if (selectedAccountId == null) {
+            errorMessage = "Select an account"
+            return
+        }
 
         viewModelScope.launch {
             runCatching {
@@ -75,7 +100,7 @@ class QuickLogViewModel @Inject constructor(
                         category = selectedCategory,
                         description = "",
                         amount = parsedAmount,
-                        accountId = null,
+                        accountId = selectedAccountId,
                         remarks = "",
                         isSynced = false,
                         syncAction = "INSERT"
