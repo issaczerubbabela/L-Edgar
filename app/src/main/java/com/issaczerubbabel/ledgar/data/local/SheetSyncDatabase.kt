@@ -8,6 +8,7 @@ import com.issaczerubbabel.ledgar.data.local.dao.BucketBudgetDao
 import com.issaczerubbabel.ledgar.data.local.dao.BudgetDao
 import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
 import com.issaczerubbabel.ledgar.data.local.dao.DropdownOptionDao
+import com.issaczerubbabel.ledgar.data.local.dao.DropdownRenameDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
 import com.issaczerubbabel.ledgar.data.local.dao.MerchantRuleDao
 import com.issaczerubbabel.ledgar.data.local.dao.RecurringRuleDao
@@ -66,4 +67,5 @@ abstract class SheetSyncDatabase : RoomDatabase() {
     abstract fun unparsedAlertDao(): UnparsedAlertDao
     abstract fun tripDao(): TripDao
     abstract fun recurringRuleDao(): RecurringRuleDao
+    abstract fun dropdownRenameDao(): DropdownRenameDao
 }

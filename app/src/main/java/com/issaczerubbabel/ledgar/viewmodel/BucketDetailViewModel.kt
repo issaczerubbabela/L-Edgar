@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.issaczerubbabel.ledgar.data.bucket.BucketSummary
 import com.issaczerubbabel.ledgar.data.bucket.CycleSummary
 import com.issaczerubbabel.ledgar.data.bucket.CycleSummaryBuilder
+import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
 import com.issaczerubbabel.ledgar.data.repository.BucketBudgetRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
@@ -67,28 +68,15 @@ class BucketDetailViewModel @Inject constructor(
                         BucketDetailUiState(isLoading = false, notFound = true)
                     } else {
                         val summary = CycleSummaryBuilder.build(cycle, buckets, assignments, records, LocalDate.now())
-                        val bucketNameById = buckets.associate { it.id to it.name }
-                        val bucketIdByCategory = assignments.associate { it.category.trim().lowercase() to it.bucketId }
-
-                        // Every category the user could reasonably want to place: the configured
-                        // list, anything already routed, and anything that has actually been spent.
-                        val names = LinkedHashMap<String, String>()
-                        (options.map { it.name } +
-                            assignments.map { it.category } +
-                            summary.buckets.flatMap { it.categories }.map { it.category } +
-                            summary.unbucketed.map { it.category })
-                            .map { it.trim() }
-                            .filter { it.isNotBlank() }
-                            .forEach { names.putIfAbsent(it.lowercase(), it) }
-
                         BucketDetailUiState(
                             isLoading = false,
                             bucket = summary.buckets.firstOrNull { it.bucket.id == bucketId },
                             cycle = summary,
-                            choices = names.values.sortedBy { it.lowercase() }.map { name ->
-                                val holder = bucketIdByCategory[name.lowercase()]
-                                CategoryChoice(name, holder, holder?.let { bucketNameById[it] })
-                            }
+                            choices = categoryChoices(
+                                configured = options.map { it.name },
+                                assignments = assignments,
+                                bucketNameById = buckets.associate { it.id to it.name }
+                            )
                         )
                     }
                 }
@@ -125,7 +113,29 @@ class BucketDetailViewModel @Inject constructor(
         viewModelScope.launch { budgets.deleteBucket(current) }
     }
 
-    private companion object {
-        const val EXPENSE_CATEGORY_TYPE = "EXPENSE_CATEGORY"
+    companion object {
+        private const val EXPENSE_CATEGORY_TYPE = "EXPENSE_CATEGORY"
+
+        /**
+         * The Categories the bucket editor offers: the user's expense Categories, nothing else. A Category
+         * deleted from the list isn't offered even while still routed or spent in this cycle; saving the
+         * bucket drops its routing. Only with no Categories at all (never set up) are routed ones shown.
+         */
+        fun categoryChoices(
+            configured: List<String>,
+            assignments: List<BucketCategory>,
+            bucketNameById: Map<Long, String>
+        ): List<CategoryChoice> {
+            val bucketIdByCategory = assignments.associate { CycleSummaryBuilder.categoryKey(it.category) to it.bucketId }
+            val names = LinkedHashMap<String, String>()
+            configured.ifEmpty { assignments.map { it.category } }
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .forEach { names.putIfAbsent(CycleSummaryBuilder.categoryKey(it), it) }
+            return names.values.sortedBy { it.lowercase() }.map { name ->
+                val holder = bucketIdByCategory[CycleSummaryBuilder.categoryKey(name)]
+                CategoryChoice(name, holder, holder?.let { bucketNameById[it] })
+            }
+        }
     }
 }

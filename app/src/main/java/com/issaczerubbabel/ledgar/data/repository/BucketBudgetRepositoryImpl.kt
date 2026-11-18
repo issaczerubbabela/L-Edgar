@@ -2,6 +2,7 @@ package com.issaczerubbabel.ledgar.data.repository
 
 import androidx.room.withTransaction
 import com.issaczerubbabel.ledgar.data.bucket.BucketBudgetSnapshot
+import com.issaczerubbabel.ledgar.data.bucket.CycleSummaryBuilder
 import com.issaczerubbabel.ledgar.data.bucket.CycleTransitions
 import com.issaczerubbabel.ledgar.data.bucket.RestoredCycle
 import com.issaczerubbabel.ledgar.data.bucket.StartCycleRequest
@@ -40,7 +41,13 @@ class BucketBudgetRepositoryImpl @Inject constructor(
             CycleTransitions.validate(request, running)?.let { return@withTransaction StartCycleResult.Rejected(it) }
 
             val oldBuckets = running?.let { dao.getBuckets(it.id) }.orEmpty()
+            // A Category deleted from the list isn't carried into the new cycle's Buckets.
+            val current = db.dropdownOptionDao().getAllOptionsSnapshot()
+                .filter { it.optionType == EXPENSE_CATEGORY }
+                .map { CycleSummaryBuilder.categoryKey(it.name) }
+                .toSet()
             val oldAssignments = running?.let { dao.getCategoryAssignments(it.id) }.orEmpty()
+                .filter { current.isEmpty() || CycleSummaryBuilder.categoryKey(it.category) in current }
 
             running?.let { dao.updateCycle(CycleTransitions.closeForNext(it, request, today)) }
 
@@ -143,5 +150,9 @@ class BucketBudgetRepositoryImpl @Inject constructor(
                 .forEach { dao.unassignCategory(cycleId, it.category) }
             dao.assignCategories(wanted.map { BucketCategory(cycleId = cycleId, bucketId = bucketId, category = it) })
         }
+    }
+
+    private companion object {
+        const val EXPENSE_CATEGORY = "EXPENSE_CATEGORY"
     }
 }

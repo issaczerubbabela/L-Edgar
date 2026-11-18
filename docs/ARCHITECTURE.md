@@ -376,6 +376,12 @@ erDiagram
   - INCOME_CATEGORY
   - ACCOUNT_GROUP
   - PAYMENT_MODE
+- Rename and delete go through `DropdownEditor`, in one Room transaction. Renaming a Category renames it in
+  `expense_records` (those rows wait to sync, so the Sheet follows), `budgets`, `bucket_categories` (every cycle),
+  `merchant_rules`, `recurring_rules`, pending `captured_transactions` and `trip_expenses`; renaming an Account group
+  renames `account_records.groupName`. A name another option of the same type already has is refused (no merging).
+  Deleting an expense Category removes its routing from the running cycle; closed cycles keep theirs. The bucket
+  editor offers only the configured expense Categories, and starting a cycle doesn't carry deleted ones over.
 
 ### captured_transactions / merchant_rules / account_aliases / unparsed_alerts
 

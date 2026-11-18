@@ -68,7 +68,7 @@ A named pot of money inside one Salary cycle. Buckets belong to their cycle, so 
 _Avoid_: envelope, budget (the legacy per-category plan)
 
 **Bucket category**:
-The routing of one expense Category into one Bucket for one cycle. A Category sits in at most one Bucket per cycle; Categories in none count as Unbucketed.
+The routing of one expense Category into one Bucket for one cycle. A Category sits in at most one Bucket per cycle; Categories in none count as Unbucketed. Deleting a Category from the list takes it out of the running cycle's Buckets; renaming one keeps its routing in every cycle.
 
 **Stats role**:
 The part a Dropdown option plays in Stats, stored in its `role`: an expense Category can be **Saving**, an income Category can be **Refund**, and an Account group can be **Savings** or **Liability**. Most options have no role.

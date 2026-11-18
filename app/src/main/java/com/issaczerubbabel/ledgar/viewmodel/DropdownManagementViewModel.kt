@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownRole
+import com.issaczerubbabel.ledgar.data.repository.DropdownEditor
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -51,7 +52,8 @@ data class DropdownManagementUiState(
 @HiltViewModel
 @OptIn(ExperimentalCoroutinesApi::class)
 class DropdownManagementViewModel @Inject constructor(
-    private val dropdownRepository: DropdownOptionRepository
+    private val dropdownRepository: DropdownOptionRepository,
+    private val editor: DropdownEditor
 ) : ViewModel() {
 
     val types: List<DropdownOptionType> = DropdownOptionType.entries
@@ -125,7 +127,23 @@ class DropdownManagementViewModel @Inject constructor(
 
     fun deleteOption(option: DropdownOption) {
         viewModelScope.launch {
-            dropdownRepository.delete(option)
+            editor.delete(option)
+        }
+    }
+
+    /**
+     * Renames [option] and everything that uses it (ADR-0003 keeps the Sheet in step: renamed
+     * Transactions wait to sync). [onDone] gets null on success, or what to tell the user.
+     */
+    fun rename(option: DropdownOption, newName: String, onDone: (error: String?) -> Unit) {
+        viewModelScope.launch {
+            val error = when (val result = editor.rename(option, newName)) {
+                is DropdownEditor.RenameResult.Renamed -> null
+                DropdownEditor.RenameResult.Blank -> "Enter a name"
+                is DropdownEditor.RenameResult.NameTaken -> "“${result.name}” already exists"
+                DropdownEditor.RenameResult.Gone -> null
+            }
+            onDone(error)
         }
     }
 

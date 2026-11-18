@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -65,6 +66,7 @@ fun DropdownManagementScreen(
     vm: DropdownManagementViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
+    var renaming by remember { mutableStateOf<DropdownOption?>(null) }
 
     Scaffold(
         topBar = {
@@ -151,6 +153,7 @@ fun DropdownManagementScreen(
                         canMoveDown = state.options.lastOrNull()?.id != option.id,
                         onMoveUp = { vm.moveUp(option) },
                         onMoveDown = { vm.moveDown(option) },
+                        onRename = { renaming = option },
                         onDelete = { vm.deleteOption(option) }
                     )
                     HorizontalDivider(
@@ -160,6 +163,15 @@ fun DropdownManagementScreen(
                 }
             }
         }
+    }
+
+    renaming?.let { option ->
+        RenameOptionDialog(
+            option = option,
+            type = state.selectedType,
+            onRename = { name, onDone -> vm.rename(option, name, onDone) },
+            onDismiss = { renaming = null }
+        )
     }
 
     if (state.isAddDialogVisible) {
@@ -189,6 +201,57 @@ fun DropdownManagementScreen(
     }
 }
 
+@Composable
+private fun RenameOptionDialog(
+    option: DropdownOption,
+    type: DropdownOptionType,
+    onRename: (name: String, onDone: (String?) -> Unit) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var name by remember(option.id) { mutableStateOf(option.name) }
+    var error by remember(option.id) { mutableStateOf<String?>(null) }
+    var saving by remember(option.id) { mutableStateOf(false) }
+    val usedBy = when (type) {
+        DropdownOptionType.ExpenseCategory, DropdownOptionType.IncomeCategory ->
+            "Every transaction, bucket, budget and rule with this category moves to the new name, and your Sheet is updated."
+        DropdownOptionType.AccountGroup -> "Every account in this group moves to the new name."
+        DropdownOptionType.PaymentMode -> null
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it; error = null },
+                    singleLine = true,
+                    label = { Text("Name") },
+                    isError = error != null,
+                    supportingText = error?.let { message -> { Text(message) } },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (usedBy != null) {
+                    Text(usedBy, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !saving && name.isNotBlank(),
+                onClick = {
+                    saving = true
+                    onRename(name) { message ->
+                        saving = false
+                        if (message == null) onDismiss() else error = message
+                    }
+                }
+            ) { Text("Rename") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
 private fun ordinaryLabel(roles: List<RoleChoice>) = when (roles.firstOrNull()?.role) {
     DropdownRole.SAVING -> "Spending"
     DropdownRole.REFUND -> "Earnings"
@@ -204,6 +267,7 @@ private fun DropdownOptionRow(
     canMoveDown: Boolean,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
+    onRename: () -> Unit,
     onDelete: () -> Unit
 ) {
     Row(
@@ -261,6 +325,9 @@ private fun DropdownOptionRow(
         }
         FilledTonalIconButton(onClick = onMoveDown, enabled = canMoveDown, modifier = Modifier.size(36.dp)) {
             Icon(Icons.Filled.ArrowDownward, contentDescription = "Move down")
+        }
+        FilledTonalIconButton(onClick = onRename, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Filled.Edit, contentDescription = "Rename")
         }
         FilledTonalIconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
             Icon(

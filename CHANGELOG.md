@@ -12,6 +12,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - Web version (web folder): view and edit transactions, Stats, Budget and Accounts from a PC or iPad browser
 - More: Account names lists Sheet account names you have no account for, to create the account or map them
+- Categories & dropdowns: rename a category or group; its transactions, buckets, budgets and rules follow
 
 ### Changed
 
@@ -22,6 +23,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Import from Google Sheets keeps the Saving, Refund, Savings and Liability roles, so Stats stay right
 - Import from Google Sheets keeps every transaction on its account, and Sync repairs links lost before
 - Sync no longer puts transactions whose Sheet account name matches no account on Cash
+- Budget: editing a bucket offers only your current categories, and deleted ones leave the running cycle
 
 ### Developer
 
@@ -29,6 +31,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Web workflow tests and builds web/ on each change and publishes it to GitHub Pages from main
 - docs/handoff-2026-11-sync-fixes.md: seven Sheet sync and Import issues found during the Nov 2026 data clean-up
 - SheetListsRestorer, the Pull's RelinkAccounts step and name-linking queries, with tests for roles, ids and names
+- DropdownEditor renames or deletes an option across every table that stores it, in one Room transaction, with tests
 
 ## [1.6.0] - 2026-10-13
 
