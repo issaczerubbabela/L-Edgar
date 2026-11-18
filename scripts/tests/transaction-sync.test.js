@@ -186,8 +186,8 @@ test("both copies of the script are identical", () => {
 
 test("every reply carries the script version and every request takes the lock", () => {
   const app = loadScript(SCRIPT);
-  assert.equal(app.post({ target: "transactions", action: "upsert", transactions: [] }).scriptVersion, 2);
-  assert.equal(app.get().scriptVersion, 2);
+  assert.equal(app.post({ target: "transactions", action: "upsert", transactions: [] }).scriptVersion, 3);
+  assert.equal(app.get().scriptVersion, 3);
   assert.equal(app.lock.acquired, 2);
   assert.equal(app.lock.released, 2);
 });

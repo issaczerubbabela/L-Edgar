@@ -73,6 +73,13 @@ private val APPS_SCRIPT_CODE = """
  *   since, so the app can merge instead of overwriting the edit.
  * - Every reply carries `scriptVersion`, which the app checks before syncing.
  * - Every request runs under a script lock, so requests never interleave.
+ *
+ * List Revision Contract (SCRIPT_VERSION 3, ADR-0010):
+ * - Every list read (accounts, dropdowns, budgets, bucket_budgets) and every successful
+ *   list backup carries `revision`: a hash of the list's whole tab content.
+ * - A backup carrying `baseRevision` is refused with `sheetChanged: true` (and the tab's current
+ *   `revision`) when the tab has changed since, so an edit made in the Sheet is never
+ *   silently overwritten. A backup without `baseRevision` overwrites, as before.
  */
 
 var TRANSACTIONS_SHEET = "_responses";
@@ -80,7 +87,7 @@ var DROPDOWNS_SHEET = "_dropdowns";
 var BUDGETS_SHEET = "_budgets";
 var ACCOUNTS_SHEET = "_accounts";
 
-var SCRIPT_VERSION = 2;
+var SCRIPT_VERSION = 3;
 var ID_HEADER = "ID";
 var LOCK_TIMEOUT_MS = 30000;
 // Text columns are kept as plain text so Sheets never turns "1/2" into a date or "=x" into a formula.
@@ -159,6 +166,38 @@ function rowRevision(row) {
     h2 = Math.imul(h2 ^ c, 0x811c9dc5) >>> 0;
   }
   return ("00000000" + h1.toString(16)).slice(-8) + ("00000000" + h2.toString(16)).slice(-8);
+}
+
+/** 64-bit FNV-1a over a text, as 16 hex digits. */
+function fnvHash(text) {
+  var h1 = 0x811c9dc5;
+  var h2 = 0x01000193;
+  for (var i = 0; i < text.length; i++) {
+    var c = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ c, 0x811c9dc5) >>> 0;
+  }
+  return ("00000000" + h1.toString(16)).slice(-8) + ("00000000" + h2.toString(16)).slice(-8);
+}
+
+// The tabs each list target covers. A list revision is a hash of all of their cells.
+var LIST_SHEETS = {
+  accounts: [ACCOUNTS_SHEET],
+  dropdowns: [DROPDOWNS_SHEET],
+  budgets: [BUDGETS_SHEET],
+  bucket_budgets: [CYCLES_SHEET, BUCKETS_SHEET, BUCKET_CATEGORIES_SHEET],
+};
+
+/** The revision of a list target's tabs: changes whenever any cell in them changes. */
+function listRevision(spreadsheet, target) {
+  var text = LIST_SHEETS[target].map(function (name) {
+    var sheet = spreadsheet.getSheetByName(name);
+    if (!sheet) return "";
+    return sheet.getDataRange().getValues().map(function (row) {
+      return row.map(cellText).join("\u001f");
+    }).join("\u001e");
+  }).join("\u001d");
+  return fnvHash(text);
 }
 
 /** Returns the 1-based ID column, adding it after the last used column if the sheet has none. */
@@ -979,6 +1018,28 @@ function handlePost(e) {
       });
     }
 
+    // A list backup that names the revision it was based on is refused if the tab changed since:
+    // someone edited the Sheet, and the app asks the user before anything is overwritten (ADR-0010).
+    if (
+      action === "backup" &&
+      LIST_SHEETS.hasOwnProperty(target) &&
+      payload.baseRevision !== undefined &&
+      payload.baseRevision !== null
+    ) {
+      var currentRevision = listRevision(spreadsheet, target);
+      if (String(payload.baseRevision) !== currentRevision) {
+        return jsonOut({
+          status: "ok",
+          action: "backup_stale",
+          type: target === "bucket_budgets" ? "bucket_budgets_backed_up" : target + "_backed_up",
+          target: target,
+          sheetChanged: true,
+          revision: currentRevision,
+          count: 0,
+        });
+      }
+    }
+
     if (
       action === "backup" &&
       (target === "accounts" ||
@@ -1014,10 +1075,12 @@ function handlePost(e) {
           message: "Skipped empty backup to prevent accidental sheet erase",
         });
       }
+      var bucketCount = backupBucketBudgets(spreadsheet, bucketCycles, timeZone);
       return jsonOut({
         status: "ok",
         type: "bucket_budgets_backed_up",
-        count: backupBucketBudgets(spreadsheet, bucketCycles, timeZone),
+        count: bucketCount,
+        revision: listRevision(spreadsheet, target),
       });
     }
 
@@ -1083,6 +1146,7 @@ function handlePost(e) {
         status: "ok",
         type: "accounts_backed_up",
         count: records.length,
+        revision: listRevision(spreadsheet, target),
       });
     }
 
@@ -1151,6 +1215,7 @@ function handlePost(e) {
         status: "ok",
         type: target + "_backed_up",
         count: records.length,
+        revision: listRevision(spreadsheet, target),
       });
     }
 
@@ -1282,7 +1347,7 @@ function handleGet(e) {
     // =============================================================
     if (target === "accounts") {
       var accountSheet = spreadsheet.getSheetByName(ACCOUNTS_SHEET);
-      if (!accountSheet) return jsonOut({ status: "ok", data: [] });
+      if (!accountSheet) return jsonOut({ status: "ok", data: [], revision: listRevision(spreadsheet, target) });
       var accountData = accountSheet.getDataRange().getValues();
       var accounts = [];
       for (var i = 1; i < accountData.length; i++) {
@@ -1302,12 +1367,12 @@ function handleGet(e) {
           reconciledAt: formatDate(accountData[i][11]),
         });
       }
-      return jsonOut({ status: "ok", data: accounts });
+      return jsonOut({ status: "ok", data: accounts, revision: listRevision(spreadsheet, target) });
     }
 
     if (target === "dropdowns") {
       var dropdownSheet = spreadsheet.getSheetByName(DROPDOWNS_SHEET);
-      if (!dropdownSheet) return jsonOut({ status: "ok", data: [] });
+      if (!dropdownSheet) return jsonOut({ status: "ok", data: [], revision: listRevision(spreadsheet, target) });
       var dropdownData = dropdownSheet.getDataRange().getValues();
       var dropdowns = [];
       for (var d = 1; d < dropdownData.length; d++) {
@@ -1319,7 +1384,7 @@ function handleGet(e) {
           role: String(dropdownData[d][5] || ""),
         });
       }
-      return jsonOut({ status: "ok", data: dropdowns });
+      return jsonOut({ status: "ok", data: dropdowns, revision: listRevision(spreadsheet, target) });
     }
 
     if (target === "bucket_budgets") {
@@ -1329,12 +1394,13 @@ function handleGet(e) {
         status: "ok",
         type: "bucket_budgets",
         data: readBucketBudgets(spreadsheet),
+        revision: listRevision(spreadsheet, target),
       });
     }
 
     if (target === "budgets") {
       var budgetSheet = spreadsheet.getSheetByName(BUDGETS_SHEET);
-      if (!budgetSheet) return jsonOut({ status: "ok", data: [] });
+      if (!budgetSheet) return jsonOut({ status: "ok", data: [], revision: listRevision(spreadsheet, target) });
       var budgetData = budgetSheet.getDataRange().getValues();
       var budgets = [];
       for (var b = 1; b < budgetData.length; b++) {
@@ -1345,7 +1411,7 @@ function handleGet(e) {
           amount: Number(budgetData[b][3]) || 0,
         });
       }
-      return jsonOut({ status: "ok", data: budgets });
+      return jsonOut({ status: "ok", data: budgets, revision: listRevision(spreadsheet, target) });
     }
 
     // =============================================================

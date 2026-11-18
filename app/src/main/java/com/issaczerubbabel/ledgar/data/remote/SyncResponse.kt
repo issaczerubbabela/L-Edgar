@@ -16,5 +16,9 @@ data class SyncResponse(
     val revisions: Map<String, String>? = null,
     /** Set by scripts that recognise the target, e.g. "bucket_budgets_backed_up". */
     val type: String? = null,
-    val action: String? = null
+    val action: String? = null,
+    /** A list Backup was refused: the tab changed in the Sheet since [SyncRequest.baseRevision] (ADR-0010). */
+    val sheetChanged: Boolean? = null,
+    /** A list's revision after a Backup, or its current one when [sheetChanged]. */
+    val revision: String? = null
 )

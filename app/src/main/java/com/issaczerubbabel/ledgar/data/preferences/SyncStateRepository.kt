@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -39,8 +40,46 @@ class SyncStateRepository @Inject constructor(@ApplicationContext private val co
         }
     }
 
+    /** The last revision this phone read or wrote for a list Backup target, if any (ADR-0010). */
+    suspend fun listRevision(target: String): String? =
+        context.syncStateStore.data.map { it[revisionKey(target)] }.first()
+
+    suspend fun setListRevision(target: String, revision: String?) {
+        context.syncStateStore.edit { prefs ->
+            if (revision.isNullOrBlank()) prefs.remove(revisionKey(target)) else prefs[revisionKey(target)] = revision
+        }
+    }
+
+    /** List Backup targets the Sheet changed since this phone's last Backup, waiting for the user to decide. */
+    val listsChangedInSheet: Flow<Set<String>> = context.syncStateStore.data
+        .map { prefs -> prefs[LISTS_CHANGED_IN_SHEET].orEmpty() }
+
+    suspend fun setListChangedInSheet(target: String, changed: Boolean) {
+        context.syncStateStore.edit { prefs ->
+            val now = prefs[LISTS_CHANGED_IN_SHEET].orEmpty().let { if (changed) it + target else it - target }
+            if (now.isEmpty()) prefs.remove(LISTS_CHANGED_IN_SHEET) else prefs[LISTS_CHANGED_IN_SHEET] = now
+        }
+    }
+
+    /** Import took in the Sheet's [target] list as it is at [revision]: Backups can write it again. */
+    suspend fun acceptSheetList(target: String, revision: String?) {
+        setListRevision(target, revision)
+        setListChangedInSheet(target, false)
+    }
+
+    /** Overwrite: the next Backup of [targets] goes without a base, replacing whatever the Sheet has. */
+    suspend fun overwriteListsInSheet(targets: Collection<String>) {
+        context.syncStateStore.edit { prefs ->
+            targets.forEach { prefs.remove(revisionKey(it)) }
+            val now = prefs[LISTS_CHANGED_IN_SHEET].orEmpty() - targets.toSet()
+            if (now.isEmpty()) prefs.remove(LISTS_CHANGED_IN_SHEET) else prefs[LISTS_CHANGED_IN_SHEET] = now
+        }
+    }
+
     private companion object {
         val LISTS_MERGED = booleanPreferencesKey("lists_merged_from_sheet")
+        val LISTS_CHANGED_IN_SHEET = stringSetPreferencesKey("lists_changed_in_sheet")
+        fun revisionKey(target: String) = stringPreferencesKey("list_revision_" + target)
         val HELD_SHEET_DELETIONS = stringSetPreferencesKey("held_sheet_deletions")
     }
 }

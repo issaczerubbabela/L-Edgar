@@ -275,6 +275,18 @@ class SettingsViewModel @Inject constructor(
     val heldSheetDeletions: StateFlow<Set<Long>> = syncState.heldSheetDeletions
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
+    /** Lists whose Sheet tab changed since the last Backup, so Backups wait for the user (ADR-0010). */
+    val listsChangedInSheet: StateFlow<Set<String>> = syncState.listsChangedInSheet
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    /** Replaces the changed tabs with the phone's lists, discarding what was edited in the Sheet. */
+    fun overwriteSheetLists() {
+        viewModelScope.launch {
+            syncState.overwriteListsInSheet(listsChangedInSheet.value)
+            syncScheduler.requestBackup()
+        }
+    }
+
     val possibleDuplicates: StateFlow<List<List<ExpenseRecord>>> = repository.observePossibleDuplicates()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -457,7 +469,8 @@ class SettingsViewModel @Inject constructor(
                         val budgetCount = latest.outputData.getInt(BackupWorker.KEY_BUDGET_BACKUP_COUNT, 0)
                         val accountCount = latest.outputData.getInt(BackupWorker.KEY_ACCOUNTS_BACKUP_COUNT, 0)
                         val bucketCount = latest.outputData.getInt(BackupWorker.KEY_BUCKET_BACKUP_COUNT, 0)
-                        val total = (dropdownCount + budgetCount + accountCount + bucketCount.coerceAtLeast(0)).coerceAtLeast(0)
+                        // Negative counts mean "not written" (script outdated, or the tab changed in the Sheet).
+                        val total = listOf(dropdownCount, budgetCount, accountCount, bucketCount).sumOf { it.coerceAtLeast(0) }
                         _backupState.value = ImportState.Success(imported = total, skipped = 0)
                         if (bucketCount == BackupWorker.SCRIPT_OUTDATED) {
                             _uiEvents.emit(SettingsUiEvent.ShowMessage(BUCKET_SCRIPT_OUTDATED_MESSAGE))

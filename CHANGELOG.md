@@ -17,6 +17,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 ### Changed
 
 - Creating or renaming an account picks up the Sheet's transactions that name it; a rename updates the Sheet
+- Apps Script version 3: redeploy it so backups can't overwrite lists you edit in the Sheet
 
 ### Fixed
 
@@ -24,6 +25,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Import from Google Sheets keeps every transaction on its account, and Sync repairs links lost before
 - Sync no longer puts transactions whose Sheet account name matches no account on Cash
 - Budget: editing a bucket offers only your current categories, and deleted ones leave the running cycle
+- Backups no longer overwrite lists edited in the Sheet: More asks whether to Import them or Overwrite the Sheet
 
 ### Developer
 
@@ -32,6 +34,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - docs/handoff-2026-11-sync-fixes.md: seven Sheet sync and Import issues found during the Nov 2026 data clean-up
 - SheetListsRestorer, the Pull's RelinkAccounts step and name-linking queries, with tests for roles, ids and names
 - DropdownEditor renames or deletes an option across every table that stores it, in one Room transaction, with tests
+- ADR-0010: list revisions in the Apps Script (version 3), sent as baseRevision by ListBackup, with script and app tests
 
 ## [1.6.0] - 2026-10-13
 

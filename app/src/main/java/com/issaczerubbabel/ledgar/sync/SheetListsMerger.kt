@@ -27,16 +27,29 @@ class SheetListsMerger @Inject constructor(
     suspend fun mergeOnce(scriptUrl: String) {
         if (syncState.hasMergedListsFromSheet()) return
 
-        val sheetAccounts = api.importAccounts(scriptUrl).dataOrThrow("Accounts") { it.status to it.data }
-        val sheetDropdowns = api.importDropdownOptions(scriptUrl).dataOrThrow("Dropdown options") { it.status to it.data }
-        val sheetBudgets = api.importBudgets(scriptUrl).dataOrThrow("Budgets") { it.status to it.data }
+        // The revisions read here are what this phone's first Backups are based on (ADR-0010).
+        val revisions = mutableMapOf<String, String?>()
+        val sheetAccounts = api.importAccounts(scriptUrl)
+            .also { revisions["accounts"] = it.body()?.revision }
+            .dataOrThrow("Accounts") { it.status to it.data }
+        val sheetDropdowns = api.importDropdownOptions(scriptUrl)
+            .also { revisions["dropdowns"] = it.body()?.revision }
+            .dataOrThrow("Dropdown options") { it.status to it.data }
+        val sheetBudgets = api.importBudgets(scriptUrl)
+            .also { revisions["budgets"] = it.body()?.revision }
+            .dataOrThrow("Budgets") { it.status to it.data }
         val sheetCycles = api.importBucketBudgets(scriptUrl).let { response ->
             val body = response.body()
             check(response.isSuccessful && body?.status.equals("ok", ignoreCase = true)) {
                 "Reading salary cycles from the Sheet failed (HTTP ${response.code()})"
             }
             // A script from before bucket budgets answers without the marker: nothing to take in.
-            if (body?.isUnderstoodByScript == true) BucketBackupMapper.fromImportDtos(body.data.orEmpty()) else emptyList()
+            if (body?.isUnderstoodByScript == true) {
+                revisions["bucket_budgets"] = body.revision
+                BucketBackupMapper.fromImportDtos(body.data.orEmpty())
+            } else {
+                emptyList()
+            }
         }
 
         database.withTransaction {
@@ -89,6 +102,7 @@ class SheetListsMerger @Inject constructor(
         if (sheetCycles.isNotEmpty() && bucketBudgets.getBackupSnapshot().cycles.isEmpty()) {
             bucketBudgets.replaceAllFromBackup(sheetCycles)
         }
+        revisions.forEach { (target, revision) -> syncState.acceptSheetList(target, revision) }
         syncState.setMergedListsFromSheet()
     }
 

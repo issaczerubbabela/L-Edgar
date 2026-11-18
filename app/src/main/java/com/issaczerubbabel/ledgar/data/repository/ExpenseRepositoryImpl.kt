@@ -116,6 +116,7 @@ class ExpenseRepositoryImpl @Inject constructor(
         }
 
         val restoredDropdowns = listsRestorer.restoreDropdowns(dropdownBody?.data.orEmpty())
+        syncState.acceptSheetList("dropdowns", dropdownBody?.revision)
 
         val accountsResponse = apiService.importAccounts(
             url = scriptUrl,
@@ -131,6 +132,7 @@ class ExpenseRepositoryImpl @Inject constructor(
         }
 
         val restoredAccounts = listsRestorer.restoreAccounts(accountsBody?.data.orEmpty())
+        syncState.acceptSheetList("accounts", accountsBody?.revision)
 
         val budgetResponse = apiService.importBudgets(
             url = scriptUrl,
@@ -169,6 +171,8 @@ class ExpenseRepositoryImpl @Inject constructor(
             }
             mapped.size
         }
+
+        syncState.acceptSheetList("budgets", budgetBody?.revision)
 
         val restoredCycles = restoreBucketBudgets(scriptUrl)
 
@@ -219,6 +223,7 @@ class ExpenseRepositoryImpl @Inject constructor(
         }
 
         val remote = if (body?.isUnderstoodByScript == true) {
+            syncState.acceptSheetList("bucket_budgets", body.revision)
             BucketBackupMapper.fromImportDtos(body.data.orEmpty())
         } else {
             Log.w(importLogTag, "Skipping bucket budget restore: the deployed Apps Script predates bucket budgets")

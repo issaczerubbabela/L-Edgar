@@ -7,7 +7,7 @@ import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 
 const PORT = Number(process.env.PORT) || 8787;
-const SCRIPT_VERSION = 2;
+const SCRIPT_VERSION = 3;
 const pad = (n) => String(n).padStart(2, "0");
 const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const daysAgo = (n) => {

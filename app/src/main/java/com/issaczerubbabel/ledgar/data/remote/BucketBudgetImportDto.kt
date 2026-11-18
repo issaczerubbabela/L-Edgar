@@ -31,7 +31,9 @@ data class BucketBudgetImportResponse(
      */
     val type: String? = null,
     val data: List<CycleImportDto>? = null,
-    val message: String? = null
+    val message: String? = null,
+    /** The salary-cycle tabs' revision (ADR-0010); missing from scripts older than version 3. */
+    val revision: String? = null
 ) {
     val isUnderstoodByScript: Boolean get() = type == TYPE
 

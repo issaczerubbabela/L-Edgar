@@ -9,7 +9,6 @@ import androidx.work.workDataOf
 import com.issaczerubbabel.ledgar.data.bucket.BucketBackupMapper
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
 import com.issaczerubbabel.ledgar.data.remote.AccountSyncDto
-import com.issaczerubbabel.ledgar.data.remote.ApiService
 import com.issaczerubbabel.ledgar.data.remote.BudgetSyncDto
 import com.issaczerubbabel.ledgar.data.remote.DropdownSyncDto
 import com.issaczerubbabel.ledgar.data.remote.SyncRequest
@@ -23,7 +22,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
 /**
- * Replaces the Sheet's Accounts, Dropdown options and Budgets tabs with the phone's current lists.
+ * Replaces the Sheet's Accounts, Dropdown options and Budgets tabs with the phone's current lists,
+ * unless a tab changed in the Sheet since the last Backup (ADR-0010).
  * Runs apart from Transaction Sync so a failing Backup can never hold Transactions back.
  */
 @HiltWorker
@@ -34,9 +34,9 @@ class BackupWorker @AssistedInject constructor(
     private val dropdownOptionRepository: DropdownOptionRepository,
     private val budgetRepository: BudgetRepository,
     private val bucketBudgetRepository: BucketBudgetRepository,
-    private val apiService: ApiService,
     private val preferenceRepository: ThemePreferenceRepository,
-    private val listsMerger: SheetListsMerger
+    private val listsMerger: SheetListsMerger,
+    private val listBackup: ListBackup
 ) : CoroutineWorker(context, workerParams) {
 
     private var lastSyncError: String? = null
@@ -95,19 +95,25 @@ class BackupWorker @AssistedInject constructor(
             return 0
         }
 
-        val response = apiService.syncRecords(
-            scriptUrl,
-            SyncRequest(action = "backup", target = "dropdowns", records = payload)
-        )
-        val body = response.body()
-        if (response.isSuccessful && body?.status.equals("ok", ignoreCase = true)) {
-            Log.i(TAG, "Dropdown backup successful. count=${payload.size}")
-            return payload.size
-        }
+        return countOf(listBackup.send(scriptUrl, SyncRequest(action = "backup", target = "dropdowns", records = payload)), payload.size)
+    }
 
-        lastSyncError = "Dropdown backup failed (HTTP ${response.code()}): ${body?.message ?: "unknown error"}"
-        Log.w(TAG, "Dropdown backup failed: HTTP ${response.code()}, status=${body?.status}, message=${body?.message}")
-        return null
+    /** The number written, [SHEET_CHANGED] or [SCRIPT_OUTDATED], or null when the request genuinely failed. */
+    private fun countOf(outcome: ListBackup.Outcome, sent: Int): Int? = when (outcome) {
+        ListBackup.Outcome.Written -> sent
+        ListBackup.Outcome.SheetChanged -> {
+            Log.w(TAG, "Backup held: the Sheet's tab changed since the last Backup, waiting for the user")
+            SHEET_CHANGED
+        }
+        ListBackup.Outcome.ScriptOutdated -> {
+            Log.w(TAG, "Backup skipped: the deployed Apps Script predates this target and needs redeploying")
+            SCRIPT_OUTDATED
+        }
+        is ListBackup.Outcome.Failed -> {
+            lastSyncError = outcome.message
+            Log.w(TAG, outcome.message)
+            null
+        }
     }
 
     private suspend fun backupBudgets(scriptUrl: String): Int? {
@@ -126,19 +132,7 @@ class BackupWorker @AssistedInject constructor(
             return 0
         }
 
-        val response = apiService.syncRecords(
-            scriptUrl,
-            SyncRequest(action = "backup", target = "budgets", records = payload)
-        )
-        val body = response.body()
-        if (response.isSuccessful && body?.status.equals("ok", ignoreCase = true)) {
-            Log.i(TAG, "Budget backup successful. count=${payload.size}")
-            return payload.size
-        }
-
-        lastSyncError = "Budget backup failed (HTTP ${response.code()}): ${body?.message ?: "unknown error"}"
-        Log.w(TAG, "Budget backup failed: HTTP ${response.code()}, status=${body?.status}, message=${body?.message}")
-        return null
+        return countOf(listBackup.send(scriptUrl, SyncRequest(action = "backup", target = "budgets", records = payload)), payload.size)
     }
 
     private suspend fun backupAccounts(
@@ -170,19 +164,7 @@ class BackupWorker @AssistedInject constructor(
             )
         }
 
-        val response = apiService.syncRecords(
-            scriptUrl,
-            SyncRequest(action = "backup", target = "accounts", records = payload)
-        )
-        val body = response.body()
-        if (response.isSuccessful && body?.status.equals("ok", ignoreCase = true)) {
-            Log.i(TAG, "Account backup successful. count=${payload.size}")
-            return payload.size
-        }
-
-        lastSyncError = "Account backup failed (HTTP ${response.code()}): ${body?.message ?: "unknown error"}"
-        Log.w(TAG, "Account backup failed: HTTP ${response.code()}, status=${body?.status}, message=${body?.message}")
-        return null
+        return countOf(listBackup.send(scriptUrl, SyncRequest(action = "backup", target = "accounts", records = payload)), payload.size)
     }
 
     /**
@@ -201,23 +183,8 @@ class BackupWorker @AssistedInject constructor(
             return 0
         }
 
-        val response = apiService.syncRecords(
-            scriptUrl,
-            SyncRequest(action = "backup", target = "bucket_budgets", records = emptyList(), cycles = payload)
-        )
-        val body = response.body()
-        if (response.isSuccessful && body?.status.equals("ok", ignoreCase = true)) {
-            if (body?.type == BUCKET_BACKUP_TYPE) {
-                Log.i(TAG, "Bucket backup successful. cycles=${payload.size}")
-                return payload.size
-            }
-            Log.w(TAG, "Bucket backup skipped: the deployed Apps Script predates bucket budgets and needs redeploying")
-            return SCRIPT_OUTDATED
-        }
-
-        lastSyncError = "Bucket backup failed (HTTP ${response.code()}): ${body?.message ?: "unknown error"}"
-        Log.w(TAG, "Bucket backup failed: HTTP ${response.code()}, status=${body?.status}, message=${body?.message}")
-        return null
+        val request = SyncRequest(action = "backup", target = "bucket_budgets", records = emptyList(), cycles = payload)
+        return countOf(listBackup.send(scriptUrl, request, expectedType = BUCKET_BACKUP_TYPE), payload.size)
     }
 
     companion object {
@@ -230,6 +197,9 @@ class BackupWorker @AssistedInject constructor(
 
         /** Reported instead of a count when the deployed script does not understand bucket budgets. */
         const val SCRIPT_OUTDATED = -1
+
+        /** Reported instead of a count when the Sheet's tab changed since the last Backup (ADR-0010). */
+        const val SHEET_CHANGED = -2
         private const val BUCKET_BACKUP_TYPE = "bucket_budgets_backed_up"
         const val KEY_ERROR_MESSAGE = "errorMessage"
         private const val MAX_ATTEMPTS = 3

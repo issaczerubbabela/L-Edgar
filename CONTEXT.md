@@ -182,7 +182,11 @@ The script's hash of a Sheet row's content. It changes whenever the row is edite
 _Avoid_: version (that's the phone's `localVersion`), fingerprint
 
 **Backup**:
-Replacing a Sheet tab with the phone's full current list of Accounts, Dropdown options or Budgets. Before a phone's first Backup, the phone takes in whatever the Sheet's lists have that it lacks.
+Replacing a Sheet tab with the phone's full current list of Accounts, Dropdown options or Budgets. Before a phone's first Backup, the phone takes in whatever the Sheet's lists have that it lacks. A tab edited in the Sheet since the last Backup is never replaced until the user chooses Import or Overwrite (ADR-0010).
+
+**List revision**:
+The script's hash of a list's whole Sheet tab (or the three salary-cycle tabs). The phone stores the one it last read or wrote, to tell whether the tab was edited in the Sheet since.
+_Avoid_: version, checksum
 _Avoid_: sync (for these lists)
 
 **Import**:

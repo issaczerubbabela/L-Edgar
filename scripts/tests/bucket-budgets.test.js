@@ -311,6 +311,61 @@ test.describe("dropdown option roles", () => {
 });
 
 // ---------------------------------------------------------------------------------------------
+// List revisions (ADR-0010): a backup based on an old revision never overwrites a Sheet edit.
+// ---------------------------------------------------------------------------------------------
+test.describe("list revisions", () => {
+  for (const [label, source] of [["AppsScript.gs", gsSource], ["copy embedded in the app", embedded]]) {
+    test(`${label}: a backup based on the tab's revision goes through and returns the new one`, () => {
+      const s = loadScript(source);
+      const read = s.get("dropdowns");
+      assert.match(read.revision, /^[0-9a-f]{16}$/);
+      const backup = s.post({ target: "dropdowns", action: "backup", records: OPTIONS, baseRevision: read.revision });
+      assert.equal(backup.sheetChanged, undefined);
+      assert.equal(backup.count, 3);
+      assert.notEqual(backup.revision, read.revision);
+      assert.equal(s.get("dropdowns").revision, backup.revision, "reading the tab gives the revision the backup returned");
+    });
+
+    test(`${label}: a backup is refused when the tab was edited in the Sheet since`, () => {
+      const s = loadScript(source);
+      const first = s.post({ target: "dropdowns", action: "backup", records: OPTIONS });
+      s.sheets["_dropdowns"].getRange(4, 3).setValues([["Food & Dining"]]); // the user renames a Category by hand
+
+      const second = s.post({ target: "dropdowns", action: "backup", records: OPTIONS.slice(0, 2), baseRevision: first.revision });
+
+      assert.equal(second.status, "ok");
+      assert.equal(second.sheetChanged, true);
+      assert.equal(second.revision, s.get("dropdowns").revision);
+      assert.deepEqual(s.get("dropdowns").data.map((o) => o.name), ["Investments/Savings", "Return", "Food & Dining"], "nothing was overwritten");
+    });
+
+    test(`${label}: a backup without a base overwrites, as before`, () => {
+      const s = loadScript(source);
+      s.post({ target: "accounts", action: "backup", records: [{ id: 1, groupName: "Bank", accountName: "HDFC", initialBalance: 0 }] });
+      s.sheets["_accounts"].getRange(2, 3).setValues([["HDFC Savings"]]);
+
+      const backup = s.post({ target: "accounts", action: "backup", records: [{ id: 1, groupName: "Bank", accountName: "HDFC", initialBalance: 0 }] });
+
+      assert.equal(backup.sheetChanged, undefined);
+      assert.equal(s.get("accounts").data[0].accountName, "HDFC");
+    });
+
+    test(`${label}: salary cycles share one revision across their three tabs`, () => {
+      const s = loadScript(source);
+      const first = s.post({ target: "bucket_budgets", action: "backup", cycles: CYCLES });
+      assert.equal(s.get("bucket_budgets").revision, first.revision);
+      s.sheets["_bucket_categories"].getRange(2, 3).setValues([["Housing"]]);
+
+      const second = s.post({ target: "bucket_budgets", action: "backup", cycles: CYCLES, baseRevision: first.revision });
+
+      assert.equal(second.sheetChanged, true);
+      assert.equal(second.type, "bucket_budgets_backed_up", "the app still sees a script that knows the target");
+      assert.equal(s.get("bucket_budgets").data[0].buckets[0].categories[0], "Housing");
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------------------------
 // Contract with the app. The Android unit test BucketBudgetContractTest checks that the app
 // serialises to exactly bucket-budgets-request.json and can parse bucket-budgets-response.json.
 // Here the script must turn that same request into that same response, so a renamed field on
@@ -324,7 +379,11 @@ test.describe("the contract with the app", () => {
       const s = loadScript(source);
       const backup = s.post(fixture("bucket-budgets-request.json"));
       assert.equal(backup.type, "bucket_budgets_backed_up");
-      assert.deepEqual(s.get("bucket_budgets"), fixture("bucket-budgets-response.json"));
+      // The revision is a hash of the tabs, so only its shape is fixed; the app just stores it.
+      const response = s.get("bucket_budgets");
+      assert.match(response.revision, /^[0-9a-f]{16}$/);
+      const expected = fixture("bucket-budgets-response.json");
+      assert.deepEqual({ ...response, revision: expected.revision }, expected);
     });
   }
 });

@@ -14,5 +14,10 @@ data class SyncRequest(
 	 * Bucket-budget cycles. Sent here rather than in [records], which is left empty: a script that
 	 * predates this field files records as transactions, and would add junk rows to the sheet.
 	 */
-	val cycles: List<CycleSyncDto>? = null
+	val cycles: List<CycleSyncDto>? = null,
+	/**
+	 * The list revision this Backup is based on (ADR-0010). The script refuses the Backup if the tab
+	 * changed since. Null (not sent) overwrites, as before.
+	 */
+	val baseRevision: String? = null
 )

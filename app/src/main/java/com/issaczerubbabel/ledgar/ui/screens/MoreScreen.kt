@@ -59,6 +59,8 @@ fun MoreScreen(
     val syncStatus by vm.syncStatus.collectAsStateWithLifecycle()
     val scriptUrl by vm.scriptUrl.collectAsStateWithLifecycle()
     val accountNames by accountNamesVm.uiState.collectAsStateWithLifecycle()
+    val listsChangedInSheet by vm.listsChangedInSheet.collectAsStateWithLifecycle()
+    var showListsChanged by remember { mutableStateOf(false) }
     var heldDeletionsDismissed by remember { mutableStateOf(false) }
     var showAllFeatures by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -108,6 +110,27 @@ fun MoreScreen(
             onEndChanged = exportVm::updateCustomEnd,
             onDismiss = exportVm::closeDialog,
             onConfirm = exportVm::requestExportDocument
+        )
+    }
+
+    if (showListsChanged && listsChangedInSheet.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = { showListsChanged = false },
+            icon = { Icon(Icons.Filled.Warning, null) },
+            title = { Text("Lists changed in your Sheet") },
+            text = {
+                Text(
+                    "${listNames(listsChangedInSheet)} changed in the Sheet since this phone last backed them up, so they " +
+                        "aren't being backed up until you choose. Import replaces this phone's accounts, categories and " +
+                        "budgets with the Sheet's. Overwrite replaces the Sheet's with this phone's and loses the edits made there."
+                )
+            },
+            confirmButton = {
+                Button(onClick = { showListsChanged = false; vm.importFromSheets() }) { Text("Import from Sheet") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showListsChanged = false; vm.overwriteSheetLists() }) { Text("Overwrite Sheet") }
+            }
         )
     }
 
@@ -190,7 +213,9 @@ fun MoreScreen(
                 isConnected = !scriptUrl.isNullOrBlank(),
                 conflictCount = syncConflicts.size,
                 unmatchedAccountTransactions = accountNames.transactionCount,
+                listsChangedInSheet = listsChangedInSheet.isNotEmpty(),
                 onSyncNow = vm::syncNow,
+                onReviewListsChanged = { showListsChanged = true },
                 onReviewConflicts = vm::openConflictSheet,
                 onReviewAccountNames = onNavigateToAccountNames,
                 onOpenSetup = onNavigateToAppsScriptSetup
@@ -281,7 +306,9 @@ private fun SyncStatusCard(
     isConnected: Boolean,
     conflictCount: Int,
     unmatchedAccountTransactions: Int,
+    listsChangedInSheet: Boolean,
     onSyncNow: () -> Unit,
+    onReviewListsChanged: () -> Unit,
     onReviewConflicts: () -> Unit,
     onReviewAccountNames: () -> Unit,
     onOpenSetup: () -> Unit
@@ -364,6 +391,9 @@ private fun SyncStatusCard(
                     onClick = onReviewConflicts
                 )
             }
+            if (listsChangedInSheet) {
+                SyncNotice(text = "Lists changed in your Sheet", onClick = onReviewListsChanged)
+            }
             if (unmatchedAccountTransactions > 0) {
                 SyncNotice(
                     text = if (unmatchedAccountTransactions == 1) "1 transaction names an account you don't have"
@@ -372,6 +402,21 @@ private fun SyncStatusCard(
                 )
             }
         }
+    }
+}
+
+/** How the user knows each list Backup target, joined for a sentence: "Accounts and Categories & groups". */
+private fun listNames(targets: Set<String>): String {
+    val names = listOf(
+        "accounts" to "Accounts",
+        "dropdowns" to "Categories & groups",
+        "budgets" to "Budgets",
+        "bucket_budgets" to "Salary cycles & buckets"
+    ).filter { it.first in targets }.map { it.second }
+    return when (names.size) {
+        0 -> "Your lists"
+        1 -> names.single()
+        else -> names.dropLast(1).joinToString(", ") + " and " + names.last()
     }
 }
 
