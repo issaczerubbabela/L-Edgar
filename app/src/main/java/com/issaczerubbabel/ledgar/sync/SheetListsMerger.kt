@@ -45,7 +45,7 @@ class SheetListsMerger @Inject constructor(
             val accountNames = localAccounts.map { it.accountName.key() }.toMutableSet()
             var nextOrder = (localAccounts.maxOfOrNull { it.displayOrder } ?: -1) + 1
             sheetAccounts.filter { it.accountName.isNotBlank() && accountNames.add(it.accountName.key()) }.forEach { dto ->
-                accountDao.insert(
+                val id = accountDao.insert(
                     AccountRecord(
                         groupName = dto.groupName,
                         accountName = dto.accountName,
@@ -58,6 +58,7 @@ class SheetListsMerger @Inject constructor(
                         reconciledAt = dto.reconciledAt?.takeIf { it.isNotBlank() }
                     )
                 )
+                database.expenseDao().linkAccountByName(id, dto.accountName)
             }
 
             val dropdownDao = database.dropdownOptionDao()

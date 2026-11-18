@@ -1,15 +1,12 @@
 package com.issaczerubbabel.ledgar.data.repository
 
 import android.util.Log
-import com.issaczerubbabel.ledgar.data.local.dao.AccountDao
 import com.issaczerubbabel.ledgar.data.bucket.BucketBackupMapper
 import com.issaczerubbabel.ledgar.data.local.dao.BudgetDao
 import com.issaczerubbabel.ledgar.data.local.migration.BucketBudgetMigration
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
 import com.issaczerubbabel.ledgar.data.local.entity.Budget
-import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
-import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.google.gson.Gson
 import com.issaczerubbabel.ledgar.data.preferences.SyncStateRepository
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
@@ -17,6 +14,7 @@ import com.issaczerubbabel.ledgar.data.remote.ApiService
 import com.issaczerubbabel.ledgar.data.remote.ImportRecordDto
 import com.issaczerubbabel.ledgar.sync.MergeStep
 import com.issaczerubbabel.ledgar.sync.PulledRow
+import com.issaczerubbabel.ledgar.sync.SheetListsRestorer
 import com.issaczerubbabel.ledgar.sync.SyncUrlNotConfiguredException
 import com.issaczerubbabel.ledgar.sync.TransactionSyncStore
 import com.issaczerubbabel.ledgar.sync.TransactionSyncer
@@ -34,15 +32,14 @@ import javax.inject.Inject
 
 class ExpenseRepositoryImpl @Inject constructor(
     private val dao: ExpenseDao,
-    private val accountDao: AccountDao,
     private val apiService: ApiService,
-    private val dropdownOptionRepository: DropdownOptionRepository,
     private val budgetDao: BudgetDao,
     private val bucketBudgetRepository: BucketBudgetRepository,
     private val preferenceRepository: ThemePreferenceRepository,
     private val transactionSyncer: TransactionSyncer,
     private val syncStore: TransactionSyncStore,
-    private val syncState: SyncStateRepository
+    private val syncState: SyncStateRepository,
+    private val listsRestorer: SheetListsRestorer
 ) : ExpenseRepository {
 
     private val importLogTag = "ExpenseImport"
@@ -118,19 +115,7 @@ class ExpenseRepositoryImpl @Inject constructor(
             throw IllegalStateException(dropdownBody?.message ?: "Dropdown import failed")
         }
 
-        val restoredDropdowns = dropdownBody?.data.orEmpty().let { remoteDropdowns ->
-            val filteredDropdowns = remoteDropdowns.filterNot { it.optionType == "PAYMENT_MODE" }
-            val mapped = filteredDropdowns.map { dto ->
-                DropdownOption(
-                    id = 0,
-                    optionType = dto.optionType,
-                    name = dto.name,
-                    displayOrder = dto.displayOrder
-                )
-            }
-            dropdownOptionRepository.overwriteAllOptions(mapped)
-            mapped.size
-        }
+        val restoredDropdowns = listsRestorer.restoreDropdowns(dropdownBody?.data.orEmpty())
 
         val accountsResponse = apiService.importAccounts(
             url = scriptUrl,
@@ -145,24 +130,7 @@ class ExpenseRepositoryImpl @Inject constructor(
             throw IllegalStateException(accountsBody?.message ?: "Account import failed")
         }
 
-        val restoredAccounts = accountsBody?.data.orEmpty().let { remoteAccounts ->
-            val mapped = remoteAccounts.mapIndexed { index, dto ->
-                AccountRecord(
-                    id = 0,
-                    groupName = dto.groupName,
-                    accountName = dto.accountName,
-                    initialBalance = dto.initialBalance,
-                    initialBalanceDate = dto.initialBalanceDate.ifBlank { "1970-01-01" },
-                    isHidden = dto.isHidden,
-                    displayOrder = dto.displayOrder ?: index,
-                    description = dto.description,
-                    includeInTotals = dto.includeInTotals,
-                    reconciledAt = dto.reconciledAt?.takeIf { it.isNotBlank() }
-                )
-            }
-            accountDao.overwriteAll(mapped)
-            mapped.size
-        }
+        val restoredAccounts = listsRestorer.restoreAccounts(accountsBody?.data.orEmpty())
 
         val budgetResponse = apiService.importBudgets(
             url = scriptUrl,

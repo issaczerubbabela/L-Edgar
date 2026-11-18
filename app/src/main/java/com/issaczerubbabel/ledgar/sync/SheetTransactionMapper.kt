@@ -60,6 +60,27 @@ class SheetTransactionMapper @Inject constructor(private val accountDao: Account
         )
     }
 
+    /** The Accounts a Sheet row names, by name or group. Unlike [mapImportRecord] it never guesses a fallback. */
+    data class NamedAccounts(
+        val accountName: String?,
+        val accountId: Long?,
+        val fromName: String?,
+        val fromId: Long?,
+        val toName: String?,
+        val toId: Long?
+    )
+
+    fun namedAccounts(dto: ImportRecordDto, accounts: AccountContext): NamedAccounts {
+        val combined = dto.accountName?.trim().takeUnless { it.isNullOrBlank() }
+            ?: dto.paymentMode?.trim().takeUnless { it.isNullOrBlank() }
+        val parts = combined?.split("->")?.map { it.trim() }?.filter { it.isNotBlank() }.orEmpty()
+        val fromName = dto.fromAccountName?.trim().takeUnless { it.isNullOrBlank() } ?: parts.getOrNull(0)
+        val toName = dto.toAccountName?.trim().takeUnless { it.isNullOrBlank() } ?: parts.getOrNull(1)
+        fun idOf(name: String?): Long? = name?.let { normalizeAccountKey(it) }
+            ?.let { key -> accounts.accountsByName[key]?.id ?: accounts.accountsByGroup[key]?.id }
+        return NamedAccounts(combined, idOf(combined), fromName, idOf(fromName), toName, idOf(toName))
+    }
+
     fun mapImportRecord(
         dto: ImportRecordDto,
         accountsByName: Map<String, AccountRecord>,
@@ -112,10 +133,15 @@ class SheetTransactionMapper @Inject constructor(private val accountDao: Account
             resolvedType.equals(TransactionType.TRANSFER, ignoreCase = true) -> null
             // A Balance adjustment changes one balance, so it's never put on a guessed Account.
             isAdjustment -> namedAccountId
-            else -> namedAccountId ?: fallbackAccountId
+            // A name that matches no Account stays unlinked, keeping the name so the user can fix it
+            // (More > Account names). Only a row that names no Account at all goes on the fallback.
+            remoteAccountName != null -> namedAccountId
+            else -> fallbackAccountId
         }
 
-        if (!resolvedType.equals(TransactionType.TRANSFER, ignoreCase = true) && !isAdjustment && mappedAccountId == null) {
+        if (!resolvedType.equals(TransactionType.TRANSFER, ignoreCase = true) && !isAdjustment &&
+            mappedAccountId == null && remoteAccountName == null
+        ) {
             return MappedImportRecord(
                 record = ExpenseRecord(
                     date = resolvedDate,

@@ -154,8 +154,12 @@ sequenceDiagram
 ### Google Sheets Import
 
 1. Settings triggers importFromSheets.
-2. Repository imports dropdowns, accounts and budgets and overwrites the local lists, then bucket_budgets (cycles with nested buckets and categories), replacing the local cycle tables.
+2. Repository imports dropdowns (with their Stats roles), accounts and budgets and overwrites the local lists, then bucket_budgets (cycles with nested buckets and categories), replacing the local cycle tables. `SheetListsRestorer` matches Accounts by name and updates them in place, so their ids and every Transaction's `accountId` / `fromAccountId` / `toAccountId` survive. An Account the Sheet lacks is deleted only after its name is written onto its Transactions, and any Transaction whose name then matches an Account is linked.
 3. Transactions come in through the same Pull as every Sync (`TransactionSyncer`), merged by Transaction ID; conflicts appear in More.
+
+### Account names
+
+A Sheet row names its Account in text. `SheetTransactionMapper` links it to the Account with that name (or group). A name that matches no Account leaves the Transaction on no Account, keeping the name in `accountName` / `fromAccountName` / `toAccountName`; only a row that names no Account at all goes on the fallback (Cash). More > Account names lists those names (`ExpenseDao.observeUnmatchedAccountNames`, which also finds rows an older version guessed onto the fallback) with Create account and Map to…. Creating or renaming an Account links the Transactions that name it, and a rename marks the Account's Transactions to sync so the Sheet shows the new name. When a Pull finds a synced row unchanged on both sides but on a different Account than the one its Sheet row names, it re-points the row (`MergeStep.RelinkAccounts`), which repairs links an older Import lost.
 
 ### CSV Import
 

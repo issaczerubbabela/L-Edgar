@@ -317,4 +317,180 @@ interface ExpenseDao {
         """
     )
     fun getTransactionsForAccountInMonth(accountId: Long, startDate: String, endDate: String): Flow<List<ExpenseRecord>>
+
+    // ---- Account links by name -------------------------------------------------------------------
+    // A Transaction names its Account by id. The accountName, fromAccountName and toAccountName columns
+    // hold the name the Sheet gave, and only count while the id is null (toSheetDto prefers the id).
+
+    /** Writes [name] into the name columns of every Transaction linked to Account [accountId], so the link can be rebuilt by name. */
+    @Query(
+        """
+        UPDATE expense_records
+        SET accountName = CASE WHEN accountId = :accountId THEN :name ELSE accountName END,
+            fromAccountName = CASE WHEN fromAccountId = :accountId THEN :name ELSE fromAccountName END,
+            toAccountName = CASE WHEN toAccountId = :accountId THEN :name ELSE toAccountName END
+        WHERE accountId = :accountId OR fromAccountId = :accountId OR toAccountId = :accountId
+        """
+    )
+    suspend fun rememberAccountName(accountId: Long, name: String)
+
+    /** Links the Expenses, Incomes and Balance adjustments with no Account whose Sheet name is [name]. Returns how many. */
+    @Query(
+        """
+        UPDATE expense_records
+        SET accountId = :accountId,
+            fromAccountId = CASE WHEN type = 'Expense' THEN :accountId ELSE fromAccountId END,
+            toAccountId = CASE WHEN type = 'Income' THEN :accountId ELSE toAccountId END
+        WHERE accountId IS NULL AND type != 'Transfer'
+          AND trim(accountName) = trim(:name) COLLATE NOCASE
+        """
+    )
+    suspend fun linkSingleAccountByName(accountId: Long, name: String): Int
+
+    /** Links the Transfers coming from no Account whose Sheet from-name is [name]. Returns how many. */
+    @Query(
+        """
+        UPDATE expense_records SET fromAccountId = :accountId
+        WHERE fromAccountId IS NULL AND type = 'Transfer' AND trim(fromAccountName) = trim(:name) COLLATE NOCASE
+        """
+    )
+    suspend fun linkTransferFromByName(accountId: Long, name: String): Int
+
+    /** Links the Transfers going to no Account whose Sheet to-name is [name]. Returns how many. */
+    @Query(
+        """
+        UPDATE expense_records SET toAccountId = :accountId
+        WHERE toAccountId IS NULL AND type = 'Transfer' AND trim(toAccountName) = trim(:name) COLLATE NOCASE
+        """
+    )
+    suspend fun linkTransferToByName(accountId: Long, name: String): Int
+
+    /** Links every Transaction with no Account whose Sheet name is [name] to Account [accountId]. Returns how many. */
+    @Transaction
+    suspend fun linkAccountByName(accountId: Long, name: String): Int =
+        linkSingleAccountByName(accountId, name) + linkTransferFromByName(accountId, name) + linkTransferToByName(accountId, name)
+
+    /** Re-points a synced Transaction at the Accounts its Sheet row names, unless it changed since Sync read it. */
+    @Query(
+        """
+        UPDATE expense_records
+        SET accountId = :accountId, fromAccountId = :fromAccountId, toAccountId = :toAccountId,
+            accountName = :accountName, fromAccountName = :fromAccountName, toAccountName = :toAccountName
+        WHERE id = :id AND localVersion = :version AND isSynced = 1
+        """
+    )
+    suspend fun relinkIfUnchanged(
+        id: Long,
+        version: Long,
+        accountId: Long?,
+        fromAccountId: Long?,
+        toAccountId: Long?,
+        accountName: String?,
+        fromAccountName: String?,
+        toAccountName: String?
+    ): Int
+
+    /**
+     * Account names from the Sheet that this phone has no Account for, with how many Transactions use
+     * each. A row either has no Account ([UnmatchedAccountName.linkedAccountId] null), or, from before
+     * that was fixed, was put on a guessed fallback Account although its name matches none.
+     */
+    @Query(
+        """
+        SELECT name, linkedAccountId, COUNT(*) AS count FROM (
+            SELECT trim(accountName) AS name, NULL AS linkedAccountId FROM expense_records
+            WHERE syncAction != 'DELETE' AND type != 'Transfer' AND accountId IS NULL AND trim(ifnull(accountName, '')) != ''
+            UNION ALL
+            SELECT trim(fromAccountName), NULL FROM expense_records
+            WHERE syncAction != 'DELETE' AND type = 'Transfer' AND fromAccountId IS NULL AND trim(ifnull(fromAccountName, '')) != ''
+            UNION ALL
+            SELECT trim(toAccountName), NULL FROM expense_records
+            WHERE syncAction != 'DELETE' AND type = 'Transfer' AND toAccountId IS NULL AND trim(ifnull(toAccountName, '')) != ''
+            UNION ALL
+            SELECT trim(e.accountName), e.accountId FROM expense_records e
+            WHERE e.syncAction != 'DELETE' AND e.type IN ('Expense', 'Income') AND e.accountId IS NOT NULL
+              AND trim(ifnull(e.accountName, '')) != ''
+              AND NOT EXISTS (
+                  SELECT 1 FROM account_records m
+                  WHERE trim(m.accountName) = trim(e.accountName) COLLATE NOCASE
+                     OR trim(m.groupName) = trim(e.accountName) COLLATE NOCASE
+              )
+        )
+        GROUP BY name COLLATE NOCASE, linkedAccountId
+        ORDER BY count DESC, name COLLATE NOCASE
+        """
+    )
+    fun observeUnmatchedAccountNames(): Flow<List<UnmatchedAccountName>>
+
+    @Query(
+        """
+        UPDATE expense_records
+        SET accountId = :accountId,
+            fromAccountId = CASE WHEN type = 'Expense' THEN :accountId ELSE fromAccountId END,
+            toAccountId = CASE WHEN type = 'Income' THEN :accountId ELSE toAccountId END,
+            accountName = :accountName,
+            fromAccountName = CASE WHEN type = 'Expense' THEN :accountName ELSE fromAccountName END,
+            toAccountName = CASE WHEN type = 'Income' THEN :accountName ELSE toAccountName END,
+            isSynced = CASE WHEN :markPending THEN 0 ELSE isSynced END,
+            syncAction = CASE WHEN :markPending AND syncAction NOT IN ('INSERT', 'DELETE') THEN 'UPDATE' ELSE syncAction END
+        WHERE syncAction != 'DELETE' AND type != 'Transfer'
+          AND trim(accountName) = trim(:name) COLLATE NOCASE
+          AND (accountId IS NULL OR NOT EXISTS (
+              SELECT 1 FROM account_records m WHERE m.id = expense_records.accountId
+                AND (trim(m.accountName) = trim(:name) COLLATE NOCASE OR trim(m.groupName) = trim(:name) COLLATE NOCASE)
+          ))
+        """
+    )
+    suspend fun mapSingleAccountName(name: String, accountId: Long, accountName: String, markPending: Boolean): Int
+
+    @Query(
+        """
+        UPDATE expense_records
+        SET fromAccountId = :accountId, fromAccountName = :accountName,
+            isSynced = CASE WHEN :markPending THEN 0 ELSE isSynced END,
+            syncAction = CASE WHEN :markPending AND syncAction NOT IN ('INSERT', 'DELETE') THEN 'UPDATE' ELSE syncAction END
+        WHERE syncAction != 'DELETE' AND type = 'Transfer' AND fromAccountId IS NULL
+          AND trim(fromAccountName) = trim(:name) COLLATE NOCASE
+        """
+    )
+    suspend fun mapTransferFromName(name: String, accountId: Long, accountName: String, markPending: Boolean): Int
+
+    @Query(
+        """
+        UPDATE expense_records
+        SET toAccountId = :accountId, toAccountName = :accountName,
+            isSynced = CASE WHEN :markPending THEN 0 ELSE isSynced END,
+            syncAction = CASE WHEN :markPending AND syncAction NOT IN ('INSERT', 'DELETE') THEN 'UPDATE' ELSE syncAction END
+        WHERE syncAction != 'DELETE' AND type = 'Transfer' AND toAccountId IS NULL
+          AND trim(toAccountName) = trim(:name) COLLATE NOCASE
+        """
+    )
+    suspend fun mapTransferToName(name: String, accountId: Long, accountName: String, markPending: Boolean): Int
+
+    /**
+     * Puts every Transaction listed under the unmatched [name] on Account [accountId], called [accountName].
+     * When that name differs from [name] they wait to sync, so the Sheet shows the Account they are on now.
+     */
+    @Transaction
+    suspend fun mapAccountName(name: String, accountId: Long, accountName: String): Int {
+        val markPending = !name.trim().equals(accountName.trim(), ignoreCase = true)
+        return mapSingleAccountName(name, accountId, accountName, markPending) +
+            mapTransferFromName(name, accountId, accountName, markPending) +
+            mapTransferToName(name, accountId, accountName, markPending)
+    }
+
+    /** Marks every Transaction on Account [accountId] as waiting to sync, so the Sheet learns its new name. */
+    @Query(
+        """
+        UPDATE expense_records
+        SET isSynced = 0,
+            syncAction = CASE WHEN syncAction = 'INSERT' THEN syncAction ELSE 'UPDATE' END
+        WHERE (accountId = :accountId OR fromAccountId = :accountId OR toAccountId = :accountId)
+          AND syncAction != 'DELETE'
+        """
+    )
+    suspend fun markAccountTransactionsPending(accountId: Long): Int
 }
+
+/** One row of [ExpenseDao.observeUnmatchedAccountNames]. */
+data class UnmatchedAccountName(val name: String, val linkedAccountId: Long?, val count: Int)

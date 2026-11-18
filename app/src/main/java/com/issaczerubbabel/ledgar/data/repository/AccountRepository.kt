@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.data.repository
 
+import com.issaczerubbabel.ledgar.data.local.dao.UnmatchedAccountName
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
@@ -30,6 +31,15 @@ interface AccountRepository {
     suspend fun getAllAccountsSnapshot(): List<AccountRecord>
     suspend fun getAccountById(accountId: Long): AccountRecord?
     suspend fun save(record: AccountRecord): Long
+
+    /** Account names from the Sheet that match none of this phone's Accounts (More > Account names). */
+    fun observeUnmatchedAccountNames(): Flow<List<UnmatchedAccountName>>
+
+    /** Puts the Transactions listed under the unmatched [name] on Account [accountId]. Returns how many. */
+    suspend fun mapAccountName(name: String, accountId: Long): Int
+
+    /** Creates an Account called [name] in [groupName] and puts the Transactions that name it on it. */
+    suspend fun createAccountForName(name: String, groupName: String): Long
     suspend fun toggleHidden(accountId: Long)
     /** Puts the Accounts in [accountIds]' order, first to last, in one Room transaction. */
     suspend fun setDisplayOrder(accountIds: List<Long>)

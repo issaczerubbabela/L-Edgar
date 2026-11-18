@@ -417,6 +417,8 @@ private class FakeStore : TransactionSyncStore {
             is MergeStep.ApplyFromSheet -> unchanged(step.localId, step.version).also { ok ->
                 if (ok) edit(step.localId) { fromSheet(step.row).copy(id = it.id, syncId = it.syncId) }
             }
+            // This fake has no Accounts, so there is never one to re-point at.
+            is MergeStep.RelinkAccounts -> false
         }
     }
 

@@ -44,6 +44,13 @@ sealed interface MergeStep {
 
     /** The Sheet row a conflict was about is gone: the phone's version goes up as is. */
     data class ClearConflict(val localId: Long, val version: Long) : MergeStep
+
+    /**
+     * Both sides agree the row is unchanged, yet the phone's Account differs from the one the Sheet
+     * names: its link was lost (an old Import) or guessed (the old fallback Account). Re-points it at
+     * the Sheet's Account where one with that name exists.
+     */
+    data class RelinkAccounts(val localId: Long, val version: Long, val row: PulledRow) : MergeStep
 }
 
 data class MergePlan(
@@ -139,7 +146,7 @@ object SheetMerge {
 
         if (record.isSynced) {
             return when {
-                !sheetChanged -> null
+                !sheetChanged -> if (sameContent) null else MergeStep.RelinkAccounts(record.id, record.localVersion, row)
                 sameContent -> MergeStep.RecordBase(record.id, record.localVersion, row.revision)
                 else -> MergeStep.ApplyFromSheet(record.id, record.localVersion, row)
             }

@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.google.gson.Gson
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.util.TransactionType
 import java.util.UUID
 import javax.inject.Inject
 
@@ -39,7 +40,9 @@ class RoomTransactionSyncStore @Inject constructor(
 
     override suspend fun apply(steps: List<MergeStep>): Int {
         if (steps.isEmpty()) return 0
-        val needsAccounts = steps.any { it is MergeStep.InsertFromSheet || it is MergeStep.ApplyFromSheet }
+        val needsAccounts = steps.any {
+            it is MergeStep.InsertFromSheet || it is MergeStep.ApplyFromSheet || it is MergeStep.RelinkAccounts
+        }
         return database.withTransaction {
             val accounts = if (needsAccounts) mapper.resolveAccountContext() else null
             steps.count { step -> applyStep(step, accounts) }
@@ -59,6 +62,48 @@ class RoomTransactionSyncStore @Inject constructor(
         is MergeStep.FinishDelete -> expenseDao.finishDeleteIfUnchanged(step.localId, step.version) > 0
         is MergeStep.InsertFromSheet -> insertFromSheet(step.row, checkNotNull(accounts))
         is MergeStep.ApplyFromSheet -> applyFromSheet(step, checkNotNull(accounts))
+        is MergeStep.RelinkAccounts -> relink(step, checkNotNull(accounts))
+    }
+
+    /** Only ids change, and only to an Account the Sheet's name actually matches: a name with no Account leaves the row as it is. */
+    private suspend fun relink(step: MergeStep.RelinkAccounts, accounts: SheetTransactionMapper.AccountContext): Boolean {
+        val current = expenseDao.getById(step.localId)
+            ?.takeIf { it.localVersion == step.version && it.isSynced }
+            ?: return false
+        val named = mapper.namedAccounts(step.row.dto, accounts)
+        val updated = when (TransactionContent.canonicalType(current.type)) {
+            TransactionType.TRANSFER -> current.copy(
+                fromAccountId = named.fromId ?: current.fromAccountId,
+                toAccountId = named.toId ?: current.toAccountId,
+                fromAccountName = named.fromName ?: current.fromAccountName,
+                toAccountName = named.toName ?: current.toAccountName
+            )
+            else -> {
+                val id = named.accountId ?: current.accountId
+                current.copy(
+                    accountId = id,
+                    fromAccountId = if (current.type == TransactionType.EXPENSE) id else current.fromAccountId,
+                    toAccountId = if (current.type == TransactionType.INCOME) id else current.toAccountId,
+                    accountName = named.accountName ?: current.accountName
+                )
+            }
+        }
+        val idsChanged = if (TransactionContent.canonicalType(current.type) == TransactionType.TRANSFER) {
+            updated.fromAccountId != current.fromAccountId || updated.toAccountId != current.toAccountId
+        } else {
+            updated.accountId != current.accountId
+        }
+        if (!idsChanged) return false
+        return expenseDao.relinkIfUnchanged(
+            id = current.id,
+            version = current.localVersion,
+            accountId = updated.accountId,
+            fromAccountId = updated.fromAccountId,
+            toAccountId = updated.toAccountId,
+            accountName = updated.accountName,
+            fromAccountName = updated.fromAccountName,
+            toAccountName = updated.toAccountName
+        ) > 0
     }
 
     private suspend fun insertFromSheet(row: PulledRow, accounts: SheetTransactionMapper.AccountContext): Boolean {

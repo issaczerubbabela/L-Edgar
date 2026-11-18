@@ -126,6 +126,35 @@ class RoomTransactionSyncStoreTest {
         assertNull(db.expenseDao().getById(id))
     }
 
+    @Test
+    fun `a synced row whose Account link was lost is re-pointed at the Account its Sheet row names`() = runBlocking {
+        // An old Import deleted the Accounts, which set the ids to null; the row itself never changed.
+        val id = db.expenseDao().insert(legacyRow().copy(accountId = null, fromAccountId = null, syncId = "sheet-1", syncedRevision = "rev-1"))
+        val local = db.expenseDao().getById(id)!!
+        val row = PulledRow("sheet-1", sheetRow().copy(revision = "rev-1"))
+
+        val plan = SheetMerge.plan(listOf(local), listOf(row), store.accountNamesById(), allowMassDelete = false)
+        assertEquals(listOf(MergeStep.RelinkAccounts(id, local.localVersion, row)), plan.steps)
+        assertEquals(1, store.apply(plan.steps))
+
+        val relinked = db.expenseDao().getById(id)!!
+        assertEquals(walletId, relinked.accountId)
+        assertEquals(walletId, relinked.fromAccountId)
+        assertTrue("the Sheet already says Wallet, so there is nothing to push", relinked.isSynced)
+        assertEquals("rev-1", relinked.syncedRevision)
+        assertTrue(SheetMerge.plan(listOf(relinked), listOf(row), store.accountNamesById(), allowMassDelete = false).steps.isEmpty())
+    }
+
+    @Test
+    fun `a Sheet name that matches no Account leaves the row's Account alone`() = runBlocking {
+        val id = db.expenseDao().insert(legacyRow().copy(syncId = "sheet-1", syncedRevision = "rev-1"))
+        val local = db.expenseDao().getById(id)!!
+        val row = PulledRow("sheet-1", sheetRow().copy(accountName = "Old wallet", revision = "rev-1"))
+
+        assertEquals(0, store.apply(SheetMerge.plan(listOf(local), listOf(row), store.accountNamesById(), allowMassDelete = false).steps))
+        assertEquals(walletId, db.expenseDao().getById(id)!!.accountId)
+    }
+
     private fun sheetRow(amount: Double = 20.0) = ImportRecordDto(
         timestamp = "9/24/2026 08:00:00",
         date = "2026-09-24",

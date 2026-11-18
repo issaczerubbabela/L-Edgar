@@ -186,8 +186,12 @@ Replacing a Sheet tab with the phone's full current list of Accounts, Dropdown o
 _Avoid_: sync (for these lists)
 
 **Import**:
-The "Import from Google Sheets" action: it replaces the phone's Accounts, Dropdown options and Budgets with the Sheet's, then Pulls Transactions.
+The "Import from Google Sheets" action: it replaces the phone's Accounts, Dropdown options and Budgets with the Sheet's, then Pulls Transactions. An Account the Sheet also has (by name) keeps its Transactions.
 _Avoid_: restore, download
+
+**Unmatched account name**:
+An account name in the Sheet's `_responses` rows that matches none of the phone's Accounts, by name or group. Its Transactions are on no Account until the user creates the Account or maps the name to one, in More > Account names.
+_Avoid_: unknown account, missing account
 
 **Sync action**:
 The change a Transaction is waiting to Sync: `INSERT`, `UPDATE` or `DELETE`, or `NONE` once it has synced. A deleted Transaction stays on the phone, hidden, until its delete has synced.

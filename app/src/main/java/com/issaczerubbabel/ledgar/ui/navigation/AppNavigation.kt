@@ -59,6 +59,7 @@ import com.issaczerubbabel.ledgar.ui.screens.AccountsScreen
 import com.issaczerubbabel.ledgar.ui.screens.AccountFormScreen
 import com.issaczerubbabel.ledgar.ui.screens.BookmarksScreen
 import com.issaczerubbabel.ledgar.ui.screens.DropdownManagementScreen
+import com.issaczerubbabel.ledgar.ui.screens.AccountNamesScreen
 import com.issaczerubbabel.ledgar.ui.screens.NetWorthScreen
 import com.issaczerubbabel.ledgar.ui.screens.SearchScreen
 import com.issaczerubbabel.ledgar.ui.screens.RepeatingScreen
@@ -99,6 +100,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object More : Screen("more", "More", Icons.Filled.MoreHoriz)
     object Settings : Screen("settings", "Settings", Icons.Filled.Settings)
     object DropdownManagement : Screen("dropdown_management", "DropdownManagement", Icons.Filled.Settings)
+    object AccountNames : Screen("account_names", "AccountNames", Icons.Filled.Settings)
     object AppsScriptSetup : Screen("apps_script_setup", "AppsScriptSetup", Icons.Filled.Settings)
     object Changelog : Screen("changelog", "Changelog", Icons.Filled.Settings)
     object CaptureInbox : Screen("capture_inbox", "CaptureInbox", Icons.Filled.Settings)
@@ -117,6 +119,7 @@ private fun tripExpenseRoute(tripId: Long, expenseId: Long = 0L, captureId: Long
 /** Screens reached from More (trips, repeats and settings); the tab stays highlighted while you are on them. */
 private val MORE_SUB_ROUTES = setOf(
     Screen.Settings.route,
+    Screen.AccountNames.route,
     Screen.Repeating.route,
     Screen.Trips.route,
     Screen.Trip.route,
@@ -788,7 +791,18 @@ fun AppNavigation(
                         navController.navigate(Screen.AppsScriptSetup.route) {
                             launchSingleTop = true
                         }
+                    },
+                    onNavigateToAccountNames = {
+                        navController.navigate(Screen.AccountNames.route) {
+                            launchSingleTop = true
+                        }
                     }
+                )
+            }
+            composable(Screen.AccountNames.route) {
+                AccountNamesScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() }
                 )
             }
             composable(Screen.Settings.route) { entry ->

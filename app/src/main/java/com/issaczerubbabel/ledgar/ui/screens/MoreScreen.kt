@@ -28,6 +28,7 @@ import com.issaczerubbabel.ledgar.ui.theme.ExpenseRed
 import com.issaczerubbabel.ledgar.ui.theme.IncomeGreen
 import com.issaczerubbabel.ledgar.viewmodel.ExportViewModel
 import com.issaczerubbabel.ledgar.viewmodel.SettingsUiEvent
+import com.issaczerubbabel.ledgar.viewmodel.AccountNamesViewModel
 import com.issaczerubbabel.ledgar.viewmodel.SettingsViewModel
 
 /**
@@ -41,7 +42,9 @@ fun MoreScreen(
     onNavigateToFeature: (route: String) -> Unit,
     onNavigateToDropdownManagement: () -> Unit,
     onNavigateToAppsScriptSetup: () -> Unit,
+    onNavigateToAccountNames: () -> Unit,
     vm: SettingsViewModel = hiltViewModel(),
+    accountNamesVm: AccountNamesViewModel = hiltViewModel(),
     exportVm: ExportViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -55,6 +58,7 @@ fun MoreScreen(
     val showDuplicatesSheet by vm.showDuplicatesSheet.collectAsStateWithLifecycle()
     val syncStatus by vm.syncStatus.collectAsStateWithLifecycle()
     val scriptUrl by vm.scriptUrl.collectAsStateWithLifecycle()
+    val accountNames by accountNamesVm.uiState.collectAsStateWithLifecycle()
     var heldDeletionsDismissed by remember { mutableStateOf(false) }
     var showAllFeatures by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -185,8 +189,10 @@ fun MoreScreen(
                 syncStatus = syncStatus,
                 isConnected = !scriptUrl.isNullOrBlank(),
                 conflictCount = syncConflicts.size,
+                unmatchedAccountTransactions = accountNames.transactionCount,
                 onSyncNow = vm::syncNow,
                 onReviewConflicts = vm::openConflictSheet,
+                onReviewAccountNames = onNavigateToAccountNames,
                 onOpenSetup = onNavigateToAppsScriptSetup
             )
 
@@ -274,8 +280,10 @@ private fun SyncStatusCard(
     syncStatus: SyncStatus,
     isConnected: Boolean,
     conflictCount: Int,
+    unmatchedAccountTransactions: Int,
     onSyncNow: () -> Unit,
     onReviewConflicts: () -> Unit,
+    onReviewAccountNames: () -> Unit,
     onOpenSetup: () -> Unit
 ) {
     val problem = syncStatus == SyncStatus.Failed || syncStatus == SyncStatus.NeedsScriptUpdate
@@ -351,31 +359,43 @@ private fun SyncStatusCard(
                 }
             }
             if (conflictCount > 0) {
-                Surface(
-                    color = MaterialTheme.colorScheme.errorContainer,
-                    shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier.fillMaxWidth().clickable(onClick = onReviewConflicts)
-                ) {
-                    Row(
-                        modifier = Modifier.defaultMinSize(minHeight = 48.dp).padding(horizontal = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.onErrorContainer)
-                        Text(
-                            text = if (conflictCount == 1) "1 sync conflict needs a decision" else "$conflictCount sync conflicts need a decision",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            "Review",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
+                SyncNotice(
+                    text = if (conflictCount == 1) "1 sync conflict needs a decision" else "$conflictCount sync conflicts need a decision",
+                    onClick = onReviewConflicts
+                )
             }
+            if (unmatchedAccountTransactions > 0) {
+                SyncNotice(
+                    text = if (unmatchedAccountTransactions == 1) "1 transaction names an account you don't have"
+                    else "$unmatchedAccountTransactions transactions name an account you don't have",
+                    onClick = onReviewAccountNames
+                )
+            }
+        }
+    }
+}
+
+/** A problem with Sync the user needs to act on, shown inside the sync status card. */
+@Composable
+private fun SyncNotice(text: String, onClick: () -> Unit, action: String = "Review") {
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier.defaultMinSize(minHeight = 48.dp).padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.onErrorContainer)
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.weight(1f)
+            )
+            Text(action, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onErrorContainer)
         }
     }
 }

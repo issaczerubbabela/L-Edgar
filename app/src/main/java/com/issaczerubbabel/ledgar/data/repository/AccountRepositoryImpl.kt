@@ -6,6 +6,7 @@ import com.issaczerubbabel.ledgar.account.ReconcileOutcome
 import com.issaczerubbabel.ledgar.data.local.dao.AccountDao
 import com.issaczerubbabel.ledgar.data.local.dao.DropdownOptionDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
+import com.issaczerubbabel.ledgar.data.local.dao.UnmatchedAccountName
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import androidx.room.withTransaction
@@ -52,20 +53,45 @@ class AccountRepositoryImpl @Inject constructor(
 
     override suspend fun getAccountById(accountId: Long): AccountRecord? = dao.getAccountById(accountId)
 
-    override suspend fun save(record: AccountRecord): Long {
-        if (record.id == 0L) {
-            return dao.insert(record)
-        }
-
-        val existing = dao.getAccountById(record.id)
-        return if (existing != null) {
+    /**
+     * Saves an Account. A new or renamed Account picks up the Transactions whose Sheet name matches it
+     * and have no Account yet. A rename also sends every Transaction on it to the Sheet again, so the
+     * Sheet shows the new name and an Import or reinstall still finds the Account.
+     */
+    override suspend fun save(record: AccountRecord): Long = database.withTransaction {
+        val existing = if (record.id == 0L) null else dao.getAccountById(record.id)
+        val id = if (existing == null) {
+            dao.insert(record)
+        } else {
             // Avoid INSERT OR REPLACE for edits because REPLACE deletes then reinserts,
             // which can null linked transaction foreign keys.
             dao.update(record)
             record.id
-        } else {
-            dao.insert(record)
         }
+        val renamed = existing != null && existing.accountName.trim() != record.accountName.trim()
+        if (renamed) {
+            expenseDao.rememberAccountName(id, record.accountName)
+            expenseDao.markAccountTransactionsPending(id)
+        }
+        if (existing == null || renamed) expenseDao.linkAccountByName(id, record.accountName)
+        id
+    }
+
+    override fun observeUnmatchedAccountNames(): Flow<List<UnmatchedAccountName>> =
+        expenseDao.observeUnmatchedAccountNames()
+
+    override suspend fun mapAccountName(name: String, accountId: Long): Int = database.withTransaction {
+        val account = dao.getAccountById(accountId) ?: return@withTransaction 0
+        expenseDao.mapAccountName(name, account.id, account.accountName)
+    }
+
+    override suspend fun createAccountForName(name: String, groupName: String): Long = database.withTransaction {
+        val order = (dao.getAllAccountsSnapshot().maxOfOrNull { it.displayOrder } ?: -1) + 1
+        val id = dao.insert(
+            AccountRecord(groupName = groupName, accountName = name.trim(), initialBalance = 0.0, displayOrder = order)
+        )
+        expenseDao.mapAccountName(name, id, name.trim())
+        id
     }
 
     override suspend fun toggleHidden(accountId: Long) {
