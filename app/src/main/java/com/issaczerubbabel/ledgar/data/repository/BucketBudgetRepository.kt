@@ -4,6 +4,9 @@ import com.issaczerubbabel.ledgar.data.bucket.BucketBudgetSnapshot
 import com.issaczerubbabel.ledgar.data.bucket.RestoredCycle
 import com.issaczerubbabel.ledgar.data.bucket.StartCycleRequest
 import com.issaczerubbabel.ledgar.data.bucket.StartCycleResult
+import com.issaczerubbabel.ledgar.data.bucket.CycleSummaryBuilder
+import com.issaczerubbabel.ledgar.data.bucket.TrackedAccounts
+import com.issaczerubbabel.ledgar.data.local.entity.BucketAccount
 import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetBucket
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetCycle
@@ -57,4 +60,17 @@ interface BucketBudgetRepository {
      * to Unbucketed, and anything listed is moved in from whichever bucket held it.
      */
     suspend fun setBucketCategories(cycleId: Long, bucketId: Long, categories: Set<String>)
+
+    // Account tracking: Transfers into savings Accounts count towards a Bucket
+    fun observeAccountRoutes(cycleId: Long): Flow<List<BucketAccount>>
+    fun observeAllAccountRoutes(): Flow<List<BucketAccount>>
+
+    /** The cycle's tracked Accounts together with every Account, for [CycleSummaryBuilder]. */
+    fun observeTrackedAccounts(cycleId: Long): Flow<TrackedAccounts>
+
+    /**
+     * Makes [accountIds] exactly the Accounts this Bucket tracks. An Account another Bucket tracked
+     * moves here, since an Account sits in at most one Bucket per cycle.
+     */
+    suspend fun setBucketAccounts(cycleId: Long, bucketId: Long, accountIds: Set<Long>)
 }

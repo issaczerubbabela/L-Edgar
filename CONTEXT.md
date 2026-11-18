@@ -64,11 +64,15 @@ The money the user has to spend between two paydays. The running cycle has no cl
 _Avoid_: month, period (a cycle rarely lines up with either)
 
 **Bucket**:
-A named pot of money inside one Salary cycle. Buckets belong to their cycle, so carrying them into the next cycle copies them.
+A named pot of money inside one Salary cycle. Buckets belong to their cycle, so carrying them into the next cycle copies them. A Bucket takes the spend of its Bucket categories and the Transfers into its Tracked accounts.
 _Avoid_: envelope, budget (the legacy per-category plan)
 
 **Bucket category**:
 The routing of one expense Category into one Bucket for one cycle. A Category sits in at most one Bucket per cycle; Categories in none count as Unbucketed. Deleting a Category from the list takes it out of the running cycle's Buckets; renaming one keeps its routing in every cycle.
+
+**Tracked account**:
+An Account whose Transfers one Bucket counts for one cycle, such as a recurring deposit or a SIP. Money transferred into it from outside that Bucket's Tracked accounts counts as the Bucket's, and money transferred back out takes it away. An Account is tracked by at most one Bucket per cycle.
+_Avoid_: savings bucket, linked account
 
 **Stats role**:
 The part a Dropdown option plays in Stats, stored in its `role`: an expense Category can be **Saving**, an income Category can be **Refund**, and an Account group can be **Savings** or **Liability**. Most options have no role.
@@ -102,7 +106,7 @@ The tab that lists every Transaction, one month at a time: day by day, on a cale
 _Avoid_: Trans., history
 
 **Left to spend**:
-A Salary cycle's spendable amount minus every Expense in it, Saving Categories included and Refunds not taken off: the same figure the Budget tab shows, because a Bucket can hold savings. Once the cycle is over, the Stats tab calls it "Left unspent".
+A Salary cycle's spendable amount minus every Expense in it, Saving Categories included and Refunds not taken off, and minus the net Transfers into Tracked accounts: the same figure the Budget tab shows, because a Bucket can hold savings. Once the cycle is over, the Stats tab calls it "Left unspent".
 _Avoid_: left over (which is based on Earned, not the spendable amount)
 
 **Usual**:

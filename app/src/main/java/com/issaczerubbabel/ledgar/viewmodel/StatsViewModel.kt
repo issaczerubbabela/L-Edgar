@@ -2,6 +2,7 @@ package com.issaczerubbabel.ledgar.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.issaczerubbabel.ledgar.data.local.entity.BucketAccount
 import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetBucket
 import com.issaczerubbabel.ledgar.data.preferences.ChartPalette
@@ -87,14 +88,19 @@ class StatsViewModel @Inject constructor(
     private val periodFlow: Flow<StatsPeriod> = combine(effectiveFilter, cycles) { f, c -> f.period(c, LocalDate.now()) }
         .distinctUntilChanged()
 
-    private val bucketsForPeriod: Flow<Pair<List<BudgetBucket>, List<BucketCategory>>> = periodFlow
+    private val bucketsForPeriod: Flow<Triple<List<BudgetBucket>, List<BucketCategory>, List<BucketAccount>>> = periodFlow
         .map { (it as? StatsPeriod.Cycle)?.span?.id }
         .distinctUntilChanged()
         .flatMapLatest { id ->
             if (id == null) {
-                flowOf(emptyList<BudgetBucket>() to emptyList())
+                flowOf(Triple(emptyList<BudgetBucket>(), emptyList(), emptyList()))
             } else {
-                combine(bucketBudgetRepository.observeBuckets(id), bucketBudgetRepository.observeCategoryAssignments(id)) { b, a -> b to a }
+                combine(
+                    bucketBudgetRepository.observeBuckets(id),
+                    bucketBudgetRepository.observeCategoryAssignments(id),
+                    bucketBudgetRepository.observeAccountRoutes(id),
+                    ::Triple
+                )
             }
         }
 
@@ -104,8 +110,8 @@ class StatsViewModel @Inject constructor(
         roles,
         combine(cycles, periodFlow, ::Pair),
         bucketsForPeriod
-    ) { records, accounts, roles, (cycles, period), (buckets, assignments) ->
-        StatsInput(records, accounts, roles, cycles, period, LocalDate.now(), buckets, assignments)
+    ) { records, accounts, roles, (cycles, period), (buckets, assignments, accountRoutes) ->
+        StatsInput(records, accounts, roles, cycles, period, LocalDate.now(), buckets, assignments, accountRoutes)
     }
 
     val uiState: StateFlow<StatsUiState> = combine(inputs, effectiveFilter) { input, f ->

@@ -9,7 +9,12 @@ data class BucketSyncDto(
     val emoji: String,
     val allocatedAmount: Double,
     val sortOrder: Int,
-    val categories: List<String>
+    val categories: List<String>,
+    /**
+     * Names of the Accounts whose Transfers the Bucket tracks. Left out (null) when there are none,
+     * and ignored by scripts older than version 3, which then just don't back them up.
+     */
+    val accounts: List<String>? = null
 )
 
 /**

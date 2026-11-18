@@ -118,9 +118,9 @@ const CYCLES = [
     id: 1, startDate: "2026-08-26", endDate: "2026-09-24", spendableAmount: 68000, closedAt: "2026-09-25",
     buckets: [
       { id: 10, name: "Essentials", note: "Rent, power", colorIndex: 4, emoji: "🏠", allocatedAmount: 18000, sortOrder: 0,
-        categories: ["Rent", "Utilities"] },
+        categories: ["Rent", "Utilities"], accounts: ["Emergency Fund RD"] },
       { id: 11, name: "Eating Out", note: "", colorIndex: 1, emoji: "", allocatedAmount: 6000, sortOrder: 1,
-        categories: ["Food & Snacks"] },
+        categories: ["Food & Snacks"], accounts: [] },
     ],
   },
   { id: 2, startDate: "2026-09-25", endDate: "2026-10-24", spendableAmount: 70000, closedAt: null, buckets: [] },

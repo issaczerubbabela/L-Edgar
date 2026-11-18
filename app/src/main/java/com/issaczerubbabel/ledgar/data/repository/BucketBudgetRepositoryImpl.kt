@@ -9,10 +9,13 @@ import com.issaczerubbabel.ledgar.data.bucket.StartCycleRequest
 import com.issaczerubbabel.ledgar.data.bucket.StartCycleResult
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.dao.BucketBudgetDao
+import com.issaczerubbabel.ledgar.data.local.entity.BucketAccount
 import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetBucket
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetCycle
+import com.issaczerubbabel.ledgar.data.bucket.TrackedAccounts
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -59,6 +62,8 @@ class BucketBudgetRepositoryImpl @Inject constructor(
                 )
             )
 
+            val oldAccountRoutes = running?.let { dao.getAccountRoutes(it.id) }.orEmpty()
+
             if (request.carryOverBuckets && oldBuckets.isNotEmpty()) {
                 val newIdByOldId = HashMap<Long, Long>()
                 oldBuckets.forEach { bucket ->
@@ -71,6 +76,11 @@ class BucketBudgetRepositoryImpl @Inject constructor(
                         }
                     }
                 )
+                dao.trackAccounts(
+                    oldAccountRoutes.mapNotNull { route ->
+                        newIdByOldId[route.bucketId]?.let { BucketAccount(cycleId = newCycleId, bucketId = it, accountId = route.accountId) }
+                    }
+                )
             }
 
             StartCycleResult.Started(newCycleId)
@@ -81,11 +91,20 @@ class BucketBudgetRepositoryImpl @Inject constructor(
     override fun observeBucket(bucketId: Long): Flow<BudgetBucket?> = dao.observeBucket(bucketId)
 
     override suspend fun getBackupSnapshot(): BucketBudgetSnapshot = db.withTransaction {
-        BucketBudgetSnapshot(dao.getAllCycles(), dao.getAllBuckets(), dao.getAllAssignments())
+        BucketBudgetSnapshot(
+            cycles = dao.getAllCycles(),
+            buckets = dao.getAllBuckets(),
+            assignments = dao.getAllAssignments(),
+            accountRoutes = dao.getAllAccountRoutes(),
+            accountNames = db.accountDao().getAllAccountsSnapshot().associate { it.id to it.accountName }
+        )
     }
 
     override suspend fun replaceAllFromBackup(cycles: List<RestoredCycle>) {
         db.withTransaction {
+            // Accounts are matched by name, ignoring case; a name with no Account is dropped.
+            val accountIdByName = db.accountDao().getAllAccountsSnapshot()
+                .associate { CycleSummaryBuilder.categoryKey(it.accountName) to it.id }
             dao.deleteAllAssignments()
             dao.deleteAllBuckets()
             dao.deleteAllCycles()
@@ -113,6 +132,12 @@ class BucketBudgetRepositoryImpl @Inject constructor(
                     dao.assignCategories(
                         bucket.categories.map { BucketCategory(cycleId = cycleId, bucketId = bucketId, category = it) }
                     )
+                    dao.trackAccounts(
+                        bucket.accounts
+                            .mapNotNull { accountIdByName[CycleSummaryBuilder.categoryKey(it)] }
+                            .distinct()
+                            .map { BucketAccount(cycleId = cycleId, bucketId = bucketId, accountId = it) }
+                    )
                 }
             }
         }
@@ -133,6 +158,20 @@ class BucketBudgetRepositoryImpl @Inject constructor(
 
     override suspend fun getCategoryAssignments(cycleId: Long): List<BucketCategory> =
         dao.getCategoryAssignments(cycleId)
+
+    override fun observeAccountRoutes(cycleId: Long): Flow<List<BucketAccount>> = dao.observeAccountRoutes(cycleId)
+
+    override fun observeAllAccountRoutes(): Flow<List<BucketAccount>> = dao.observeAllAccountRoutes()
+
+    override fun observeTrackedAccounts(cycleId: Long): Flow<TrackedAccounts> =
+        combine(dao.observeAccountRoutes(cycleId), db.accountDao().getAllAccounts(), ::TrackedAccounts)
+
+    override suspend fun setBucketAccounts(cycleId: Long, bucketId: Long, accountIds: Set<Long>) {
+        db.withTransaction {
+            dao.untrackBucketAccounts(cycleId, bucketId)
+            dao.trackAccounts(accountIds.map { BucketAccount(cycleId = cycleId, bucketId = bucketId, accountId = it) })
+        }
+    }
 
     override suspend fun assignCategory(cycleId: Long, bucketId: Long, category: String) {
         dao.assignCategory(BucketCategory(cycleId = cycleId, bucketId = bucketId, category = category.trim()))

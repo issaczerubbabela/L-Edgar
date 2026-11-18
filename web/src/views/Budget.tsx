@@ -77,7 +77,7 @@ export function Budget() {
               {isOpen && (
                 <>
                   {categoryList(b.categories)}
-                  <p className="muted small">Takes: {b.bucket.categories.join(", ") || "no categories yet"}</p>
+                  <p className="muted small">Takes: {b.bucket.categories.join(", ") || "no categories yet"}{b.bucket.accounts.length > 0 ? ` · Transfers into ${b.bucket.accounts.join(", ")}` : ""}</p>
                 </>
               )}
             </Card>

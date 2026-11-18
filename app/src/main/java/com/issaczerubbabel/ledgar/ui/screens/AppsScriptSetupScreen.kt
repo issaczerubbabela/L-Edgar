@@ -95,6 +95,8 @@ var TRANSACTION_TEXT_COLUMNS = [4, 5, 6, 8, 9, 10, 11];
 var CYCLES_SHEET = "_cycles";
 var BUCKETS_SHEET = "_buckets";
 var BUCKET_CATEGORIES_SHEET = "_bucket_categories";
+// Accounts whose Transfers a Bucket tracks, by Account name (script version 3).
+var BUCKET_ACCOUNTS_SHEET = "_bucket_accounts";
 
 // Column indices (0-based) for TRANSACTION_HEADERS_V2
 var COL_TIMESTAMP       = 0;
@@ -185,7 +187,7 @@ var LIST_SHEETS = {
   accounts: [ACCOUNTS_SHEET],
   dropdowns: [DROPDOWNS_SHEET],
   budgets: [BUDGETS_SHEET],
-  bucket_budgets: [CYCLES_SHEET, BUCKETS_SHEET, BUCKET_CATEGORIES_SHEET],
+  bucket_budgets: [CYCLES_SHEET, BUCKETS_SHEET, BUCKET_CATEGORIES_SHEET, BUCKET_ACCOUNTS_SHEET],
 };
 
 /** The revision of a list target's tabs: changes whenever any cell in them changes. */
@@ -824,6 +826,7 @@ function backupBucketBudgets(spreadsheet, cycles, timeZone) {
   var cycleRows = [];
   var bucketRows = [];
   var categoryRows = [];
+  var accountRows = [];
 
   cycles.forEach(function (c) {
     cycleRows.push([
@@ -848,6 +851,9 @@ function backupBucketBudgets(spreadsheet, cycles, timeZone) {
       (b.categories || []).forEach(function (category) {
         categoryRows.push([c.id, b.id, String(category)]);
       });
+      (b.accounts || []).forEach(function (account) {
+        accountRows.push([c.id, b.id, String(account)]);
+      });
     });
   });
 
@@ -870,6 +876,13 @@ function backupBucketBudgets(spreadsheet, cycles, timeZone) {
     BUCKET_CATEGORIES_SHEET,
     ["Cycle ID", "Bucket ID", "Category"],
     categoryRows,
+    [3],
+  );
+  writeTable(
+    spreadsheet,
+    BUCKET_ACCOUNTS_SHEET,
+    ["Cycle ID", "Bucket ID", "Account"],
+    accountRows,
     [3],
   );
   return cycles.length;
@@ -903,6 +916,14 @@ function readBucketBudgets(spreadsheet) {
     (categoriesByBucket[key] = categoriesByBucket[key] || []).push(category);
   });
 
+  var accountsByBucket = {};
+  readTableRows(spreadsheet, BUCKET_ACCOUNTS_SHEET).forEach(function (r) {
+    var account = String(r[2] || "");
+    if (!account) return;
+    var key = (Number(r[0]) || 0) + ":" + (Number(r[1]) || 0);
+    (accountsByBucket[key] = accountsByBucket[key] || []).push(account);
+  });
+
   var bucketsByCycle = {};
   readTableRows(spreadsheet, BUCKETS_SHEET).forEach(function (r) {
     var bucketId = Number(r[0]) || 0;
@@ -916,6 +937,7 @@ function readBucketBudgets(spreadsheet) {
       allocatedAmount: Number(r[6]) || 0,
       sortOrder: Number(r[7]) || 0,
       categories: categoriesByBucket[cycleId + ":" + bucketId] || [],
+      accounts: accountsByBucket[cycleId + ":" + bucketId] || [],
     });
   });
 

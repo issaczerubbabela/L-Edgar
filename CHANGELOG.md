@@ -13,6 +13,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Web version (web folder): view and edit transactions, Stats, Budget and Accounts from a PC or iPad browser
 - More: Account names lists Sheet account names you have no account for, to create the account or map them
 - Categories & dropdowns: rename a category or group; its transactions, buckets, budgets and rules follow
+- Budget: a bucket can track transfers into savings accounts, like an RD or a SIP, to show their progress
 
 ### Changed
 
@@ -35,6 +36,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - SheetListsRestorer, the Pull's RelinkAccounts step and name-linking queries, with tests for roles, ids and names
 - DropdownEditor renames or deletes an option across every table that stores it, in one Room transaction, with tests
 - ADR-0010: list revisions in the Apps Script (version 3), sent as baseRevision by ListBackup, with script and app tests
+- bucket_accounts table (database v27), the _bucket_accounts tab and the web port of transfer tracking, with tests
 
 ## [1.6.0] - 2026-10-13
 

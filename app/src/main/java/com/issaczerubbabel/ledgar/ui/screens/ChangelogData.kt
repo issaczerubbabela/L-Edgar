@@ -21,7 +21,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
         added = listOf(
             "Web version (web folder): view and edit transactions, Stats, Budget and Accounts from a PC or iPad browser",
             "More: Account names lists Sheet account names you have no account for, to create the account or map them",
-            "Categories & dropdowns: rename a category or group; its transactions, buckets, budgets and rules follow"
+            "Categories & dropdowns: rename a category or group; its transactions, buckets, budgets and rules follow",
+            "Budget: a bucket can track transfers into savings accounts, like an RD or a SIP, to show their progress"
         ),
         changed = listOf(
             "Creating or renaming an account picks up the Sheet's transactions that name it; a rename updates the Sheet",
@@ -40,7 +41,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "docs/handoff-2026-11-sync-fixes.md: seven Sheet sync and Import issues found during the Nov 2026 data clean-up",
             "SheetListsRestorer, the Pull's RelinkAccounts step and name-linking queries, with tests for roles, ids and names",
             "DropdownEditor renames or deletes an option across every table that stores it, in one Room transaction, with tests",
-            "ADR-0010: list revisions in the Apps Script (version 3), sent as baseRevision by ListBackup, with script and app tests"
+            "ADR-0010: list revisions in the Apps Script (version 3), sent as baseRevision by ListBackup, with script and app tests",
+            "bucket_accounts table (database v27), the _bucket_accounts tab and the web port of transfer tracking, with tests"
         )
     ),
     ChangelogRelease(

@@ -148,6 +148,7 @@ const toCycle = (row: any): Cycle => ({
       allocated: Number(b.allocatedAmount) || 0,
       order: Number(b.sortOrder) || 0,
       categories: (b.categories ?? []).map(text).filter(Boolean),
+      accounts: (b.accounts ?? []).map(text).filter(Boolean),
     }))
     .sort((a: any, b: any) => a.order - b.order),
 });

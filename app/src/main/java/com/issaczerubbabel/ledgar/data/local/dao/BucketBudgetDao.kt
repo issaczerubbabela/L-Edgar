@@ -6,6 +6,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import com.issaczerubbabel.ledgar.data.local.entity.BucketAccount
 import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetBucket
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetCycle
@@ -106,4 +107,25 @@ interface BucketBudgetDao {
 
     @Query("SELECT * FROM bucket_categories WHERE cycleId = :cycleId ORDER BY category ASC")
     suspend fun getCategoryAssignments(cycleId: Long): List<BucketCategory>
+
+    // ── Account tracking (Transfers into savings Accounts) ──────────────────────
+
+    /** REPLACE on the unique (cycleId, accountId) index moves an Account between Buckets. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun trackAccounts(routes: List<BucketAccount>)
+
+    @Query("DELETE FROM bucket_accounts WHERE cycleId = :cycleId AND bucketId = :bucketId")
+    suspend fun untrackBucketAccounts(cycleId: Long, bucketId: Long)
+
+    @Query("SELECT * FROM bucket_accounts WHERE cycleId = :cycleId")
+    fun observeAccountRoutes(cycleId: Long): Flow<List<BucketAccount>>
+
+    @Query("SELECT * FROM bucket_accounts WHERE cycleId = :cycleId")
+    suspend fun getAccountRoutes(cycleId: Long): List<BucketAccount>
+
+    @Query("SELECT * FROM bucket_accounts")
+    suspend fun getAllAccountRoutes(): List<BucketAccount>
+
+    @Query("SELECT * FROM bucket_accounts")
+    fun observeAllAccountRoutes(): Flow<List<BucketAccount>>
 }

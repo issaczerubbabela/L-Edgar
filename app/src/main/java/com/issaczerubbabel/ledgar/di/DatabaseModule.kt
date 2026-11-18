@@ -185,6 +185,21 @@ object DatabaseModule {
         }
     }
 
+    /** A Bucket can track the Transfers into chosen Accounts, such as a recurring deposit or a SIP. */
+    internal val MIGRATION_26_27 = object : Migration(26, 27) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `bucket_accounts` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`cycleId` INTEGER NOT NULL, `bucketId` INTEGER NOT NULL, `accountId` INTEGER NOT NULL, " +
+                    "FOREIGN KEY(`bucketId`, `cycleId`) REFERENCES `budget_buckets`(`id`, `cycleId`) ON UPDATE NO ACTION ON DELETE CASCADE , " +
+                    "FOREIGN KEY(`accountId`) REFERENCES `account_records`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+            )
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_bucket_accounts_cycleId_accountId` ON `bucket_accounts` (`cycleId`, `accountId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_bucket_accounts_bucketId_cycleId` ON `bucket_accounts` (`bucketId`, `cycleId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_bucket_accounts_accountId` ON `bucket_accounts` (`accountId`)")
+        }
+    }
+
     private fun columnsOf(db: SupportSQLiteDatabase, table: String): Set<String> =
         db.query("PRAGMA table_info($table)").use { cursor ->
             val nameColumn = cursor.getColumnIndexOrThrow("name")
@@ -333,6 +348,7 @@ object DatabaseModule {
             .addMigrations(MIGRATION_23_24)
             .addMigrations(MIGRATION_24_25)
             .addMigrations(MIGRATION_25_26)
+            .addMigrations(MIGRATION_26_27)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .addCallback(callback)
             .build()

@@ -45,11 +45,12 @@ class PlanBucketsViewModel @Inject constructor(
                 combine(
                     budgets.observeBuckets(cycle.id),
                     budgets.observeCategoryAssignments(cycle.id),
-                    expenses.getAllRecords()
-                ) { buckets, assignments, records ->
+                    expenses.getAllRecords(),
+                    budgets.observeTrackedAccounts(cycle.id)
+                ) { buckets, assignments, records, tracked ->
                     PlanBucketsUiState(
                         isLoading = false,
-                        summary = CycleSummaryBuilder.build(cycle, buckets, assignments, records, LocalDate.now()),
+                        summary = CycleSummaryBuilder.build(cycle, buckets, assignments, records, LocalDate.now(), tracked),
                         categoryCountByBucket = assignments.groupingBy { it.bucketId }.eachCount()
                     )
                 }

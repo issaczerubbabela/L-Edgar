@@ -216,6 +216,8 @@ erDiagram
 
     BUDGET_CYCLES ||--o{ BUDGET_BUCKETS : cycleId
     BUDGET_BUCKETS ||--o{ BUCKET_CATEGORIES : "bucketId, cycleId"
+    BUDGET_BUCKETS ||--o{ BUCKET_ACCOUNTS : "bucketId, cycleId"
+    ACCOUNT_RECORDS ||--o{ BUCKET_ACCOUNTS : accountId
 
     BUDGET_CYCLES {
         long id PK
@@ -241,6 +243,13 @@ erDiagram
         long cycleId FK
         long bucketId FK
         string category
+    }
+
+    BUCKET_ACCOUNTS {
+        long id PK
+        long cycleId FK
+        long bucketId FK
+        long accountId FK
     }
 
     DROPDOWN_OPTIONS {
@@ -335,6 +344,12 @@ erDiagram
   The composite foreign key (bucketId, cycleId) -> budget_buckets(id, cycleId) keeps the repeated
   cycleId honest. Assigning uses REPLACE, so a category moves between buckets instead of duplicating.
 - Categories with no row are "Unbucketed", a virtual bucket that is derived, never stored.
+- bucket_accounts (database v27) makes a bucket track Transfers into chosen Accounts (an RD, a SIP). Unique on
+  (cycleId, accountId), so an Account sits in one bucket per cycle; deleting the Account or the bucket removes the row.
+  CycleSummaryBuilder counts a Transfer into a tracked Account from outside that bucket's Accounts as the bucket's
+  spend (and the cycle's, so Left to spend falls), and one back out as negative; Transfers within one bucket's
+  Accounts count nothing. Carry-over copies the rows. Backed up by Account name in `_bucket_accounts` (script
+  version 3, nested as `accounts` on each bucket) and matched back to Accounts by name on restore.
 - Spent and remaining amounts are derived from expense_records over the cycle's date range, not stored.
 - No per-row sync fields: like budgets, these are backed up wholesale rather than tracked per record.
 - Cycle rules live in data/bucket/ as pure functions: CycleCalendar (day counts, pace, overdue),

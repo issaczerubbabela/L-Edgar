@@ -10,10 +10,18 @@ export interface CategorySpend {
   amount: number;
 }
 
+/** Money moved into one tracked Account this cycle, net of what was moved back out. */
+export interface AccountTransfers {
+  account: string;
+  amount: number;
+}
+
 export interface BucketSummary {
   bucket: Bucket;
   /** Categories routed here that have spend this cycle, largest first. */
   categories: CategorySpend[];
+  /** Accounts this Bucket tracks, with their net Transfers this cycle; included in spent. */
+  accounts: AccountTransfers[];
   spent: number;
   remaining: number;
 }
@@ -59,16 +67,33 @@ export function cycleSummary(cycle: Cycle, transactions: Txn[], todayDay: Day): 
 
   const bucketOf = new Map<string, number>();
   for (const bucket of cycle.buckets) for (const category of bucket.categories) bucketOf.set(key(category), bucket.id);
-  const bySize = (a: CategorySpend, b: CategorySpend) => b.amount - a.amount;
+  const bySize = (a: { amount: number }, b: { amount: number }) => b.amount - a.amount;
+
+  // A Transfer that crosses into a Bucket's tracked Accounts counts as that Bucket's; one back out takes it away.
+  const bucketOfAccount = new Map<string, number>();
+  for (const bucket of cycle.buckets) for (const account of bucket.accounts ?? []) if (!bucketOfAccount.has(key(account))) bucketOfAccount.set(key(account), bucket.id);
+  const moved = new Map<string, number>();
+  for (const txn of transactions) {
+    if (txn.type !== "Transfer" || txn.date < cycle.start || (isClosed && txn.date > cycle.end)) continue;
+    const fromBucket = bucketOfAccount.get(key(txn.from));
+    const toBucket = bucketOfAccount.get(key(txn.to));
+    if (fromBucket === toBucket) continue;
+    if (toBucket !== undefined) moved.set(key(txn.to), (moved.get(key(txn.to)) ?? 0) + txn.amount);
+    if (fromBucket !== undefined) moved.set(key(txn.from), (moved.get(key(txn.from)) ?? 0) - txn.amount);
+  }
 
   const buckets = cycle.buckets.map((bucket) => {
     const categories = [...spend].filter(([name]) => bucketOf.get(name) === bucket.id).map(([, s]) => s).sort(bySize);
-    const spent = categories.reduce((sum, c) => sum + c.amount, 0);
-    return { bucket, categories, spent, remaining: bucket.allocated - spent };
+    const accounts = (bucket.accounts ?? [])
+      .filter((account) => bucketOfAccount.get(key(account)) === bucket.id)
+      .map((account) => ({ account, amount: moved.get(key(account)) ?? 0 }))
+      .sort(bySize);
+    const spent = categories.reduce((sum, c) => sum + c.amount, 0) + accounts.reduce((sum, a) => sum + a.amount, 0);
+    return { bucket, categories, accounts, spent, remaining: bucket.allocated - spent };
   });
   const unbucketed = [...spend].filter(([name]) => !bucketOf.has(name)).map(([, s]) => s).sort(bySize);
 
-  const totalSpent = [...spend.values()].reduce((sum, c) => sum + c.amount, 0);
+  const totalSpent = [...spend.values()].reduce((sum, c) => sum + c.amount, 0) + [...moved.values()].reduce((sum, a) => sum + a, 0);
   const allocated = cycle.buckets.reduce((sum, b) => sum + b.allocated, 0);
   const leftToSpend = cycle.spendable - totalSpent;
   const totalDays = Math.max(daysBetween(cycle.start, cycle.end) + 1, 1);

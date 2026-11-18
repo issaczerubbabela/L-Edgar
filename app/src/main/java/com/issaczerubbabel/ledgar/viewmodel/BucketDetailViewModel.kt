@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.issaczerubbabel.ledgar.data.bucket.BucketSummary
 import com.issaczerubbabel.ledgar.data.bucket.CycleSummary
 import com.issaczerubbabel.ledgar.data.bucket.CycleSummaryBuilder
+import com.issaczerubbabel.ledgar.data.bucket.TrackedAccounts
 import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
 import com.issaczerubbabel.ledgar.data.repository.BucketBudgetRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
@@ -32,13 +33,23 @@ data class CategoryChoice(
     val bucketName: String?
 )
 
+/** An Account the bucket editor can make this Bucket track, and the Bucket tracking it now. */
+data class TrackedAccountChoice(
+    val id: Long,
+    val name: String,
+    val groupName: String,
+    val bucketId: Long?,
+    val bucketName: String?
+)
+
 data class BucketDetailUiState(
     val isLoading: Boolean = true,
     /** The bucket no longer exists, for example it was just deleted. */
     val notFound: Boolean = false,
     val bucket: BucketSummary? = null,
     val cycle: CycleSummary? = null,
-    val choices: List<CategoryChoice> = emptyList()
+    val choices: List<CategoryChoice> = emptyList(),
+    val accountChoices: List<TrackedAccountChoice> = emptyList()
 )
 
 @HiltViewModel
@@ -60,14 +71,15 @@ class BucketDetailViewModel @Inject constructor(
                 combine(
                     budgets.observeCycle(bucket.cycleId),
                     budgets.observeBuckets(bucket.cycleId),
-                    budgets.observeCategoryAssignments(bucket.cycleId),
+                    combine(budgets.observeCategoryAssignments(bucket.cycleId), budgets.observeTrackedAccounts(bucket.cycleId), ::Pair),
                     expenses.getAllRecords(),
                     dropdowns.getOptionsByType(EXPENSE_CATEGORY_TYPE)
-                ) { cycle, buckets, assignments, records, options ->
+                ) { cycle, buckets, (assignments, tracked), records, options ->
                     if (cycle == null) {
                         BucketDetailUiState(isLoading = false, notFound = true)
                     } else {
-                        val summary = CycleSummaryBuilder.build(cycle, buckets, assignments, records, LocalDate.now())
+                        val summary = CycleSummaryBuilder.build(cycle, buckets, assignments, records, LocalDate.now(), tracked)
+                        val bucketNameById = buckets.associate { it.id to it.name }
                         BucketDetailUiState(
                             isLoading = false,
                             bucket = summary.buckets.firstOrNull { it.bucket.id == bucketId },
@@ -75,8 +87,9 @@ class BucketDetailViewModel @Inject constructor(
                             choices = categoryChoices(
                                 configured = options.map { it.name },
                                 assignments = assignments,
-                                bucketNameById = buckets.associate { it.id to it.name }
-                            )
+                                bucketNameById = bucketNameById
+                            ),
+                            accountChoices = accountChoices(tracked, bucketNameById)
                         )
                     }
                 }
@@ -91,7 +104,8 @@ class BucketDetailViewModel @Inject constructor(
         emoji: String,
         colorIndex: Int,
         allocatedAmount: Double,
-        categories: Set<String>
+        categories: Set<String>,
+        accountIds: Set<Long>
     ) {
         val current = uiState.value.bucket?.bucket ?: return
         viewModelScope.launch {
@@ -105,6 +119,7 @@ class BucketDetailViewModel @Inject constructor(
                 )
             )
             budgets.setBucketCategories(current.cycleId, current.id, categories)
+            budgets.setBucketAccounts(current.cycleId, current.id, accountIds)
         }
     }
 
@@ -121,6 +136,18 @@ class BucketDetailViewModel @Inject constructor(
          * deleted from the list isn't offered even while still routed or spent in this cycle; saving the
          * bucket drops its routing. Only with no Categories at all (never set up) are routed ones shown.
          */
+        /** Every Account still in use, plus any Hidden one a Bucket already tracks, in the Accounts tab's order. */
+        fun accountChoices(tracked: TrackedAccounts, bucketNameById: Map<Long, String>): List<TrackedAccountChoice> {
+            val bucketOf = tracked.routes.associate { it.accountId to it.bucketId }
+            return tracked.accounts
+                .filter { !it.isHidden || it.id in bucketOf }
+                .sortedBy { it.displayOrder }
+                .map { account ->
+                    val holder = bucketOf[account.id]
+                    TrackedAccountChoice(account.id, account.accountName, account.groupName, holder, holder?.let(bucketNameById::get))
+                }
+        }
+
         fun categoryChoices(
             configured: List<String>,
             assignments: List<BucketCategory>,

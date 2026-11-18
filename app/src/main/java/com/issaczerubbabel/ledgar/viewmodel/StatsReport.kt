@@ -3,6 +3,7 @@ package com.issaczerubbabel.ledgar.viewmodel
 import com.issaczerubbabel.ledgar.data.bucket.CycleSummary
 import com.issaczerubbabel.ledgar.data.bucket.CycleSummaryBuilder
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
+import com.issaczerubbabel.ledgar.data.local.entity.BucketAccount
 import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetBucket
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetCycle
@@ -51,7 +52,9 @@ data class StatsInput(
     val today: LocalDate,
     /** The buckets and routing of the cycle on screen. Only read when [period] is a [StatsPeriod.Cycle]. */
     val buckets: List<BudgetBucket> = emptyList(),
-    val assignments: List<BucketCategory> = emptyList()
+    val assignments: List<BucketCategory> = emptyList(),
+    /** The Accounts that cycle's Buckets track (Transfers into savings). */
+    val accountRoutes: List<BucketAccount> = emptyList()
 )
 
 /** Money in a period, in the terms of CONTEXT.md. */
@@ -253,7 +256,10 @@ object StatsReport {
 
     private fun cycleView(period: StatsPeriod.Cycle, input: StatsInput, money: Money, inPeriod: List<ExpenseRecord>): CycleView? {
         val cycle = input.cycles.firstOrNull { it.id == period.span.id } ?: return null
-        val summary = CycleSummaryBuilder.build(cycle, input.buckets, input.assignments, input.records, input.today)
+        val summary = CycleSummaryBuilder.build(
+            cycle, input.buckets, input.assignments, input.records, input.today,
+            input.accountRoutes, input.accounts.associate { it.id to it.accountName }
+        )
         val saved = inPeriod.filter { it.type.trim().equals("Expense", ignoreCase = true) && money.roles.isSaving(it.category) }.sumOf { it.amount }
         return CycleView(summary, period.span.isRunning, saved)
     }

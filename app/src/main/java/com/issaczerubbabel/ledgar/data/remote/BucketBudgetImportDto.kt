@@ -11,7 +11,9 @@ data class BucketImportDto(
     val emoji: String? = null,
     val allocatedAmount: Double? = null,
     val sortOrder: Int? = null,
-    val categories: List<String>? = null
+    val categories: List<String>? = null,
+    /** Missing from scripts older than version 3. */
+    val accounts: List<String>? = null
 )
 
 data class CycleImportDto(

@@ -93,9 +93,9 @@ const lastOfMonth = (back) => {
   return new Date(d.getFullYear(), d.getMonth() - back + 1, 0, 12);
 };
 const buckets = () => [
-  { id: 1, name: "Needs", note: "Rent, bills, food at home", colorIndex: 0, emoji: "🏠", allocatedAmount: 42000, sortOrder: 0, categories: ["Rent", "Utilities", "Groceries", "Transport", "Health"] },
-  { id: 2, name: "Wants", note: "", colorIndex: 1, emoji: "🎉", allocatedAmount: 18000, sortOrder: 1, categories: ["Food", "Entertainment"] },
-  { id: 3, name: "Future", note: "Pay yourself first", colorIndex: 2, emoji: "🌱", allocatedAmount: 10000, sortOrder: 2, categories: ["Investments/Savings"] },
+  { id: 1, name: "Needs", note: "Rent, bills, food at home", colorIndex: 0, emoji: "🏠", allocatedAmount: 42000, sortOrder: 0, categories: ["Rent", "Utilities", "Groceries", "Transport", "Health"], accounts: [] },
+  { id: 2, name: "Wants", note: "", colorIndex: 1, emoji: "🎉", allocatedAmount: 18000, sortOrder: 1, categories: ["Food", "Entertainment"], accounts: [] },
+  { id: 3, name: "Future", note: "Pay yourself first", colorIndex: 2, emoji: "🌱", allocatedAmount: 10000, sortOrder: 2, categories: ["Investments/Savings"], accounts: [] },
 ];
 const cycles = [2, 1, 0].map((back, i) => ({
   id: i + 1, startDate: iso(firstOfMonth(back)), endDate: iso(lastOfMonth(back)), spendableAmount: 80000,

@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.data.bucket
 
+import com.issaczerubbabel.ledgar.data.local.entity.BucketAccount
 import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetBucket
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetCycle
@@ -13,7 +14,10 @@ import java.time.LocalDate
 data class BucketBudgetSnapshot(
     val cycles: List<BudgetCycle>,
     val buckets: List<BudgetBucket>,
-    val assignments: List<BucketCategory>
+    val assignments: List<BucketCategory>,
+    /** Accounts whose Transfers a Bucket tracks, backed up by Account name. */
+    val accountRoutes: List<BucketAccount> = emptyList(),
+    val accountNames: Map<Long, String> = emptyMap()
 )
 
 /** A bucket ready to be written back, with no database ids: those are assigned on insert. */
@@ -24,7 +28,9 @@ data class RestoredBucket(
     val emoji: String,
     val allocatedAmount: Double,
     val sortOrder: Int,
-    val categories: List<String>
+    val categories: List<String>,
+    /** Names of the Accounts whose Transfers this Bucket tracks; matched to Accounts on restore. */
+    val accounts: List<String> = emptyList()
 )
 
 data class RestoredCycle(
@@ -47,6 +53,7 @@ object BucketBackupMapper {
     fun toSyncDtos(snapshot: BucketBudgetSnapshot): List<CycleSyncDto> {
         val bucketsByCycle = snapshot.buckets.groupBy { it.cycleId }
         val categoriesByBucket = snapshot.assignments.groupBy { it.bucketId }
+        val accountsByBucket = snapshot.accountRoutes.groupBy { it.bucketId }
 
         return snapshot.cycles
             .sortedWith(compareBy<BudgetCycle> { it.startDate }.thenBy { it.id })
@@ -68,7 +75,11 @@ object BucketBackupMapper {
                                 emoji = bucket.emoji,
                                 allocatedAmount = bucket.allocatedAmount,
                                 sortOrder = bucket.sortOrder,
-                                categories = categoriesByBucket[bucket.id].orEmpty().map { it.category }.sorted()
+                                categories = categoriesByBucket[bucket.id].orEmpty().map { it.category }.sorted(),
+                                accounts = accountsByBucket[bucket.id].orEmpty()
+                                    .mapNotNull { snapshot.accountNames[it.accountId] }
+                                    .sorted()
+                                    .takeIf { it.isNotEmpty() }
                             )
                         }
                 )
@@ -85,6 +96,7 @@ object BucketBackupMapper {
             // it with a unique index, so a duplicate in the sheet has to be dropped here rather
             // than fail the whole restore. The first bucket to claim a category keeps it.
             val claimed = HashSet<String>()
+            val claimedAccounts = HashSet<String>()
             val buckets = dto.buckets.orEmpty().mapIndexedNotNull { index, bucket ->
                 val name = bucket.name?.trim().orEmpty()
                 if (name.isEmpty()) return@mapIndexedNotNull null
@@ -97,7 +109,10 @@ object BucketBackupMapper {
                     sortOrder = bucket.sortOrder ?: index,
                     categories = bucket.categories.orEmpty()
                         .map { it.trim() }
-                        .filter { it.isNotEmpty() && claimed.add(it.lowercase()) }
+                        .filter { it.isNotEmpty() && claimed.add(it.lowercase()) },
+                    accounts = bucket.accounts.orEmpty()
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() && claimedAccounts.add(it.lowercase()) }
                 )
             }
 

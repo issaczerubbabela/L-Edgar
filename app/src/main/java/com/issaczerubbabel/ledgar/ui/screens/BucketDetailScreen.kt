@@ -28,6 +28,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import com.issaczerubbabel.ledgar.viewmodel.TrackedAccountChoice
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -121,9 +123,10 @@ fun BucketDetailScreen(
         BucketEditorSheet(
             bucket = bucket.bucket,
             choices = state.choices,
+            accountChoices = state.accountChoices,
             onDismiss = { editing = false },
-            onSave = { name, note, emoji, colorIndex, amount, categories ->
-                vm.save(name, note, emoji, colorIndex, amount, categories)
+            onSave = { name, note, emoji, colorIndex, amount, categories, accountIds ->
+                vm.save(name, note, emoji, colorIndex, amount, categories, accountIds)
                 editing = false
             },
             onDelete = {
@@ -221,10 +224,10 @@ private fun DetailContent(bucket: BucketSummary, cycle: CycleSummary) {
             )
         }
 
-        if (bucket.categories.isEmpty()) {
+        if (bucket.categories.isEmpty() && bucket.accounts.isEmpty()) {
             Text(
                 text = if (running) {
-                    "Nothing spent here yet. Use Edit to choose which categories go into this bucket."
+                    "Nothing spent here yet. Use Edit to choose which categories or savings accounts go into this bucket."
                 } else {
                     "Nothing was spent in this bucket."
                 },
@@ -266,6 +269,26 @@ private fun DetailContent(bucket: BucketSummary, cycle: CycleSummary) {
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
+                bucket.accounts.forEach { account ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(account.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("Transfers in", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text(text = formatRupees(account.amount), style = tabularNumbers(MaterialTheme.typography.bodyLarge))
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
             }
         }
 
@@ -295,8 +318,9 @@ private val COLOR_NAMES = listOf("Cyan", "Red", "Green", "Orange", "Purple", "Ye
 private fun BucketEditorSheet(
     bucket: BudgetBucket,
     choices: List<CategoryChoice>,
+    accountChoices: List<TrackedAccountChoice>,
     onDismiss: () -> Unit,
-    onSave: (name: String, note: String, emoji: String, colorIndex: Int, amount: Double, categories: Set<String>) -> Unit,
+    onSave: (name: String, note: String, emoji: String, colorIndex: Int, amount: Double, categories: Set<String>, accountIds: Set<Long>) -> Unit,
     onDelete: () -> Unit
 ) {
     var name by remember { mutableStateOf(bucket.name) }
@@ -304,6 +328,9 @@ private fun BucketEditorSheet(
     var emoji by remember { mutableStateOf(bucket.emoji) }
     var colorIndex by remember { mutableStateOf(bucket.colorIndex) }
     var amountInput by remember { mutableStateOf(amountToInput(bucket.allocatedAmount)) }
+    val selectedAccounts = remember {
+        accountChoices.filter { it.bucketId == bucket.id }.map { it.id }.toMutableStateList()
+    }
     val selected = remember {
         choices.filter { it.bucketId == bucket.id }.map { it.name }.toMutableStateList()
     }
@@ -423,8 +450,50 @@ private fun BucketEditorSheet(
                 }
             }
 
+            if (accountChoices.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SectionLabel("Savings transfers")
+                    Text(
+                        text = "Money you transfer into these accounts counts towards this bucket, like an RD or a SIP. " +
+                            "Moving it back out takes it off.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    accountChoices.forEach { choice ->
+                        val checked = choice.id in selectedAccounts
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .toggleable(
+                                    value = checked,
+                                    role = Role.Checkbox,
+                                    onValueChange = { on -> if (on) selectedAccounts.add(choice.id) else selectedAccounts.remove(choice.id) }
+                                ),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Checkbox(checked = checked, onCheckedChange = null)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(text = choice.name, style = MaterialTheme.typography.bodyLarge)
+                                val elsewhere = choice.bucketId != null && choice.bucketId != bucket.id
+                                Text(
+                                    text = when {
+                                        elsewhere && checked -> "Will move here from ${choice.bucketName}"
+                                        elsewhere -> "Counted in ${choice.bucketName}"
+                                        else -> choice.groupName
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             Button(
-                onClick = { amount?.let { onSave(name, note, emoji, colorIndex, it, selected.toSet()) } },
+                onClick = { amount?.let { onSave(name, note, emoji, colorIndex, it, selected.toSet(), selectedAccounts.toSet()) } },
                 enabled = canSave,
                 modifier = Modifier
                     .fillMaxWidth()

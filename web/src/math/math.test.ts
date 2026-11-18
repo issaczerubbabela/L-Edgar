@@ -83,7 +83,7 @@ describe("accounts", () => {
 describe("buckets", () => {
   const cycle: Cycle = {
     id: 1, start: "2026-03-01", end: "2026-03-30", spendable: 3000, closedAt: null,
-    buckets: [{ id: 1, name: "Needs", note: "", colorIndex: 0, emoji: "", allocated: 1000, order: 0, categories: ["food"] }],
+    buckets: [{ id: 1, name: "Needs", note: "", colorIndex: 0, emoji: "", allocated: 1000, order: 0, categories: ["food"], accounts: [] }],
   };
   it("routes spend into buckets ignoring case and keeps the rest Unbucketed", () => {
     const s = cycleSummary(cycle, [txn({ amount: 400 }), txn({ category: "Fun", amount: 150 }), txn({ type: "Income", amount: 9 }), txn({ date: "2026-02-27" })], "2026-03-10");
@@ -92,6 +92,21 @@ describe("buckets", () => {
     expect(s.unbucketedSpent).toBe(150);
     expect(s.leftToSpend).toBe(2450);
     expect([s.dayNumber, s.daysLeft, s.totalDays]).toEqual([10, 21, 30]);
+  });
+  it("counts Transfers into a Bucket's tracked Accounts, like the app", () => {
+    const saving: Cycle = {
+      ...cycle,
+      buckets: [{ id: 2, name: "Savings", note: "", colorIndex: 0, emoji: "", allocated: 5000, order: 0, categories: [], accounts: ["Recurring Deposit", "SIP"] }],
+    };
+    const s = cycleSummary(saving, [
+      txn({ type: "Transfer", account: "", from: "Bank", to: "recurring deposit", amount: 3000 }),
+      txn({ type: "Transfer", account: "", from: "Recurring Deposit", to: "SIP", amount: 500 }), // within the Bucket
+      txn({ type: "Transfer", account: "", from: "SIP", to: "Bank", amount: 200 }),
+      txn({ amount: 400 }),
+    ], "2026-03-10");
+    expect(s.buckets[0].spent).toBe(2800);
+    expect(s.buckets[0].accounts).toEqual([{ account: "Recurring Deposit", amount: 3000 }, { account: "SIP", amount: -200 }]);
+    expect(s.totalSpent).toBe(3200);
   });
   it("lets a running cycle keep absorbing spend past its end date", () => {
     expect(cycleSummary(cycle, [txn({ date: "2026-04-02" })], "2026-04-03").totalSpent).toBe(100);

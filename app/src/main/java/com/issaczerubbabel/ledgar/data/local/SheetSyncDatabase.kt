@@ -16,6 +16,7 @@ import com.issaczerubbabel.ledgar.data.local.dao.TripDao
 import com.issaczerubbabel.ledgar.data.local.dao.UnparsedAlertDao
 import com.issaczerubbabel.ledgar.data.local.entity.AccountAlias
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
+import com.issaczerubbabel.ledgar.data.local.entity.BucketAccount
 import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
 import com.issaczerubbabel.ledgar.data.local.entity.Budget
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetBucket
@@ -50,9 +51,10 @@ import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
         TripExpenseRecord::class,
         TripExpenseShareRecord::class,
         TripSettlementRecord::class,
-        RecurringRule::class
+        RecurringRule::class,
+        BucketAccount::class
     ],
-    version = 26,
+    version = 27,
     exportSchema = false
 )
 abstract class SheetSyncDatabase : RoomDatabase() {

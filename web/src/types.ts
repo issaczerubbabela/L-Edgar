@@ -54,6 +54,8 @@ export interface Bucket {
   allocated: number;
   order: number;
   categories: string[];
+  /** Accounts whose Transfers this Bucket tracks, by name (script version 3; empty before). */
+  accounts: string[];
 }
 
 export interface Cycle {
