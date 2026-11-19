@@ -30,11 +30,7 @@ class HdfcParser : TransactionParser {
             )
         }
 
-        val direction = when {
-            ParsingUtils.CREDIT_WORDS.containsMatchIn(normalized) -> Direction.CREDIT
-            ParsingUtils.DEBIT_WORDS.containsMatchIn(normalized) -> Direction.DEBIT
-            else -> return null
-        }
+        val direction = ParsingUtils.directionOf(normalized) ?: return null
 
         val merchantRaw = if (direction == Direction.CREDIT) {
             CREDIT_NARRATION.find(normalized)?.groupValues?.get(1)

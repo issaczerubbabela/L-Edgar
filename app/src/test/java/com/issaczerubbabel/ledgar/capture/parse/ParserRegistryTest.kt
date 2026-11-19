@@ -40,6 +40,19 @@ class ParserRegistryTest {
     }
 
     @Test
+    fun iciciDebitAlertWordedCreditedForTheCounterpartyIsAnExpenseNotIncome() {
+        val parsed = registry.parse(
+            "ICICI Bank",
+            "ICICI Bank Acct XX123 debited for Rs 240.00 on 28-Sep-26; ZOMATO credited. " +
+                "UPI:327145093128. Call 18002662 for dispute. SMS BLOCK 123 to 9215676766."
+        )!!
+
+        assertEquals(Direction.DEBIT, parsed.direction)
+        assertEquals(240.0, parsed.amount, 0.001)
+        assertEquals("ZOMATO", parsed.merchantRaw)
+    }
+
+    @Test
     fun ignoresOtpAndTextWithoutAnAmount() {
         assertNull(registry.parse("HDFC Bank", "123456 is your OTP for txn of Rs.2,500 at FLIPKART."))
         assertNull(registry.parse("Anyone", "Your statement is ready to view."))
