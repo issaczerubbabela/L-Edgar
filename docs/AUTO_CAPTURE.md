@@ -237,6 +237,10 @@ wording change; "Clear all" deals with those.
 
 Deliberate omissions and gaps, so nobody assumes otherwise:
 
+The planned work on several of these (Transfers, history and Naive Bayes guesses, guessed Descriptions, a
+faster To review) is specified in [specs/auto-capture-improvements](specs/auto-capture-improvements/README.md).
+
+
 - **Google Pay and Paytm are unverified.** Google Pay's layout comes from a description, and Paytm has no
   sample.
 - **Sources.** Only notifications. No SMS permission path, no email capture.
