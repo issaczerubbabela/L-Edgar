@@ -6,6 +6,7 @@ import com.issaczerubbabel.ledgar.capture.categorize.Categorization
 import com.issaczerubbabel.ledgar.capture.categorize.CategorizationPipeline
 import com.issaczerubbabel.ledgar.capture.categorize.ConfidenceBand
 import com.issaczerubbabel.ledgar.capture.categorize.HistoryPredictor
+import com.issaczerubbabel.ledgar.capture.pair.LedgerMatchFinder
 import com.issaczerubbabel.ledgar.capture.parse.Direction
 import com.issaczerubbabel.ledgar.capture.parse.ParsedTxn
 import com.issaczerubbabel.ledgar.capture.parse.ParserRegistry
@@ -37,7 +38,10 @@ sealed interface IngestResult {
     data object Unparsed : IngestResult
     data object Duplicate : IngestResult
 
-    /** [shouldNotify] is true only for a High-confidence capture whose Account is already known. */
+    /**
+     * [shouldNotify] is true only for a High-confidence capture whose Account is already known and
+     * that doesn't look like a Transaction already in the Ledger.
+     */
     data class Captured(val id: Long, val band: ConfidenceBand, val shouldNotify: Boolean) : IngestResult
 }
 
@@ -58,7 +62,8 @@ class CaptureIngestor @Inject constructor(
     private val pipeline: CategorizationPipeline,
     private val settings: CaptureSettingsSource,
     private val unparsedDao: UnparsedAlertDao,
-    private val history: CaptureHistorySource
+    private val history: CaptureHistorySource,
+    private val ledgerMatches: LedgerMatchFinder
 ) : CaptureReguesser {
     private val registry = ParserRegistry.default()
 
@@ -102,10 +107,13 @@ class CaptureIngestor @Inject constructor(
             traceJson = trace.toJson()
         )
 
-        val id = captureDao.insert(row)
+        // A payment already logged by hand waits quietly as a POSSIBLE_DUPLICATE: no Confirm from the shade (#125).
+        val alreadyLogged = ledgerMatches.find(row) != null
+        val id = captureDao.insert(if (alreadyLogged) row.copy(status = "POSSIBLE_DUPLICATE") else row)
         if (id == -1L) return IngestResult.Duplicate
         // The notification's Confirm doesn't cover Transfers yet (#143).
-        val shouldNotify = result.band == ConfidenceBand.HIGH && accountId != null && result.type != TransactionType.TRANSFER
+        val shouldNotify = result.band == ConfidenceBand.HIGH && accountId != null &&
+            result.type != TransactionType.TRANSFER && !alreadyLogged
         return IngestResult.Captured(id, result.band, shouldNotify)
     }
 

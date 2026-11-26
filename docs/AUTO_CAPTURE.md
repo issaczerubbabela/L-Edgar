@@ -39,11 +39,24 @@ alert) are defined in [CONTEXT.md](../CONTEXT.md).
    becomes `PAIRED` with the same `confirmedExpenseId`, so the money is counted once. The snackbar says "Transfer
    saved, and the matching CUB Savings credit too", and Undo brings both cards back. Two or more matches pair
    none: they stay waiting, and the snackbar says so.
-   Every Confirm, Dismiss and **Review all** shows a snackbar with **Undo** for 5 seconds. Nothing is written
+   **Linking to a logged Transaction** (#125): a capture that looks like a Transaction already in the
+   Ledger (typed in on Add Transaction or Quick Add, or added by a Repeat rule) shows **"Already in your
+   Ledger?"** with that Transaction drawn as the shared Transaction row. **Same one** (and a right swipe,
+   which reads "Link") **links** the capture to it: the capture becomes `LINKED` with that Transaction's id
+   in `confirmedExpenseId`, and nothing is written to `expense_records`, so there is nothing to Sync. It
+   teaches the Merchant rule and Account alias like a Confirm, from the Transaction's type, Category and
+   Account, but never takes its Description as the merchant's rename. **Add anyway** is an ordinary Confirm.
+   The match (`LedgerMatcher`) is worked out live, so a capture picks it up the moment the Transaction is
+   saved: the same amount to the paisa, a debit against an Expense or a credit against an Income (Transfers
+   and Balance adjustments never), dated within 3 days, the same Account when both have one, not waiting to
+   be deleted, and not already resolved by another capture. With several, the one on the capture's Account
+   wins, then the nearest date, then the newest. Matched cards are left out of **Review all**.
+   Every Confirm, Dismiss, Same one and **Review all** shows a snackbar with **Undo** for 5 seconds. Nothing is written
    until then (`UndoableActions`, the same holder Delete uses), so Undo leaves no Transaction, nothing to
    Sync and no rule or alias change. Leaving the screen or the app makes a waiting decision final.
 5. **Confirm from a notification.** A capture that is High confidence and has a known Account also posts a
-   notification with **Confirm** and **Not mine**. Everything else waits quietly in the inbox.
+   notification with **Confirm** and **Not mine**, unless it already matches a Transaction in the Ledger.
+   Everything else waits quietly in the inbox.
 6. **Unreadable alerts.** If a bank changes its wording and an alert can't be read, it appears under
    More > Auto-capture > Alerts we couldn't read, with Copy and Delete.
 
@@ -78,7 +91,7 @@ aliases and unparsed alerts are local only and are not sent to the Sheet.
 | --- | --- |
 | `capture/source` | `BankNotificationListener` (the service), `CaptureApps` (the allowlist and sender rules) |
 | `capture` | `CaptureIngestor` (parse, dedupe, account lookup, categorize, store), `CaptureSettingsSource`, `CaptureConfirmer` (Confirm with Undo, shared by To review and Edit) |
-| `capture/pair` | `TransferPairMatcher` (a confirmed Transfer's other half, ADR-0006) |
+| `capture/pair` | `TransferPairMatcher` (a confirmed Transfer's other half, ADR-0006), `LedgerMatcher` + `LedgerMatchFinder` (the logged Transaction a capture repeats) |
 | `capture/parse` | `ParserRegistry`, `HdfcParser`, `CubParser`, `AxisParser`, `UpiAppParser`, `GenericBankParser`, `ParsingUtils`, `ParsedTxn`, `TxnTime` |
 | `capture/categorize` | `MerchantNormalizer`, `KeywordDictionary`, `CategoryResolver`, `CategorizationPipeline`, `MerchantRuleLearner` |
 | `capture/notify` | `CaptureNotifier`, `CaptureActionReceiver`, `CaptureActionHandler`, `CaptureNotificationText` |
@@ -145,6 +158,13 @@ Each capture has a `rawHash` with a unique index; a repeat is dropped by the dat
   same notification read again gets the same key, while two real identical payments more than ten minutes
   apart both land. Two identical payments within ten minutes count as one; nothing in the alert can tell
   them apart.
+
+**Against the Ledger.** The hash only compares alerts with alerts. Before storing a capture,
+`CaptureIngestor` also asks `LedgerMatchFinder` whether it repeats a Transaction already logged (the rule
+is in section 1). If so it is stored as `POSSIBLE_DUPLICATE` instead of `PENDING` and no notification is
+posted. It still waits in To review and counts in the badge like any other. The inbox doesn't rely on that
+status: it matches every waiting capture live, so a capture that arrived before its Transaction was typed
+in gets the strip too, and the notification's Confirm re-checks and does nothing once a match exists.
 
 **Dating.** A capture is filed under the date its alert states (`TxnTime`), so a late SMS isn't logged as
 today. A missing date, an impossible one, or one more than a day in the future falls back to arrival time. A
@@ -250,14 +270,15 @@ user confirms.
 
 ## 8. The notification
 
-`CaptureNotifier` posts for a capture that is High confidence **and** has a known Account, nothing else.
+`CaptureNotifier` posts for a capture that is High confidence **and** has a known Account, and that doesn't
+match a Transaction already in the Ledger, nothing else.
 
 - The lock screen shows "A captured transaction is waiting"; the amount and merchant appear only once unlocked.
 - **Confirm** is marked as needing authentication (`setAuthenticationRequired`), so Android asks for an unlock
   first. It saves only what the capture
   already suggests, with the capture's title (its rename or Suggested description) as the Description, and
-  never with a guessed Account; with no Category or Account it
-  does nothing and the capture stays in the inbox.
+  never with a guessed Account. With no Category or Account, or once the capture matches a Transaction in the
+  Ledger, it does nothing and the capture stays in the inbox.
 - **Not mine** dismisses the capture.
 - Tapping the notification opens the app normally, so the app lock still applies before anything is shown.
 - It is cancelled when the capture is resolved in the inbox.
@@ -320,6 +341,10 @@ Deliberate omissions and gaps, so nobody assumes otherwise:
 - **Transfers.** The other half is paired only when the user confirms a Transfer
   ([ADR-0006](adr/0006-transfer-suggestions-require-an-own-account-signal.md)). Two waiting captures are
   never suggested as a Transfer on their own, and the notification's Confirm doesn't cover Transfers yet.
+- **Linking.** Only Transactions dated in the last 35 days are offered, and only the best match: there is
+  no picker for "2 other matches", no Unlink, and a link never corrects the Transaction's date or amount to
+  the bank's. Two captures of one payment from different apps (the bank's SMS and Google Pay) are still two
+  captures; once one is linked or confirmed, the other no longer matches.
 - **No 30-day purge of a capture's raw text** (only unparsed alerts are purged). The database is not
   excluded from Android's automatic backup, which is on for the app.
 - **Learned data is local.** Rules, aliases and the mapping aren't backed up to the Sheet, so a reinstall

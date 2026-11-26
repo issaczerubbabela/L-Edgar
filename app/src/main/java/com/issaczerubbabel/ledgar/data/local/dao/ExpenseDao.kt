@@ -292,6 +292,19 @@ interface ExpenseDao {
      * Fetch all records between two dates (inclusive).
      * Used for month aggregation and weekly breakdowns.
      */
+    /** Expenses and Incomes a waiting capture could be the bank's alert for (#125), dated from [since]. */
+    @Query("""
+        SELECT * FROM expense_records
+        WHERE type IN ('Expense', 'Income') AND syncAction != 'DELETE' AND date >= :since
+    """)
+    fun observeCaptureMatchCandidates(since: String): Flow<List<ExpenseRecord>>
+
+    @Query("""
+        SELECT * FROM expense_records
+        WHERE type IN ('Expense', 'Income') AND syncAction != 'DELETE' AND date >= :from AND date <= :to
+    """)
+    suspend fun getCaptureMatchCandidates(from: String, to: String): List<ExpenseRecord>
+
     @Query("""
         SELECT * FROM expense_records
         WHERE date >= :startDate AND date <= :endDate

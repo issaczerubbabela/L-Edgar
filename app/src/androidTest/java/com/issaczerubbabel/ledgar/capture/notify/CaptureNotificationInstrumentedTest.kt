@@ -14,6 +14,7 @@ import com.issaczerubbabel.ledgar.capture.IngestResult
 import com.issaczerubbabel.ledgar.capture.RoomCaptureHistorySource
 import com.issaczerubbabel.ledgar.capture.categorize.CategorizationPipeline
 import com.issaczerubbabel.ledgar.capture.categorize.KeywordDictionary
+import com.issaczerubbabel.ledgar.capture.pair.LedgerMatchFinder
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.entity.AccountAlias
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
@@ -67,7 +68,8 @@ class CaptureNotificationInstrumentedTest {
         ingestor = CaptureIngestor(
             db.captureDao(), db.accountAliasDao(), DropdownOptionRepositoryImpl(db.dropdownOptionDao()),
             CategorizationPipeline(KeywordDictionary(emptyMap())) { db.merchantRuleDao().get(it) }, settings, db.unparsedAlertDao(),
-            RoomCaptureHistorySource(db.expenseDao(), db.accountAliasDao())
+            RoomCaptureHistorySource(db.expenseDao(), db.accountAliasDao()),
+            LedgerMatchFinder(db.expenseDao(), db.captureDao())
         )
         val repository = CaptureRepositoryImpl(db, db.captureDao(), db.merchantRuleDao(), db.accountAliasDao(), db.expenseDao(), db.unparsedAlertDao(), ingestor)
         handler = CaptureActionHandler(db.captureDao(), repository, ReminderPreferences(context))

@@ -26,7 +26,7 @@ interface CaptureDao {
     )
     fun observePending(): Flow<List<CapturedTransaction>>
 
-    @Query("SELECT COUNT(*) FROM captured_transactions WHERE status = 'PENDING'")
+    @Query("SELECT COUNT(*) FROM captured_transactions WHERE status IN ('PENDING', 'POSSIBLE_DUPLICATE')")
     fun observePendingCount(): Flow<Int>
 
     @Query("SELECT * FROM captured_transactions WHERE refNumber = :ref LIMIT 1")
@@ -50,6 +50,20 @@ interface CaptureDao {
     /** The other half of a confirmed Transfer (ADR-0006): resolved by the same Transaction. */
     @Query("UPDATE captured_transactions SET status = 'PAIRED', confirmedExpenseId = :expenseId, finalCategory = 'Transfer' WHERE id = :id")
     suspend fun markPaired(id: Long, expenseId: Long)
+
+    /**
+     * A Link (#125): the capture is the bank's alert for a Transaction the user had already logged,
+     * so it resolves to that Transaction's id without writing a new one.
+     */
+    @Query("UPDATE captured_transactions SET status = 'LINKED', confirmedExpenseId = :expenseId, finalCategory = :finalCategory WHERE id = :id")
+    suspend fun markLinked(id: Long, expenseId: Long, finalCategory: String?)
+
+    /** Transactions a capture already resolved (Confirm, a Transfer's other half or a Link): each absorbs one alert. */
+    @Query("SELECT DISTINCT confirmedExpenseId FROM captured_transactions WHERE confirmedExpenseId IS NOT NULL")
+    fun observeLinkedExpenseIds(): Flow<List<Long>>
+
+    @Query("SELECT DISTINCT confirmedExpenseId FROM captured_transactions WHERE confirmedExpenseId IS NOT NULL")
+    suspend fun getLinkedExpenseIds(): List<Long>
 
     /** Captures still waiting in one direction within a time window: a Transfer's possible other halves. */
     @Query(
@@ -100,6 +114,6 @@ interface CaptureDao {
     suspend fun getPendingSnapshot(): List<CapturedTransaction>
 
     /** R3-Q1: turning auto-capture off clears queued work but never touches learned data. */
-    @Query("DELETE FROM captured_transactions WHERE status = 'PENDING'")
+    @Query("DELETE FROM captured_transactions WHERE status IN ('PENDING', 'POSSIBLE_DUPLICATE')")
     suspend fun deleteAllPending()
 }

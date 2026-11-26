@@ -6,6 +6,9 @@ import com.issaczerubbabel.ledgar.capture.CaptureTrace
 import com.issaczerubbabel.ledgar.capture.categorize.MerchantRuleLearner
 import com.issaczerubbabel.ledgar.capture.categorize.RuleChange
 import com.issaczerubbabel.ledgar.capture.notify.displayTitle
+import com.issaczerubbabel.ledgar.capture.pair.LedgerCandidates
+import com.issaczerubbabel.ledgar.capture.pair.LedgerMatchFinder
+import com.issaczerubbabel.ledgar.capture.pair.LedgerMatcher
 import com.issaczerubbabel.ledgar.capture.pair.TransferPairMatcher
 import com.issaczerubbabel.ledgar.capture.pair.TransferPairing
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
@@ -17,6 +20,7 @@ import com.issaczerubbabel.ledgar.data.local.dao.UnparsedAlertDao
 import com.issaczerubbabel.ledgar.data.local.entity.AccountAlias
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.data.local.entity.MerchantRule
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRuleKey
 import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
 import com.issaczerubbabel.ledgar.util.TransactionType
@@ -36,6 +40,8 @@ class CaptureRepositoryImpl @Inject constructor(
     private val unparsedDao: UnparsedAlertDao,
     private val reguesser: CaptureReguesser
 ) : CaptureRepository {
+
+    private val ledgerMatches = LedgerMatchFinder(expenseDao, captureDao)
 
     override fun observePending(): Flow<List<CapturedTransaction>> = captureDao.observePending()
 
@@ -58,21 +64,23 @@ class CaptureRepositoryImpl @Inject constructor(
         val expenseId = confirmInTransaction(captureId, edits)
         // What this Confirm taught (a rule, an alias, one more past Transaction) can sharpen the
         // guesses on captures still waiting. Only the stored guesses change; a user's picks stay.
-        if (expenseId != null) {
-            try {
-                reguesser.reguessPending()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                // The Confirm is saved; stale guesses are only a missed improvement.
-            }
-        }
+        if (expenseId != null) reguessQuietly()
         return expenseId
+    }
+
+    private suspend fun reguessQuietly() {
+        try {
+            reguesser.reguessPending()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // The decision is saved; stale guesses are only a missed improvement.
+        }
     }
 
     private suspend fun confirmInTransaction(captureId: Long, edits: CaptureEdits): Long? = database.withTransaction {
         val capture = captureDao.getById(captureId) ?: return@withTransaction null
-        if (capture.status != "PENDING" && capture.status != "POSSIBLE_DUPLICATE") return@withTransaction null
+        if (!capture.isWaiting()) return@withTransaction null
 
         val isTransfer = edits.type == TransactionType.TRANSFER
         val otherAccountId = edits.otherAccountId.takeIf { isTransfer }
@@ -116,35 +124,98 @@ class CaptureRepositoryImpl @Inject constructor(
             if (pairing is TransferPairing.One) captureDao.markPaired(pairing.capture.id, expenseId)
         }
 
-        // Picking an account for an alert we couldn't place teaches the alias for next time.
-        capture.accountHint?.let { hint ->
-            if (aliasDao.getByAlias(hint) == null) {
-                aliasDao.upsert(AccountAlias(hint, edits.accountId))
-                captureDao.assignAccountToPending(hint, edits.accountId)
-            }
-        }
-
-        capture.merchantNorm?.let { merchant ->
-            val existing = merchantRuleDao.get(merchant, capture.direction)
-            val typed = edits.description.trim()
-            val change = MerchantRuleLearner.onConfirmed(
-                existing = existing,
-                merchantNorm = merchant,
-                direction = capture.direction,
-                type = edits.type,
-                finalCategory = category,
-                alwaysUse = edits.alwaysUse,
-                now = System.currentTimeMillis(),
+        learn(
+            capture,
+            accountId = edits.accountId,
+            type = edits.type,
+            category = category,
+            alwaysUse = edits.alwaysUse,
+            description = { existing ->
+                val typed = edits.description.trim()
                 // Renaming is remembered; confirming with the bank's own text forgets an earlier rename.
                 // A Suggested description is a guess for this payment, not a new name for the merchant,
                 // so keeping one (or picking one of its chips) leaves the rule's rename as it was.
-                description = when {
+                when {
                     typed.isEmpty() || typed == capture.displayTitle() -> null
                     CaptureTrace.parse(capture.traceJson).descriptionGuesses.any { it.equals(typed, ignoreCase = true) } ->
                         existing?.description
                     else -> typed
-                },
-                toAccountId = otherAccountId
+                }
+            },
+            toAccountId = otherAccountId
+        )
+        expenseId
+    }
+
+    override fun observeLedgerCandidates(): Flow<LedgerCandidates> = ledgerMatches.observe()
+
+    override suspend fun findLedgerMatch(captureId: Long): ExpenseRecord? {
+        val capture = captureDao.getById(captureId)?.takeIf { it.isWaiting() } ?: return null
+        return ledgerMatches.find(capture)
+    }
+
+    override suspend fun link(captureId: Long, expenseId: Long): Boolean {
+        val linked = linkInTransaction(captureId, expenseId)
+        // A link teaches like a Confirm, so waiting captures are guessed again the same way.
+        if (linked) reguessQuietly()
+        return linked
+    }
+
+    private suspend fun linkInTransaction(captureId: Long, expenseId: Long): Boolean = database.withTransaction {
+        val capture = captureDao.getById(captureId)?.takeIf { it.isWaiting() } ?: return@withTransaction false
+        val transaction = expenseDao.getById(expenseId) ?: return@withTransaction false
+        // Re-checked here: the Transaction may have been edited, deleted or linked since the card showed it.
+        val linked = captureDao.getLinkedExpenseIds().toSet()
+        if (!LedgerMatcher.isMatch(capture, transaction, linked, ZoneId.systemDefault())) return@withTransaction false
+
+        captureDao.markLinked(captureId, expenseId, transaction.category)
+        // The user chose this Transaction's Category and Account themselves, so it teaches like a Confirm.
+        learn(
+            capture,
+            accountId = transaction.accountId,
+            type = transaction.type,
+            category = transaction.category,
+            alwaysUse = false,
+            // A hand-typed description is often about that one payment, so it never renames the merchant.
+            description = { existing -> existing?.description },
+            toAccountId = null
+        )
+        true
+    }
+
+    /**
+     * What a resolved capture teaches: the Account alias for digits not yet placed, and the
+     * merchant's rule ([MerchantRuleLearner]). Runs inside the caller's Room transaction.
+     */
+    private suspend fun learn(
+        capture: CapturedTransaction,
+        accountId: Long?,
+        type: String,
+        category: String,
+        alwaysUse: Boolean,
+        /** The rule's description from the existing rule: the user's rename, or null to forget it. */
+        description: (existing: MerchantRule?) -> String?,
+        toAccountId: Long?
+    ) {
+        // Picking an account for an alert we couldn't place teaches the alias for next time.
+        val hint = capture.accountHint
+        if (hint != null && accountId != null && aliasDao.getByAlias(hint) == null) {
+            aliasDao.upsert(AccountAlias(hint, accountId))
+            captureDao.assignAccountToPending(hint, accountId)
+        }
+
+        capture.merchantNorm?.let { merchant ->
+            val existing = merchantRuleDao.get(merchant, capture.direction)
+            val change = MerchantRuleLearner.onConfirmed(
+                existing = existing,
+                merchantNorm = merchant,
+                direction = capture.direction,
+                type = type,
+                finalCategory = category,
+                alwaysUse = alwaysUse,
+                now = System.currentTimeMillis(),
+                description = description(existing),
+                toAccountId = toAccountId
             )
             when (change) {
                 is RuleChange.Upsert -> merchantRuleDao.upsert(change.rule)
@@ -152,8 +223,9 @@ class CaptureRepositoryImpl @Inject constructor(
                 RuleChange.None -> Unit
             }
         }
-        expenseId
     }
+
+    private fun CapturedTransaction.isWaiting() = status == "PENDING" || status == "POSSIBLE_DUPLICATE"
 
     override suspend fun findTransferPair(captureId: Long, edits: CaptureEdits): TransferPairing {
         if (edits.type != TransactionType.TRANSFER) return TransferPairing.None

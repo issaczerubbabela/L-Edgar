@@ -5,6 +5,7 @@ import com.issaczerubbabel.ledgar.capture.categorize.ConfidenceBand
 import com.issaczerubbabel.ledgar.capture.categorize.DescriptionGuesser
 import com.issaczerubbabel.ledgar.capture.notify.displayTitle
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
+import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRuleKey
 import com.issaczerubbabel.ledgar.data.repository.CaptureEdits
 import com.issaczerubbabel.ledgar.util.TransactionType
@@ -37,7 +38,12 @@ data class CaptureRowUi(
     /** Up to two other guessed Descriptions, shown as chips; tapping one replaces the title. */
     val descriptionAlternatives: List<String> = emptyList(),
     /** The Account was guessed from the source app; no alias is saved until Confirm. */
-    val accountIsGuess: Boolean = false
+    val accountIsGuess: Boolean = false,
+    /**
+     * The Transaction already in the Ledger this capture probably repeats (#125): the card asks
+     * "Already in your Ledger?" and offers Same one and Add anyway instead of Confirm.
+     */
+    val match: ExpenseRecord? = null
 ) {
     /** The merchant's name for "Always use": its rename or the bank's text, never a guessed Description. */
     val merchantTitle: String get() = if (titleIsGuess) bankTitle else title
@@ -57,9 +63,10 @@ data class CaptureRowUi(
 
     /**
      * Safe to confirm in bulk: a High-confidence guess (only a saved rule is one, ADR-0010) whose
-     * outcome and Account are both known, the Account not merely guessed.
+     * outcome and Account are both known, the Account not merely guessed, and that isn't possibly a
+     * Transaction already logged, which only the user can decide.
      */
-    val isBulkCandidate: Boolean get() = band == ConfidenceBand.HIGH && canConfirm && !accountIsGuess
+    val isBulkCandidate: Boolean get() = band == ConfidenceBand.HIGH && canConfirm && !accountIsGuess && match == null
 
     /** What Confirm saves; null while something is still missing. */
     fun toEdits(): CaptureEdits? {
@@ -106,7 +113,8 @@ object CaptureRows {
         edit: CaptureRowEdit?,
         renames: Map<MerchantRuleKey, String>,
         knownAccountIds: Set<Long>,
-        why: String? = CaptureTrace.parse(capture.traceJson).whyText
+        why: String? = CaptureTrace.parse(capture.traceJson).whyText,
+        match: ExpenseRecord? = null
     ): CaptureRowUi {
         val trace = CaptureTrace.parse(capture.traceJson)
         val suggested = suggestedType(capture)
@@ -146,7 +154,8 @@ object CaptureRows {
                 .distinctBy { it.lowercase() }
                 .filterNot { it.equals(title, ignoreCase = true) }
                 .take(DescriptionGuesser.MAX_ALTERNATIVES),
-            accountIsGuess = guessedAccount != null
+            accountIsGuess = guessedAccount != null,
+            match = match
         )
     }
 

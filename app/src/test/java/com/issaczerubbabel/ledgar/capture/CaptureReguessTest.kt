@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.issaczerubbabel.ledgar.capture.categorize.CategorizationPipeline
 import com.issaczerubbabel.ledgar.capture.categorize.ConfidenceBand
 import com.issaczerubbabel.ledgar.capture.categorize.KeywordDictionary
+import com.issaczerubbabel.ledgar.capture.pair.LedgerMatchFinder
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.entity.AccountAlias
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
@@ -58,7 +59,8 @@ class CaptureReguessTest {
         val pipeline = CategorizationPipeline(KeywordDictionary(emptyMap())) { db.merchantRuleDao().get(it) }
         ingestor = CaptureIngestor(
             db.captureDao(), db.accountAliasDao(), DropdownOptionRepositoryImpl(db.dropdownOptionDao()), pipeline, settings,
-            db.unparsedAlertDao(), RoomCaptureHistorySource(db.expenseDao(), db.accountAliasDao())
+            db.unparsedAlertDao(), RoomCaptureHistorySource(db.expenseDao(), db.accountAliasDao()),
+            LedgerMatchFinder(db.expenseDao(), db.captureDao())
         )
         repository = CaptureRepositoryImpl(
             db, db.captureDao(), db.merchantRuleDao(), db.accountAliasDao(), db.expenseDao(), db.unparsedAlertDao(), ingestor

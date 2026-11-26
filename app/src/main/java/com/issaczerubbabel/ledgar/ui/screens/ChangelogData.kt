@@ -24,7 +24,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Auto-capture: guesses Category and Description from what you logged before, like Lunch or Tea",
             "To review: up to 2 other guessed titles show as chips under a card, and tapping one uses it",
             "Auto-capture: an alert from your bank's app with an unknown account number suggests your Account",
-            "To review: each Confirm sharpens the guesses on waiting captures, never changing what you picked"
+            "To review: each Confirm sharpens the guesses on waiting captures, never changing what you picked",
+            "Auto-capture: a capture you already logged by hand says so, and Same one links it instead of adding it twice"
         ),
         fixed = listOf(
             "Auto-capture: a bank alert saying \"debited ... NAME credited\" is filed as an Expense, not Income",
@@ -37,7 +38,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "TransferPairMatcher pairs a confirmed Transfer with its other half (ADR-0006 accepted); CaptureConfirmer shares Undo",
             "Capture predictor: pure HistoryMatch (R2), NaiveBayesCategorizer, DescriptionGuesser and AccountGuesser, unit tested",
             "ADR-0010 \"Only a saved rule reaches High\"; guesses live in traceJson via CaptureTrace, adding no migration",
-            "CaptureIngestor.reguessPending runs after each Confirm (CaptureReguessTest); a picked Category or other Account pins the type"
+            "CaptureIngestor.reguessPending runs after each Confirm (CaptureReguessTest); a picked Category or other Account pins the type",
+            "Pure LedgerMatcher finds the logged Transaction a capture repeats; a link is status LINKED, no migration"
         )
     ),
     ChangelogRelease(

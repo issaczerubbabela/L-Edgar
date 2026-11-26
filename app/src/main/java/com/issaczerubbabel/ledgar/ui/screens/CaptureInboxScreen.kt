@@ -36,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
@@ -68,6 +69,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
@@ -82,8 +84,12 @@ import kotlinx.coroutines.withTimeoutOrNull
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.capture.categorize.ConfidenceBand
+import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
+import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.ledger.Ledger
 import com.issaczerubbabel.ledgar.ui.components.OptionPickerSheet
 import com.issaczerubbabel.ledgar.ui.components.PickerOption
+import com.issaczerubbabel.ledgar.ui.components.TransactionRow
 import com.issaczerubbabel.ledgar.ui.components.UndoSnackbar
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseOrange
 import com.issaczerubbabel.ledgar.ui.theme.IncomeBlue
@@ -115,6 +121,7 @@ private fun otherSideLabel(row: CaptureRowUi, name: String?): String =
 
 private val timeFormat = DateTimeFormatter.ofPattern("d MMM, h:mm a")
 private val dateFormat = DateTimeFormatter.ofPattern("d MMM")
+private val spokenDateFormat = DateTimeFormatter.ofPattern("d MMMM")
 
 /** The alert's own date when it differs from the day it arrived, else when it arrived. */
 private fun whenText(arrivedAt: Long, txnTime: Long): String {
@@ -253,7 +260,9 @@ fun CaptureInboxScreen(
                         },
                         onAlwaysUseChange = { vm.setAlwaysUse(row.capture.id, it) },
                         onDescriptionChange = { vm.setDescription(row.capture.id, it) },
+                        accounts = accounts,
                         onConfirm = { vm.confirm(row) },
+                        onLink = { vm.link(row) },
                         onDismiss = { vm.dismiss(row) },
                         // ADR-0008: a shared trip payment becomes a Trip expense, never a full personal Transaction.
                         onAddToTrip = activeTrip?.takeIf { row.type == TransactionType.EXPENSE }?.let { trip -> { onAddToTrip(trip.tripId, row.capture.id) } },
@@ -321,7 +330,10 @@ private fun SwipeableCaptureCard(
     onEdit: () -> Unit,
     onAlwaysUseChange: (Boolean) -> Unit,
     onDescriptionChange: (String) -> Unit,
+    accounts: List<AccountRecord>,
     onConfirm: () -> Unit,
+    /** Same one: offered instead of Confirm when the capture may already be in the Ledger. */
+    onLink: () -> Unit,
     onDismiss: () -> Unit,
     onAddToTrip: (() -> Unit)?,
     modifier: Modifier = Modifier
@@ -352,8 +364,15 @@ private fun SwipeableCaptureCard(
     SwipeToDismissBox(
         state = state,
         modifier = modifier.semantics {
-            customActions = listOf(
-                CustomAccessibilityAction("Confirm") { confirmOrShowMissing(); true },
+            val decide = if (row.match != null) {
+                listOf(
+                    CustomAccessibilityAction("Same one, link to the logged transaction") { onLink(); true },
+                    CustomAccessibilityAction("Add anyway") { confirmOrShowMissing(); true }
+                )
+            } else {
+                listOf(CustomAccessibilityAction("Confirm") { confirmOrShowMissing(); true })
+            }
+            customActions = decide + listOf(
                 CustomAccessibilityAction("Dismiss") { onDismiss(); true },
                 CustomAccessibilityAction("Edit description") { editingTitle = true; true },
                 CustomAccessibilityAction("Edit in full") { onEdit(); true }
@@ -363,7 +382,10 @@ private fun SwipeableCaptureCard(
         onDismiss = { direction ->
             when (direction) {
                 SwipeToDismissBoxValue.StartToEnd -> {
-                    if (row.canConfirm) {
+                    // On a card that may already be logged, the swipe is the safe choice: Same one.
+                    if (row.match != null) {
+                        onLink()
+                    } else if (row.canConfirm) {
                         onConfirm()
                     } else {
                         highlightMissing = true
@@ -374,7 +396,7 @@ private fun SwipeableCaptureCard(
                 SwipeToDismissBoxValue.Settled -> Unit
             }
         },
-        backgroundContent = { SwipeBackground(state.dismissDirection, canConfirm = row.canConfirm) }
+        backgroundContent = { SwipeBackground(state.dismissDirection, canConfirm = row.canConfirm, links = row.match != null) }
     ) {
         CaptureCard(
             row = row,
@@ -393,16 +415,21 @@ private fun SwipeableCaptureCard(
             onEdit = onEdit,
             onAlwaysUseChange = onAlwaysUseChange,
             onDescriptionChange = onDescriptionChange,
+            accounts = accounts,
             onConfirm = confirmOrShowMissing,
+            onLink = onLink,
             onDismiss = onDismiss,
             onAddToTrip = onAddToTrip
         )
     }
 }
 
-/** What letting go will do: Confirm in the primary colour to the right, Dismiss in the error colour to the left. */
+/**
+ * What letting go will do: Confirm (Link, on a card that may already be logged) in the primary
+ * colour to the right, Dismiss in the error colour to the left.
+ */
 @Composable
-private fun SwipeBackground(direction: SwipeToDismissBoxValue, canConfirm: Boolean) {
+private fun SwipeBackground(direction: SwipeToDismissBoxValue, canConfirm: Boolean, links: Boolean) {
     if (direction == SwipeToDismissBoxValue.Settled) return
     val confirming = direction == SwipeToDismissBoxValue.StartToEnd
     val colors = MaterialTheme.colorScheme
@@ -412,7 +439,7 @@ private fun SwipeBackground(direction: SwipeToDismissBoxValue, canConfirm: Boole
             .background(
                 when {
                     !confirming -> colors.error
-                    canConfirm -> colors.primary
+                    links || canConfirm -> colors.primary
                     else -> colors.surfaceVariant
                 },
                 CardDefaults.shape
@@ -423,12 +450,13 @@ private fun SwipeBackground(direction: SwipeToDismissBoxValue, canConfirm: Boole
         Text(
             when {
                 !confirming -> "Dismiss"
+                links -> "Link"
                 canConfirm -> "Confirm"
                 else -> "Pick what's missing first"
             },
             color = when {
                 !confirming -> colors.onError
-                canConfirm -> colors.onPrimary
+                links || canConfirm -> colors.onPrimary
                 else -> colors.onSurfaceVariant
             },
             style = MaterialTheme.typography.titleSmall
@@ -455,7 +483,9 @@ private fun CaptureCard(
     onEdit: () -> Unit,
     onAlwaysUseChange: (Boolean) -> Unit,
     onDescriptionChange: (String) -> Unit,
+    accounts: List<AccountRecord>,
     onConfirm: () -> Unit,
+    onLink: () -> Unit,
     onDismiss: () -> Unit,
     onAddToTrip: (() -> Unit)? = null
 ) {
@@ -518,6 +548,7 @@ private fun CaptureCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            row.match?.let { AlreadyLoggedStrip(it, accounts) }
             if (!editingTitle && (row.titleIsGuess || row.descriptionAlternatives.isNotEmpty())) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -624,8 +655,53 @@ private fun CaptureCard(
             ) {
                 TextButton(onClick = onDismiss) { Text("Dismiss") }
                 if (onAddToTrip != null) TextButton(onClick = onAddToTrip) { Text("Add to trip") }
-                Button(onClick = onConfirm, enabled = row.canConfirm) { Text("Confirm") }
+                if (row.match != null) {
+                    // Add anyway is today's Confirm; Same one is the safe choice, so it's the filled one.
+                    TextButton(onClick = onConfirm, enabled = row.canConfirm) { Text("Add anyway") }
+                    Button(onClick = onLink) { Text("Same one") }
+                } else {
+                    Button(onClick = onConfirm, enabled = row.canConfirm) { Text("Confirm") }
+                }
             }
+        }
+    }
+}
+
+/**
+ * "Already in your Ledger?" over the Transaction this capture may repeat, drawn as the shared
+ * Transaction row with its date. TalkBack reads it as one sentence.
+ */
+@Composable
+private fun AlreadyLoggedStrip(match: ExpenseRecord, accounts: List<AccountRecord>) {
+    val ledgerRow = remember(match, accounts) { Ledger.row(match, accounts) }
+    val date = remember(match.date) { runCatching { LocalDate.parse(match.date) }.getOrNull() }
+    val spoken = "Possibly already logged as " + listOfNotNull(
+        match.description.ifBlank { null },
+        match.category,
+        ledgerRow.accountLabel.ifBlank { null },
+        date?.format(spokenDateFormat)
+    ).joinToString(", ")
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clearAndSetSemantics { contentDescription = spoken }
+    ) {
+        Column(modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)) {
+            Text(
+                "Already in your Ledger?",
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(horizontal = 12.dp)
+            )
+            // Only shows the Transaction: the card's buttons decide.
+            TransactionRow(
+                row = ledgerRow,
+                onClick = {},
+                trailingLine = date?.format(dateFormat),
+                modifier = Modifier.padding(4.dp)
+            )
         }
     }
 }

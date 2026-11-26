@@ -3,6 +3,7 @@ package com.issaczerubbabel.ledgar.capture
 import com.issaczerubbabel.ledgar.capture.notify.CaptureNotifier
 import com.issaczerubbabel.ledgar.capture.pair.TransferPairing
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
+import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.preferences.ReminderPreferences
 import com.issaczerubbabel.ledgar.data.repository.CaptureEdits
 import com.issaczerubbabel.ledgar.data.repository.CaptureRepository
@@ -11,6 +12,7 @@ import com.issaczerubbabel.ledgar.data.repository.UndoableActions
 import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.util.formatRupeesExact
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -63,6 +65,23 @@ class CaptureConfirmer @Inject constructor(
             }
         )
     }
+
+    /**
+     * Same one: links [capture] to [transaction], the Transaction the user already logged for it,
+     * once the Undo window is over. Nothing is written to the Ledger, now or then.
+     */
+    fun link(capture: CapturedTransaction, transaction: ExpenseRecord, onFinal: (captureId: Long) -> Unit = {}) {
+        undoableActions.perform(
+            UndoableAction(
+                message = CaptureConfirmMessages.linked(transaction),
+                hiddenCaptureIds = setOf(capture.id)
+            ) {
+                captureRepository.link(capture.id, transaction.id)
+                notifier.cancel(capture.id)
+                onFinal(capture.id)
+            }
+        )
+    }
 }
 
 /** The Undo snackbar's text for a Confirm. */
@@ -83,6 +102,14 @@ object CaptureConfirmMessages {
             TransferPairing.None -> "Transfer saved · $amount ${if (isDebit) "to" else "from"} $other"
         }
     }
+
+    /** "Linked to Swiggy, 14 Nov". */
+    fun linked(transaction: ExpenseRecord): String {
+        val date = runCatching { LocalDate.parse(transaction.date).format(DAY) }.getOrNull()
+        return "Linked to " + listOfNotNull(transaction.description.ifBlank { transaction.category }, date).joinToString(", ")
+    }
+
+    private val DAY = DateTimeFormatter.ofPattern("d MMM")
 
     fun several(items: List<CaptureConfirmation>): String =
         "Confirmed ${items.size} · ${formatRupeesExact(items.sumOf { it.edits.amount ?: it.capture.amount })}"

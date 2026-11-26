@@ -7,6 +7,7 @@ import com.issaczerubbabel.ledgar.capture.CaptureConfirmer
 import com.issaczerubbabel.ledgar.capture.CaptureDraftHandoff
 import com.issaczerubbabel.ledgar.capture.notify.CaptureNotifier
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
+import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.CaptureEdits
 import com.issaczerubbabel.ledgar.data.repository.CaptureRepository
@@ -18,11 +19,13 @@ import com.issaczerubbabel.ledgar.util.DescriptionUse
 import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.util.formatRupeesExact
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -52,13 +55,14 @@ class ReviewInboxViewModel @Inject constructor(
         captureRepository.observeRenames(),
         edits,
         undoableActions.hiddenCaptureIds,
-        accounts
-    ) { pending, renames, edited, hidden, accountList ->
+        // Worked out live: a capture picks up its match the moment the Transaction it repeats is saved.
+        combine(accounts, captureRepository.observeLedgerCandidates(), ::Pair)
+    ) { pending, renames, edited, hidden, (accountList, ledger) ->
         val knownAccountIds = accountList.map { it.id }.toSet()
         pending.filterNot { it.id in hidden }.map { capture ->
-            CaptureRows.build(capture, edited[capture.id], renames, knownAccountIds)
+            CaptureRows.build(capture, edited[capture.id], renames, knownAccountIds, match = ledger.bestMatch(capture))
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** The Confirm or Dismiss the Undo snackbar is offering, if any. */
     val pending: StateFlow<UndoableAction?> = undoableActions.pending
@@ -120,6 +124,12 @@ class ReviewInboxViewModel @Inject constructor(
 
     /** Review all: one decision, so one Undo puts every card back. */
     fun confirmAll(rows: List<CaptureRowUi>) = confirmRows(rows)
+
+    /** Same one: the capture is the bank's alert for [CaptureRowUi.match], so nothing new is added. */
+    fun link(row: CaptureRowUi) {
+        val match: ExpenseRecord = row.match ?: return
+        confirmer.link(row.capture, match) { captureId -> edits.update { it - captureId } }
+    }
 
     fun dismiss(row: CaptureRowUi) {
         val captureId = row.capture.id

@@ -380,10 +380,12 @@ erDiagram
 
 - Purpose: auto-capture (see [AUTO_CAPTURE.md](AUTO_CAPTURE.md)). Added in database v19 (the first three) and v20.
 - `captured_transactions` holds a parsed alert until the user confirms or dismisses it (`status`: PENDING,
-  CONFIRMED, DISMISSED, DUPLICATE, POSSIBLE_DUPLICATE, TRIP, PAIRED). `rawHash` is unique, which is the
+  CONFIRMED, DISMISSED, DUPLICATE, POSSIBLE_DUPLICATE, TRIP, PAIRED, LINKED). `rawHash` is unique, which is the
   same-alert dedupe. Only a Confirm creates an `expense_records` row (`confirmedExpenseId`), in one Room
   transaction. A confirmed Transfer's other half becomes PAIRED in that same transaction and shares its
-  `confirmedExpenseId` (ADR-0006).
+  `confirmedExpenseId` (ADR-0006). A capture for a Transaction the user had already logged becomes LINKED
+  with that Transaction's id and writes no row; POSSIBLE_DUPLICATE is a waiting capture that matched one on
+  arrival, so it was never notified. No migration: both are status strings.
 - `merchant_rules` is keyed by (`merchantNorm`, `direction`) since v27; `origin` is USER, LEARNED or CANDIDATE
   (a candidate is a run of confirmations, never matched). A Transfer rule stores its other Account in `toAccountId`.
 - None of these tables is sent to the Sheet or covered by `BackupWorker`.

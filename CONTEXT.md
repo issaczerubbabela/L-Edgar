@@ -136,6 +136,10 @@ _Avoid_: pending transaction, alert, capture (as a standalone noun)
 Turning a Captured transaction into a real Transaction. Only the user confirms; nothing about auto-capture does this on its own.
 _Avoid_: auto-log, auto-add
 
+**Link**:
+Resolving a Captured transaction as the bank's alert for a Transaction the user had already logged (by hand, with Quick Add or by a Repeat rule), instead of confirming it into a second one. Like Confirm, only the user links ("Same one"); nothing new is written to the Ledger. A Captured transaction that looks like a logged Transaction is a **Possible duplicate** until the user decides.
+_Avoid_: merge, match (as the user's action)
+
 **Merchant rule**:
 A saved mapping from a normalized merchant name and the bank's direction (debit or credit) to an outcome, and to the description the user last renamed it to, used for future Captured transactions from the same merchant. The outcome is an Expense or Income with a Category, or a Transfer with the other Account (the To-account of a debit, the From-account of a credit). It is either set by the user or learned from repeated identical confirmations.
 _Avoid_: category rule

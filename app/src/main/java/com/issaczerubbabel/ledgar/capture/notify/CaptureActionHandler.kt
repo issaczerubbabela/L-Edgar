@@ -17,13 +17,15 @@ class CaptureActionHandler @Inject constructor(
 
     /**
      * Returns true if the capture became a Transaction. It needs both a suggested Category and a
-     * known Account; without them nothing is saved and the capture stays waiting in the inbox.
+     * known Account; without them nothing is saved and the capture stays waiting in the inbox. So
+     * does a capture that has since gained a match in the Ledger: the user decides in To review.
      */
     suspend fun confirm(captureId: Long): Boolean {
         val capture = captureDao.getById(captureId) ?: return false
         if (capture.status != "PENDING") return false
         val category = capture.suggestedCategory?.takeIf { it.isNotBlank() } ?: return false
         val accountId = capture.accountId ?: return false
+        if (captureRepository.findLedgerMatch(captureId) != null) return false
 
         val confirmed = captureRepository.confirm(
             captureId,

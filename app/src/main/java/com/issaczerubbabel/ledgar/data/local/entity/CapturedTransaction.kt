@@ -53,8 +53,12 @@ data class CapturedTransaction(
     val decidedBy: String? = null,
     val traceJson: String? = null,
     /**
-     * PENDING | CONFIRMED | DISMISSED | DUPLICATE | POSSIBLE_DUPLICATE | TRIP | PAIRED. PAIRED is the
-     * other half of a confirmed Transfer (ADR-0006): it shares that Transfer's [confirmedExpenseId].
+     * PENDING | CONFIRMED | DISMISSED | DUPLICATE | POSSIBLE_DUPLICATE | TRIP | PAIRED | LINKED. PAIRED
+     * is the other half of a confirmed Transfer (ADR-0006): it shares that Transfer's [confirmedExpenseId].
+     * LINKED is the user's Same one: the alert for a Transaction already logged, whose id it holds in
+     * [confirmedExpenseId] without writing a new one. POSSIBLE_DUPLICATE waits like PENDING but matched a
+     * logged Transaction when it arrived, so it was never notified; the inbox re-matches every waiting
+     * capture live either way.
      */
     val status: String = "PENDING",
     val confirmedExpenseId: Long? = null,

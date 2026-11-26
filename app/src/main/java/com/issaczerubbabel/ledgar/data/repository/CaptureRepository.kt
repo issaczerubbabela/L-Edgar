@@ -1,7 +1,9 @@
 package com.issaczerubbabel.ledgar.data.repository
 
+import com.issaczerubbabel.ledgar.capture.pair.LedgerCandidates
 import com.issaczerubbabel.ledgar.capture.pair.TransferPairing
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
+import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRuleKey
 import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
 import kotlinx.coroutines.flow.Flow
@@ -56,6 +58,24 @@ interface CaptureRepository {
      * snackbar can say so and hide both cards. [TransferPairing.None] for anything but a Transfer.
      */
     suspend fun findTransferPair(captureId: Long, edits: CaptureEdits): TransferPairing
+
+    /**
+     * The Transactions a waiting capture could be the bank's alert for, as they change: compare
+     * with [LedgerCandidates.bestMatch]. A capture with a match shows "Already in your Ledger?".
+     */
+    fun observeLedgerCandidates(): Flow<LedgerCandidates>
+
+    /** The Transaction already in the Ledger that this capture probably repeats, or null. */
+    suspend fun findLedgerMatch(captureId: Long): ExpenseRecord?
+
+    /**
+     * Same one: resolves a waiting capture as LINKED to [expenseId], a Transaction the user had
+     * already logged, and learns from it as Confirm does, using that Transaction's type, Category
+     * and Account. No Transaction is written or changed. Returns false, saving nothing, if the
+     * capture is no longer waiting or the Transaction no longer matches it (deleted, edited, or
+     * resolved by another capture meanwhile).
+     */
+    suspend fun link(captureId: Long, expenseId: Long): Boolean
 
     suspend fun dismiss(captureId: Long)
 
