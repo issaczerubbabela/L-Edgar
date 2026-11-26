@@ -149,8 +149,12 @@ A bank or UPI alert that showed an amount but that no parser could read. It is k
 _Avoid_: failed alert
 
 **Confidence band**:
-High, Check or Low: how sure auto-capture is about a Captured transaction's suggested Category. Only High, with its Account already resolved, notifies the user; everything else waits in the inbox.
+High, Check or Low: how sure auto-capture is about a Captured transaction's suggested Category. Only a saved Merchant rule reaches High (ADR-0010); a guess from history or the on-phone guesser is at most Check. Only High, with its Account already resolved, notifies the user; everything else waits in the inbox.
 _Avoid_: confidence score
+
+**Suggested description**:
+The Description auto-capture guesses for a Captured transaction from the user's own Transactions, by merchant, amount, time of day and weekday (₹80 at 1pm is "Lunch", ₹30 at 4:30pm is "Tea"). It fills the capture's title, marked as a guess, with up to two alternatives as chips. A saved rename on the Merchant rule wins over it until the merchant has had different Descriptions. It never changes the Confidence band, and keeping it doesn't rename the merchant.
+_Avoid_: auto-description, predicted title
 
 ## Google Sheets
 

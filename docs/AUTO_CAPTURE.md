@@ -1,8 +1,8 @@
 # Auto-capture
 
 Auto-capture turns bank and UPI alerts into suggested Transactions, so they don't have to be typed in by
-hand. Everything runs on the phone with plain code: no network calls, no paid services, no machine-learning
-model.
+hand. Everything runs on the phone: no network calls, no paid services and no cloud model. The only
+learning is an on-phone Naive Bayes guesser, no network.
 
 Nothing becomes a Transaction until the user confirms it ([ADR-0005](adr/0005-auto-capture-never-confirms-itself.md)).
 Alerts are read from notifications, not from the SMS database ([ADR-0007](adr/0007-auto-capture-reads-notifications-not-sms.md)).
@@ -159,17 +159,54 @@ punctuation and company words are dropped, and a phone-number handle becomes `P2
 | Rule | When | Confidence |
 | --- | --- | --- |
 | R1 | A saved Merchant rule exists for the merchant and the bank's direction: its type and Category, or Transfer and its other Account | 0.98 |
+| R2 | History match: the user's past picks for this merchant agree at least 60% of the time | that share, at most 0.89 |
+| NB | Naive Bayes: the on-phone guesser's top Category clears 0.6 | its probability, at most 0.89 |
 | R7 | A keyword matches and its kind is mapped to a Category the user still has | 0.75 |
 | R11 | Anything else: "Needs a category" | none |
 
+Everything runs on the phone with no network (`CategorizationPipeline`, with R2 and Naive Bayes in
+`HistoryPredictor`). The learned steps read a fresh snapshot of `expense_records` on every ingest and re-guess
+(`CaptureHistorySource`); nothing they learn is stored. They only guess an Expense or Income Category: a
+Transfer comes from a rule alone, and past Transfers only feed the Suggested description.
+
+- **R2, history match** (`HistoryMatch`). A past Transaction counts when it was confirmed from a capture of
+  the same merchant, or when its Description is the merchant's saved rename or reads as the merchant itself
+  (a hand-typed "Swiggy" for `SWIGGY`). The most-picked Category the user still has wins, with "You picked
+  Food for this 4 of 5 times".
+- **Naive Bayes** (`NaiveBayesCategorizer`). A multinomial model over merchant and Description words, a
+  log-scaled amount bucket (doubling: ₹30 and ₹80 differ, ₹80 and ₹90 don't), a three-hour time-of-day slot
+  (known only for Transactions confirmed from a capture) and weekday/weekend. It is trained on every Expense
+  and Income, hand-typed ones included, one model per type. Merchant words count three times over the
+  context features. It answers only with at least 10 rows and two Categories to tell apart, when the capture
+  shares a word with them, and when its top probability is 0.6 or more: "Guessed from similar spends". The
+  threshold was tuned leave-one-out on a fixture in `NaiveBayesCategorizerTest`, which prints the sweep.
 - **Keywords** come from `assets/merchant_keywords.json` (kind to words). Whole words only, the longest
   match wins, so "instamart" beats "swiggy" for `SWIGGY INSTAMART`.
-- **The app never invents a Category.** A kind with no mapping, or mapped to a Category since deleted,
-  leaves the capture uncategorized and records which kind to map. Mapping a kind in Settings fills in waiting
-  captures that were only missing it; it never changes one already suggested or chosen.
-- **Credits** are Income and only ever get a Category from a rule.
+- **The app never invents a Category.** Every step only suggests one of the user's own Categories. A kind
+  with no mapping, or mapped to a Category since deleted, leaves the capture uncategorized and records which
+  kind to map.
+- **Credits** are Income and get a Category from a rule, R2 or Naive Bayes, never from a keyword.
 - **Bands.** High is 0.90 or more, Check is 0.60 to 0.89, Low is less or no Category. Only a rule reaches
-  High, so a keyword guess is always Check.
+  High ([ADR-0010](adr/0010-only-a-saved-rule-reaches-high.md)), so a history, Naive Bayes or keyword guess is
+  always Check: it never notifies and is never ticked in bulk.
+
+**Suggested description** (`DescriptionGuesser`). Each capture also gets a guessed Description from every
+Transaction of its type, by merchant, amount, time of day and weekday. A merchant seen before outweighs
+everything: only its own Descriptions are ranked, and amount and time decide between them (₹80 at 1pm is
+"Lunch", ₹30 at 4:30pm is "Tea"). With no history for the merchant, a Description is guessed only when
+several close Transactions agree. The top guess fills the card's title in italics, marked "Suggested title",
+and up to two alternatives show as chips; tapping one replaces the title. The bank's own text and "Payment"
+are never guessed. A saved rename wins over the guess until the merchant has had different Descriptions;
+from then on the guess is the title and the rename one of its chips. Confirming with a guessed Description
+(or a chip) doesn't rename the merchant. It never changes the Confidence band.
+
+**Re-guessing.** After each Confirm, once its Undo is over (`CaptureRepository.confirm`), and after a kind is
+mapped in Settings, every waiting capture is guessed again (`CaptureIngestor.reguessPending`). Only the guesses
+stored on the capture change: its suggested type and Category (or Transfer and other Account), the Suggested
+description and the Account guess. What the user picked or typed on a card, including switching it to a
+Transfer, lives in the inbox until Confirm, so it always wins, and a pass with no suggestion keeps the one
+already there. The guesses, why text and alternatives are kept in the capture's `traceJson`
+(`CaptureTrace`), so no table changed.
 
 **Merchant rules** (`MerchantRuleLearner`), keyed by merchant and **direction** (`DEBIT` or `CREDIT`, as the
 bank wrote it), so a debit and a credit from one merchant have separate rules. A rule's outcome is
@@ -205,6 +242,12 @@ Aliases are also the own-account signal for **Transfer pairing**: a waiting capt
 Transfer's other half when its digits are an alias of the Transfer's other Account. A Transfer between two
 Accounts whose digits aren't aliased yet is saved without pairing, and its other half stays waiting.
 
+**Account guess** (`AccountGuesser`). When the digits have no alias but the alert came from a bank's own app
+(HDFC, Axis or City Union Bank, not a UPI app or an SMS) and every alias seen on that bank's alerts points to
+the same one Account, the card suggests it, shown as "HDFC Savings?". It is only a suggestion: the capture's
+Account stays unknown, so it never notifies and isn't ticked in bulk, and the alias is saved only when the
+user confirms.
+
 ## 8. The notification
 
 `CaptureNotifier` posts for a capture that is High confidence **and** has a known Account, nothing else.
@@ -212,7 +255,8 @@ Accounts whose digits aren't aliased yet is saved without pairing, and its other
 - The lock screen shows "A captured transaction is waiting"; the amount and merchant appear only once unlocked.
 - **Confirm** is marked as needing authentication (`setAuthenticationRequired`), so Android asks for an unlock
   first. It saves only what the capture
-  already suggests, with the merchant's renamed title as the Description; with no Category or Account it
+  already suggests, with the capture's title (its rename or Suggested description) as the Description, and
+  never with a guessed Account; with no Category or Account it
   does nothing and the capture stays in the inbox.
 - **Not mine** dismisses the capture.
 - Tapping the notification opens the app normally, so the app lock still applies before anything is shown.
@@ -269,9 +313,10 @@ Deliberate omissions and gaps, so nobody assumes otherwise:
 - **Google Pay and Paytm are unverified.** Google Pay's layout comes from a description, and Paytm has no
   sample.
 - **Sources.** Only notifications. No SMS permission path, no email capture.
-- **Categorization.** Only rules and keywords. Matching against the user's history and a Naive Bayes
-  classifier were planned and are not built, so a merchant seen before but with no rule still needs a
-  Category.
+- **Categorization.** Rules, history, an on-phone Naive Bayes guesser and keywords, with no network and no
+  cloud model. The Naive Bayes counts are rebuilt in memory on each ingest and re-guess rather than stored,
+  which is fine for a few thousand Transactions (the snapshot is capped at the latest 5,000); a much larger
+  ledger may want a cached model.
 - **Transfers.** The other half is paired only when the user confirms a Transfer
   ([ADR-0006](adr/0006-transfer-suggestions-require-an-own-account-signal.md)). Two waiting captures are
   never suggested as a Transfer on their own, and the notification's Confirm doesn't cover Transfers yet.
