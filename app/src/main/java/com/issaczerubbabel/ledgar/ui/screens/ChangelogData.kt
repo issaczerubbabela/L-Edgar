@@ -18,13 +18,19 @@ val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
         version = "v1.7.0",
         date = "2026-11-26",
+        added = listOf(
+            "Auto-capture: make a capture a Transfer or edit it in full, and its other half is matched for you",
+            "Auto-capture: a merchant you keep confirming as a Transfer to one Account is suggested that way next time"
+        ),
         fixed = listOf(
             "Auto-capture: a bank alert saying \"debited ... NAME credited\" is filed as an Expense, not Income",
             "Auto-capture: a payment to a UPI ID shows who you paid instead of Payment"
         ),
         developer = listOf(
             "ParsingUtils.directionOf picks whichever debit/credit word comes first, shared by Generic/HDFC/Axis parsers",
-            "ParsingUtils.vpaOf reads the \"to VPA/UPI ID handle@psp\" payee for Generic/HDFC/Axis debits, tested on synthetic alerts"
+            "ParsingUtils.vpaOf reads the \"to VPA/UPI ID handle@psp\" payee for Generic/HDFC/Axis debits, tested on synthetic alerts",
+            "Merchant rules are keyed by merchant and direction and can mean a Transfer (Room 26 → 27, migration tested)",
+            "TransferPairMatcher pairs a confirmed Transfer with its other half (ADR-0006 accepted); CaptureConfirmer shares Undo"
         )
     ),
     ChangelogRelease(

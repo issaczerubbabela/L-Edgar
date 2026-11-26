@@ -8,6 +8,11 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 ## [1.7.0] - 2026-11-26
 
+### Added
+
+- Auto-capture: make a capture a Transfer or edit it in full, and its other half is matched for you
+- Auto-capture: a merchant you keep confirming as a Transfer to one Account is suggested that way next time
+
 ### Fixed
 
 - Auto-capture: a bank alert saying "debited ... NAME credited" is filed as an Expense, not Income
@@ -17,6 +22,8 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - ParsingUtils.directionOf picks whichever debit/credit word comes first, shared by Generic/HDFC/Axis parsers
 - ParsingUtils.vpaOf reads the "to VPA/UPI ID handle@psp" payee for Generic/HDFC/Axis debits, tested on synthetic alerts
+- Merchant rules are keyed by merchant and direction and can mean a Transfer (Room 26 → 27, migration tested)
+- TransferPairMatcher pairs a confirmed Transfer with its other half (ADR-0006 accepted); CaptureConfirmer shares Undo
 
 ## [1.6.0] - 2026-10-13
 

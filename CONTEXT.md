@@ -137,7 +137,7 @@ Turning a Captured transaction into a real Transaction. Only the user confirms; 
 _Avoid_: auto-log, auto-add
 
 **Merchant rule**:
-A saved mapping from a normalized merchant name to a Category, and to the description the user last renamed it to, used for future Captured transactions from the same merchant. The Category is either set by the user or learned from repeated confirmations.
+A saved mapping from a normalized merchant name and the bank's direction (debit or credit) to an outcome, and to the description the user last renamed it to, used for future Captured transactions from the same merchant. The outcome is an Expense or Income with a Category, or a Transfer with the other Account (the To-account of a debit, the From-account of a credit). It is either set by the user or learned from repeated identical confirmations.
 _Avoid_: category rule
 
 **Account alias**:

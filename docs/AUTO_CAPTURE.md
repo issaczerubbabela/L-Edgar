@@ -25,6 +25,20 @@ alert) are defined in [CONTEXT.md](../CONTEXT.md).
    left. "Original text" shows the alert as received. "Always use X for Y" saves a rule after one
    confirmation. Tapping the title renames it before confirming, with Descriptions used before as
    suggestions; the merchant's rule remembers the new name for its next captures.
+   An **Expense / Income / Transfer** switch sets the type. **Transfer** swaps the Category pick for the other
+   side's Account: a debit's Account is the From-account and the user picks the To-account, a credit's Account
+   is the To-account and the user picks the From-account. The bank's direction is never flipped (a wrong one
+   is a parser bug). **Edit…** opens Add Transaction filled in from the card (amount, date, type, Accounts,
+   Category, Description, Remarks), with "Always use this for <merchant>". Saving there is the capture's
+   Confirm, through the same `CaptureConfirmer`, so learning, aliases, pairing and Undo match the card; Back
+   leaves the capture waiting as it was.
+   **Transfer pairing** ([ADR-0006](adr/0006-transfer-suggestions-require-an-own-account-signal.md)):
+   confirming a Transfer also resolves the capture on its other side, in the same Room transaction, when
+   exactly one waiting capture matches (`TransferPairMatcher`): opposite direction, the same amount to the
+   paisa, within 2 days, and account digits that are an Account alias of the Transfer's other Account. It
+   becomes `PAIRED` with the same `confirmedExpenseId`, so the money is counted once. The snackbar says "Transfer
+   saved, and the matching CUB Savings credit too", and Undo brings both cards back. Two or more matches pair
+   none: they stay waiting, and the snackbar says so.
    Every Confirm, Dismiss and **Review all** shows a snackbar with **Undo** for 5 seconds. Nothing is written
    until then (`UndoableActions`, the same holder Delete uses), so Undo leaves no Transaction, nothing to
    Sync and no rule or alias change. Leaving the screen or the app makes a waiting decision final.
@@ -63,13 +77,14 @@ aliases and unparsed alerts are local only and are not sent to the Sheet.
 | Area | Files |
 | --- | --- |
 | `capture/source` | `BankNotificationListener` (the service), `CaptureApps` (the allowlist and sender rules) |
-| `capture` | `CaptureIngestor` (parse, dedupe, account lookup, categorize, store), `CaptureSettingsSource` |
+| `capture` | `CaptureIngestor` (parse, dedupe, account lookup, categorize, store), `CaptureSettingsSource`, `CaptureConfirmer` (Confirm with Undo, shared by To review and Edit) |
+| `capture/pair` | `TransferPairMatcher` (a confirmed Transfer's other half, ADR-0006) |
 | `capture/parse` | `ParserRegistry`, `HdfcParser`, `CubParser`, `AxisParser`, `UpiAppParser`, `GenericBankParser`, `ParsingUtils`, `ParsedTxn`, `TxnTime` |
 | `capture/categorize` | `MerchantNormalizer`, `KeywordDictionary`, `CategoryResolver`, `CategorizationPipeline`, `MerchantRuleLearner` |
 | `capture/notify` | `CaptureNotifier`, `CaptureActionReceiver`, `CaptureActionHandler`, `CaptureNotificationText` |
-| `data/local` | entities `CapturedTransaction`, `MerchantRule`, `AccountAlias`, `UnparsedAlert`; matching DAOs; `CaptureMigration` (v18 to v19, v19 to v20) |
+| `data/local` | entities `CapturedTransaction`, `MerchantRule`, `AccountAlias`, `UnparsedAlert`; matching DAOs; `CaptureMigration` (v18 to v19, v19 to v20, v26 to v27) |
 | `data` | `CaptureRepository(Impl)`, `CapturePreferencesRepository` (on/off flag and category mapping, in DataStore) |
-| `viewmodel`, `ui/screens` | `ReviewInboxViewModel` + `CaptureInboxScreen`, `CaptureSettingsViewModel` + `CaptureSettingsScreen`, `UnparsedAlertsViewModel` + `UnparsedAlertsScreen`, `CaptureBadgeViewModel` |
+| `viewmodel`, `ui/screens` | `ReviewInboxViewModel` + `CaptureInboxScreen` (cards built by `CaptureRows`), `LogViewModel` + `LogScreen` for Edit (`CaptureForm`), `CaptureSettingsViewModel` + `CaptureSettingsScreen`, `UnparsedAlertsViewModel` + `UnparsedAlertsScreen`, `CaptureBadgeViewModel` |
 | `di` | `CaptureModule` (keyword list from `assets/merchant_keywords.json`, the pipeline, bindings) |
 
 ## 3. Reading the alerts
@@ -143,7 +158,7 @@ punctuation and company words are dropped, and a phone-number handle becomes `P2
 
 | Rule | When | Confidence |
 | --- | --- | --- |
-| R1 | A saved Merchant rule exists for the merchant and type | 0.98 |
+| R1 | A saved Merchant rule exists for the merchant and the bank's direction: its type and Category, or Transfer and its other Account | 0.98 |
 | R7 | A keyword matches and its kind is mapped to a Category the user still has | 0.75 |
 | R11 | Anything else: "Needs a category" | none |
 
@@ -156,12 +171,18 @@ punctuation and company words are dropped, and a phone-number handle becomes `P2
 - **Bands.** High is 0.90 or more, Check is 0.60 to 0.89, Low is less or no Category. Only a rule reaches
   High, so a keyword guess is always Check.
 
-**Merchant rules** (`MerchantRuleLearner`), keyed by merchant and type:
+**Merchant rules** (`MerchantRuleLearner`), keyed by merchant and **direction** (`DEBIT` or `CREDIT`, as the
+bank wrote it), so a debit and a credit from one merchant have separate rules. A rule's outcome is
+Expense + Category, Income + Category, or **Transfer + the other Account** (`toAccountId`: the To-account of
+a debit, the From-account of a credit). Two outcomes are identical when their type matches and so does the
+Category, or for a Transfer the other Account; a different type counts as an override. A Transfer rule
+suggests the card already on Transfer with its Account, at High. Room 26 → 27 kept every rule: Expense
+rules became `DEBIT` and Income rules `CREDIT`.
 
 | Origin | How it arises | What happens to it |
 | --- | --- | --- |
-| `CANDIDATE` | First confirmation of a merchant | Tracks consecutive same-category confirmations. Never matched |
-| `LEARNED` | Three same-category confirmations in a row | Deleted after two overrides in a row |
+| `CANDIDATE` | First confirmation of a merchant | Tracks consecutive identical outcomes. Never matched |
+| `LEARNED` | Three identical outcomes in a row | Deleted after two overrides in a row |
 | `USER` | "Always use X for Y" ticked on Confirm | Never changed automatically |
 
 Confirming from a notification or in bulk never saves a `USER` rule.
@@ -179,6 +200,10 @@ An **Account alias** maps the account digits in an alert (`1234`) to one of the 
 prompt: a capture with an unknown number shows "Map account". Picking an Account for it and confirming saves
 the alias, and other waiting captures with that number pick the Account up too. Aliases are by last digits
 only; UPI-address aliases are not built.
+
+Aliases are also the own-account signal for **Transfer pairing**: a waiting capture is only taken as a
+Transfer's other half when its digits are an alias of the Transfer's other Account. A Transfer between two
+Accounts whose digits aren't aliased yet is saved without pairing, and its other half stays waiting.
 
 ## 8. The notification
 
@@ -247,8 +272,9 @@ Deliberate omissions and gaps, so nobody assumes otherwise:
 - **Categorization.** Only rules and keywords. Matching against the user's history and a Naive Bayes
   classifier were planned and are not built, so a merchant seen before but with no rule still needs a
   Category.
-- **Transfers.** Two captures are never merged into a Transfer suggestion
-  ([ADR-0006](adr/0006-transfer-suggestions-require-an-own-account-signal.md) records how it should work).
+- **Transfers.** The other half is paired only when the user confirms a Transfer
+  ([ADR-0006](adr/0006-transfer-suggestions-require-an-own-account-signal.md)). Two waiting captures are
+  never suggested as a Transfer on their own, and the notification's Confirm doesn't cover Transfers yet.
 - **No 30-day purge of a capture's raw text** (only unparsed alerts are purged). The database is not
   excluded from Android's automatic backup, which is on for the app.
 - **Learned data is local.** Rules, aliases and the mapping aren't backed up to the Sheet, so a reinstall
