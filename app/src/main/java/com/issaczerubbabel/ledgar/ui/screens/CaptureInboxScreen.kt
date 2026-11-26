@@ -64,6 +64,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
@@ -485,6 +488,8 @@ private fun CaptureCard(
                     Text(
                         row.title,
                         style = MaterialTheme.typography.titleMedium,
+                        // A Suggested description reads as a guess until the user keeps or edits it.
+                        fontStyle = if (row.titleIsGuess) FontStyle.Italic else FontStyle.Normal,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
@@ -492,6 +497,7 @@ private fun CaptureCard(
                             .heightIn(min = 48.dp)
                             .clickable(onClickLabel = "Edit description") { onEditingTitleChange(true) }
                             .padding(vertical = 12.dp)
+                            .semantics { if (row.titleIsGuess) contentDescription = "Suggested description: ${row.title}" }
                     )
                 }
                 Text(
@@ -512,6 +518,26 @@ private fun CaptureCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (!editingTitle && (row.titleIsGuess || row.descriptionAlternatives.isNotEmpty())) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.horizontalScroll(rememberScrollState())
+                ) {
+                    Text(
+                        if (row.titleIsGuess) "Suggested title" else "Or",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    row.descriptionAlternatives.forEach { alternative ->
+                        SuggestionChip(
+                            onClick = { onDescriptionChange(alternative) },
+                            label = { Text(alternative, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            modifier = Modifier.semantics { contentDescription = "Use $alternative as the title" }
+                        )
+                    }
+                }
+            }
             // The bank's direction stays: a Transfer only decides where the money went or came from.
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                 CAPTURE_TYPES.forEachIndexed { index, type ->
@@ -539,7 +565,16 @@ private fun CaptureCard(
                 }
                 AssistChip(
                     onClick = onPickAccount,
-                    label = { Text(accountName ?: "Map account", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    label = {
+                        Text(
+                            accountName?.let { if (row.accountIsGuess) "$it?" else it } ?: "Map account",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    modifier = Modifier.semantics {
+                        if (row.accountIsGuess && accountName != null) contentDescription = "Suggested account: $accountName"
+                    },
                     border = if (highlightMissing && row.accountId == null) missingBorder else AssistChipDefaults.assistChipBorder(true)
                 )
             }
@@ -563,7 +598,7 @@ private fun CaptureCard(
                 ) {
                     Checkbox(checked = row.alwaysUse, onCheckedChange = onAlwaysUseChange)
                     Text(
-                        "Always use ${if (row.isTransfer) "Transfer " + otherSideLabel(row, otherAccountName).replaceFirstChar { it.lowercase() } else row.category} for ${row.title}",
+                        "Always use ${if (row.isTransfer) "Transfer " + otherSideLabel(row, otherAccountName).replaceFirstChar { it.lowercase() } else row.category} for ${row.merchantTitle}",
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.weight(1f)
                     )

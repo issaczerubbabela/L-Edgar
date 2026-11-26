@@ -27,6 +27,9 @@ data class CaptureTrace(
     /** Every guessed Description, the title first. */
     val descriptionGuesses: List<String> get() = listOfNotNull(descriptionGuess) + descriptionAlternatives
 
+    /** What the card says decided the Category, such as "R2 · You picked Food for this 4 of 5 times". */
+    val whyText: String? get() = rule?.let { "$it · ${why.orEmpty()}" }
+
     /**
      * Whether the Suggested description is the title rather than the merchant's [rename]: always
      * when there is no rename, and over one once the merchant has had different Descriptions.

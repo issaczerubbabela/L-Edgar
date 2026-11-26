@@ -1,6 +1,8 @@
 package com.issaczerubbabel.ledgar.viewmodel
 
+import com.issaczerubbabel.ledgar.capture.CaptureTrace
 import com.issaczerubbabel.ledgar.capture.categorize.ConfidenceBand
+import com.issaczerubbabel.ledgar.capture.categorize.DescriptionGuesser
 import com.issaczerubbabel.ledgar.capture.notify.displayTitle
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRuleKey
@@ -19,15 +21,27 @@ data class CaptureRowUi(
     val otherAccountId: Long? = null,
     val band: ConfidenceBand,
     val why: String?,
-    /** What Confirm saves as the Description: the user's edit, else the merchant's rename, else the bank's text. */
+    /**
+     * What Confirm saves as the Description: the user's edit, else the merchant's rename, else the
+     * Suggested description, else the bank's text.
+     */
     val title: String,
     /** The title as the bank wrote it, before any rename. */
     val bankTitle: String,
     /** What the user has typed in the title field, if they've edited it. */
     val descriptionDraft: String? = null,
     val categoryPickedByUser: Boolean = false,
-    val alwaysUse: Boolean = false
+    val alwaysUse: Boolean = false,
+    /** The title is the Suggested description, not something the user or a rename chose. */
+    val titleIsGuess: Boolean = false,
+    /** Up to two other guessed Descriptions, shown as chips; tapping one replaces the title. */
+    val descriptionAlternatives: List<String> = emptyList(),
+    /** The Account was guessed from the source app; no alias is saved until Confirm. */
+    val accountIsGuess: Boolean = false
 ) {
+    /** The merchant's name for "Always use": its rename or the bank's text, never a guessed Description. */
+    val merchantTitle: String get() = if (titleIsGuess) bankTitle else title
+
     val isIncome: Boolean get() = type == TransactionType.INCOME
     val isTransfer: Boolean get() = type == TransactionType.TRANSFER
 
@@ -41,8 +55,11 @@ data class CaptureRowUi(
     val canOfferAlwaysUse: Boolean
         get() = !capture.merchantNorm.isNullOrBlank() && if (isTransfer) otherAccountId != null else !category.isNullOrBlank()
 
-    /** Safe to confirm in bulk: a High-confidence guess whose outcome and Account are both known. */
-    val isBulkCandidate: Boolean get() = band == ConfidenceBand.HIGH && canConfirm
+    /**
+     * Safe to confirm in bulk: a High-confidence guess (only a saved rule is one, ADR-0010) whose
+     * outcome and Account are both known, the Account not merely guessed.
+     */
+    val isBulkCandidate: Boolean get() = band == ConfidenceBand.HIGH && canConfirm && !accountIsGuess
 
     /** What Confirm saves; null while something is still missing. */
     fun toEdits(): CaptureEdits? {
@@ -77,15 +94,21 @@ object CaptureRows {
     /**
      * The card for [capture]. A suggestion only applies while the card is on the suggested type: a
      * switched card starts without a Category or other Account. [knownAccountIds] drops a suggested
-     * other Account that has since been deleted.
+     * other Account, or a guessed Account, that has since been deleted.
+     *
+     * A field the user touched ([edit]) keeps their value however often the capture is guessed
+     * again; every other field shows the latest guess. The merchant's rename wins over the
+     * Suggested description until the merchant has had different Descriptions
+     * ([CaptureTrace.guessWinsOver]).
      */
     fun build(
         capture: CapturedTransaction,
         edit: CaptureRowEdit?,
         renames: Map<MerchantRuleKey, String>,
         knownAccountIds: Set<Long>,
-        why: String?
+        why: String? = CaptureTrace.parse(capture.traceJson).whyText
     ): CaptureRowUi {
+        val trace = CaptureTrace.parse(capture.traceJson)
         val suggested = suggestedType(capture)
         val type = edit?.type ?: suggested
         val onSuggestedType = type == suggested
@@ -95,12 +118,17 @@ object CaptureRows {
         val otherAccountId = if (isTransfer) edit?.otherAccountId ?: suggestedOther.takeIf { onSuggestedType } else null
         val pickedByUser = edit?.category != null || edit?.otherAccountId != null
         val hasSuggestion = onSuggestedType && (capture.suggestedCategory != null || suggestedOther != null)
-        val rename = capture.merchantNorm?.let { renames[MerchantRuleKey(it, capture.direction)] }
+        val rename = capture.merchantNorm?.let { renames[MerchantRuleKey(it, capture.direction)] }?.trim()?.takeIf { it.isNotEmpty() }
+        val bankTitle = capture.displayTitle()
+        // A cleared field means the bank's own text, which also forgets an earlier rename.
+        val title = edit?.description?.trim()?.ifEmpty { bankTitle } ?: capture.displayTitle(trace.titleBeforeBankText(rename))
+        val guessedAccount = trace.guessedAccountId
+            ?.takeIf { edit?.accountId == null && capture.accountId == null && it in knownAccountIds }
         return CaptureRowUi(
             capture = capture,
             type = type,
             category = category,
-            accountId = edit?.accountId ?: capture.accountId,
+            accountId = edit?.accountId ?: capture.accountId ?: guessedAccount,
             otherAccountId = otherAccountId,
             // Picking an outcome yourself is a decision, so it no longer needs a second look.
             band = when {
@@ -108,12 +136,17 @@ object CaptureRows {
                 else -> ConfidenceBand.of(capture.confidence, hasSuggestion)
             },
             why = why.takeIf { onSuggestedType },
-            // A cleared field means the bank's own text, which also forgets an earlier rename.
-            title = edit?.description?.trim()?.ifEmpty { capture.displayTitle() } ?: capture.displayTitle(rename),
-            bankTitle = capture.displayTitle(),
+            title = title,
+            bankTitle = bankTitle,
             descriptionDraft = edit?.description,
             categoryPickedByUser = pickedByUser,
-            alwaysUse = edit?.alwaysUse ?: false
+            alwaysUse = edit?.alwaysUse ?: false,
+            titleIsGuess = edit?.description == null && trace.guessWinsOver(rename),
+            descriptionAlternatives = (trace.descriptionGuesses + listOfNotNull(rename))
+                .distinctBy { it.lowercase() }
+                .filterNot { it.equals(title, ignoreCase = true) }
+                .take(DescriptionGuesser.MAX_ALTERNATIVES),
+            accountIsGuess = guessedAccount != null
         )
     }
 

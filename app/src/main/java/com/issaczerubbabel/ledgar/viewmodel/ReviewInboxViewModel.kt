@@ -2,8 +2,6 @@ package com.issaczerubbabel.ledgar.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import com.issaczerubbabel.ledgar.capture.CaptureConfirmation
 import com.issaczerubbabel.ledgar.capture.CaptureConfirmer
 import com.issaczerubbabel.ledgar.capture.CaptureDraftHandoff
@@ -45,8 +43,6 @@ class ReviewInboxViewModel @Inject constructor(
 
     // Kept until a decision is final, so Undo brings a card back exactly as the user left it.
     private val edits = MutableStateFlow<Map<Long, CaptureRowEdit>>(emptyMap())
-    private val gson = Gson()
-    private val traceType = object : TypeToken<Map<String, String?>>() {}.type
 
     val accounts: StateFlow<List<AccountRecord>> = accountRepository.getAllVisibleAccounts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -60,7 +56,7 @@ class ReviewInboxViewModel @Inject constructor(
     ) { pending, renames, edited, hidden, accountList ->
         val knownAccountIds = accountList.map { it.id }.toSet()
         pending.filterNot { it.id in hidden }.map { capture ->
-            CaptureRows.build(capture, edited[capture.id], renames, knownAccountIds, parseWhy(capture.traceJson))
+            CaptureRows.build(capture, edited[capture.id], renames, knownAccountIds)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -157,12 +153,5 @@ class ReviewInboxViewModel @Inject constructor(
 
     private fun edit(captureId: Long, change: (CaptureRowEdit) -> CaptureRowEdit) {
         edits.update { it + (captureId to change(it[captureId] ?: CaptureRowEdit())) }
-    }
-
-    private fun parseWhy(json: String?): String? {
-        if (json.isNullOrBlank()) return null
-        val trace = runCatching { gson.fromJson<Map<String, String?>>(json, traceType) }.getOrNull() ?: return null
-        val rule = trace["rule"] ?: return null
-        return "$rule · ${trace["why"].orEmpty()}"
     }
 }
