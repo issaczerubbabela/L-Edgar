@@ -52,4 +52,13 @@ class AxisParserTest {
     fun doesNotClaimUnrelatedText() {
         assertEquals(false, parser.canParse("HDFC Bank", "Rs.100 debited from HDFC Bank A/c XX1234"))
     }
+
+    // Synthetic: no real Axis alert addressed to a VPA has been captured yet.
+    @Test
+    fun parsesAVpaDebitWithTheHandleAsMerchant() {
+        val parsed = parser.parse("INR 250.00 debited from Axis Bank A/c XX1234 to UPI ID swiggy.stores@axb on 12-11-26.")!!
+
+        assertEquals(Direction.DEBIT, parsed.direction)
+        assertEquals("swiggy.stores@axb", parsed.merchantRaw)
+    }
 }

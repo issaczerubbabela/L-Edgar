@@ -11,10 +11,12 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 ### Fixed
 
 - Auto-capture: a bank alert saying "debited ... NAME credited" is filed as an Expense, not Income
+- Auto-capture: a payment to a UPI ID shows who you paid instead of Payment
 
 ### Developer
 
 - ParsingUtils.directionOf picks whichever debit/credit word comes first, shared by Generic/HDFC/Axis parsers
+- ParsingUtils.vpaOf reads the "to VPA/UPI ID handle@psp" payee for Generic/HDFC/Axis debits, tested on synthetic alerts
 
 ## [1.6.0] - 2026-10-13
 

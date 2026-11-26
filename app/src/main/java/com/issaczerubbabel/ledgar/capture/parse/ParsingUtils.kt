@@ -39,6 +39,19 @@ internal object ParsingUtils {
         }
     }
 
+    /**
+     * "to VPA swiggy.stores@axb", "to UPI ID 9876543210@ybl", "to zomato@okhdfcbank". The handle
+     * must contain "@", so the bank's own "SMS BLOCK ... to <number>" footer never matches, and a
+     * domain after it (".com", ".net") marks an email address rather than a VPA.
+     */
+    private val VPA = Regex(
+        """\bto\s+(?:(?:vpa|upi\s*id)\s*[:\-]?\s*)?([A-Za-z0-9][A-Za-z0-9._\-]*@[A-Za-z][A-Za-z0-9]*)\b(?!\.[A-Za-z])""",
+        RegexOption.IGNORE_CASE
+    )
+
+    /** The VPA a payment was sent to, as written in the alert, or null if it names none. */
+    fun vpaOf(text: String): String? = VPA.find(text)?.groupValues?.get(1)
+
     /** Matches "A/C *1234", "A/c 1234", "a/c no. XXXXXXXX1234", "Card XX9876", etc. */
     val ACCOUNT = Regex(
         """(?:a\/?c(?:\s*no\.?)?|acct|card)\s*(?:no\.?)?\s*[x*]*(\d{3,4})\b""",

@@ -78,4 +78,16 @@ class HdfcParserTest {
         assertEquals(false, parser.canParse("City Union Bank", "Rs.100 debited"))
         assertEquals(false, parser.canParse("HDFC Bank", "No amount mentioned here"))
     }
+
+    // Synthetic: no real HDFC alert addressed to a VPA has been captured yet.
+    @Test
+    fun parsesAVpaDebitWithTheHandleAsMerchant() {
+        val text = "Rs.250.00 debited from HDFC Bank A/c XX1234 to VPA swiggy.stores@axb on 12-11-26. " +
+            "Not you? Call 18002586161/SMS BLOCK UPI to 7308080808"
+
+        val parsed = parser.parse(text)!!
+
+        assertEquals(Direction.DEBIT, parsed.direction)
+        assertEquals("swiggy.stores@axb", parsed.merchantRaw)
+    }
 }

@@ -19,10 +19,12 @@ val changelogReleases: List<ChangelogRelease> = listOf(
         version = "v1.7.0",
         date = "2026-11-26",
         fixed = listOf(
-            "Auto-capture: a bank alert saying \"debited ... NAME credited\" is filed as an Expense, not Income"
+            "Auto-capture: a bank alert saying \"debited ... NAME credited\" is filed as an Expense, not Income",
+            "Auto-capture: a payment to a UPI ID shows who you paid instead of Payment"
         ),
         developer = listOf(
-            "ParsingUtils.directionOf picks whichever debit/credit word comes first, shared by Generic/HDFC/Axis parsers"
+            "ParsingUtils.directionOf picks whichever debit/credit word comes first, shared by Generic/HDFC/Axis parsers",
+            "ParsingUtils.vpaOf reads the \"to VPA/UPI ID handle@psp\" payee for Generic/HDFC/Axis debits, tested on synthetic alerts"
         )
     ),
     ChangelogRelease(

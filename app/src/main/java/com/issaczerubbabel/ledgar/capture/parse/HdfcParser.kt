@@ -3,8 +3,8 @@ package com.issaczerubbabel.ledgar.capture.parse
 /**
  * HDFC Bank SMS/notification alerts. Built and golden-tested against three real (redacted)
  * formats: a UPI P2P send, a UPI ATM withdrawal, and a deposit narration. A VPA-addressed debit
- * (e.g. "to VPA swiggy@icici") isn't covered by those samples yet, so [merchantRaw] can come back
- * null for that shape until a real sample is available to test against.
+ * (e.g. "to VPA swiggy@icici") takes the handle as [merchantRaw] via [ParsingUtils.vpaOf]; that
+ * shape is only covered by a synthetic sample so far.
  */
 class HdfcParser : TransactionParser {
 
@@ -35,7 +35,7 @@ class HdfcParser : TransactionParser {
         val merchantRaw = if (direction == Direction.CREDIT) {
             CREDIT_NARRATION.find(normalized)?.groupValues?.get(1)
         } else {
-            P2P_RECIPIENT.find(normalized)?.groupValues?.get(1)
+            ParsingUtils.vpaOf(normalized) ?: P2P_RECIPIENT.find(normalized)?.groupValues?.get(1)
         }
 
         return ParsedTxn(

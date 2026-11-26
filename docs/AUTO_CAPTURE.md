@@ -106,6 +106,7 @@ Formats covered by tests built from real (redacted) alerts:
 | Axis | UPI merchant debit, recognised by its `UPI/P2M/<ref>/<merchant>` narration because it never says "Axis"; IMPS credit |
 | Google Pay | `Paid Rs.500 to NAME.` and `Received ... from NAME.` Built from a description of the notifications, **not** a capture from a real phone |
 | Paytm | Same patterns as Google Pay on trust. No sample exists yet |
+| VPA debit (Generic, HDFC, Axis) | `Rs.250.00 debited from A/c XX1234 to VPA swiggy.stores@axb on 12-11-26 ...`, also `to UPI ID handle@psp` and a bare `to handle@psp`. `ParsingUtils.vpaOf` takes the handle as the merchant, and `MerchantNormalizer` strips the `@psp` (a phone-number handle becomes `P2P:<number>`). The handle must contain `@`, so the bank's `SMS BLOCK ... to <number>` footer is never the payee, and an email address (`care@bank.net`) is skipped. Built from a synthetic sample, **not** a real alert. CUB is left alone |
 | Generic | Any text with an amount and a debit or credit word, e.g. ICICI's UPI debit alert (`ICICI Bank Acct XX123 debited for Rs 240.00 on 28-Sep-26; ZOMATO credited. UPI:... Call ... SMS BLOCK 123 to ...`), where the debit word comes before "credited" for the payee |
 
 Direction for `GenericBankParser`, `HdfcParser` and `AxisParser` is decided by `ParsingUtils.directionOf`: whichever debit or credit word occurs first in the text wins, so an alert naming both (debited for your account, credited for the payee, or the reverse order) resolves correctly either way. `CubParser` keeps its own "Your a/c" rule instead, since CUB's narration always says which account the alert is about regardless of word order.
@@ -115,8 +116,9 @@ come later); the dates `26/09/26`, `25-SEP-26`, `14-09-2026` and `19-12-24` are 
 
 **Adding a bank.** Add a `TransactionParser` with `canParse` (cheap) and `parse`, list it in
 `ParserRegistry.default()` before the generic parser, and add a test file using the real alert text. Keep
-the alerts in tests, since they are the only record of what a bank actually sends. Expect gaps: a
-VPA-addressed debit ("to VPA merchant@bank") has no sample yet, so its merchant comes back empty.
+the alerts in tests, since they are the only record of what a bank actually sends. Expect gaps: the
+VPA-addressed debit above is tested only on a synthetic sample, so swap in a real (redacted) alert when one
+turns up under Alerts we couldn't read.
 
 ## 5. Keeping one capture per alert
 

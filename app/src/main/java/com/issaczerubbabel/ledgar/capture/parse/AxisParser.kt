@@ -22,7 +22,8 @@ class AxisParser : TransactionParser {
         return ParsedTxn(
             amount = amount,
             direction = direction,
-            merchantRaw = narration?.groupValues?.get(2)?.trim(),
+            merchantRaw = narration?.groupValues?.get(2)?.trim()
+                ?: ParsingUtils.vpaOf(normalized).takeIf { direction == Direction.DEBIT },
             accountHint = ParsingUtils.ACCOUNT.find(normalized)?.groupValues?.get(1),
             refNumber = narration?.groupValues?.get(1)
                 ?: ParsingUtils.REF.find(normalized)?.groupValues?.get(1),
