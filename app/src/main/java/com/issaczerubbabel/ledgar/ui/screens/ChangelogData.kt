@@ -16,12 +16,17 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
-        version = "v1.7.0",
-        date = "2026-11-26",
+        version = "v1.6.1",
+        date = "2026-11-16",
+        added = listOf(
+            "Web version (web folder): view and edit transactions, Stats, Budget and Accounts from a PC or iPad browser"
+        ),
         fixed = listOf(
             "Auto-capture: a bank alert saying \"debited ... NAME credited\" is filed as an Expense, not Income"
         ),
         developer = listOf(
+            "web/: Vite + React client on the Apps Script contract, with ported account, bucket and Stats maths, tests and a mock script",
+            "Web workflow tests and builds web/ on each change and publishes it to GitHub Pages from main",
             "ParsingUtils.directionOf picks whichever debit/credit word comes first, shared by Generic/HDFC/Axis parsers"
         )
     ),
