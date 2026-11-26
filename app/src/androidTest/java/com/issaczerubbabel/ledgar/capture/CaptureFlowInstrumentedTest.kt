@@ -66,9 +66,10 @@ class CaptureFlowInstrumentedTest {
             db.merchantRuleDao().get(it)
         }
         ingestor = CaptureIngestor(
-            db.captureDao(), db.accountAliasDao(), DropdownOptionRepositoryImpl(db.dropdownOptionDao()), pipeline, settings, db.unparsedAlertDao()
+            db.captureDao(), db.accountAliasDao(), DropdownOptionRepositoryImpl(db.dropdownOptionDao()), pipeline, settings, db.unparsedAlertDao(),
+            RoomCaptureHistorySource(db.expenseDao(), db.accountAliasDao())
         )
-        repository = CaptureRepositoryImpl(db, db.captureDao(), db.merchantRuleDao(), db.accountAliasDao(), db.expenseDao(), db.unparsedAlertDao())
+        repository = CaptureRepositoryImpl(db, db.captureDao(), db.merchantRuleDao(), db.accountAliasDao(), db.expenseDao(), db.unparsedAlertDao(), ingestor)
     }
 
     @After
@@ -240,20 +241,23 @@ class CaptureFlowInstrumentedTest {
         assertNull(db.captureDao().getById(id)!!.suggestedCategory)
 
         settings.mapping = mapOf("fuel" to "Fuel")
-        ingestor.recategorizePending()
+        ingestor.reguessPending()
 
         assertEquals("Fuel", db.captureDao().getById(id)!!.suggestedCategory)
     }
 
     @Test
-    fun recategorizingNeverChangesACategoryAlreadySuggested() = runBlocking {
+    fun reguessingFollowsTheMappingButNeverTakesASuggestionAway() = runBlocking {
         val id = (ingestor.ingest(CaptureSource.NOTIFICATION, "AXISBK", axisFuel("435476373861")) as IngestResult.Captured).id
         assertEquals("Fuel", db.captureDao().getById(id)!!.suggestedCategory)
 
         settings.mapping = mapOf("fuel" to "Groceries")
-        ingestor.recategorizePending()
+        ingestor.reguessPending()
+        assertEquals("Groceries", db.captureDao().getById(id)!!.suggestedCategory)
 
-        assertEquals("Fuel", db.captureDao().getById(id)!!.suggestedCategory)
+        settings.mapping = emptyMap()
+        ingestor.reguessPending()
+        assertEquals("Groceries", db.captureDao().getById(id)!!.suggestedCategory)
     }
 
     @Test

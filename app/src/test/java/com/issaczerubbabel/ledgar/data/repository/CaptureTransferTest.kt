@@ -58,7 +58,7 @@ class CaptureTransferTest {
             .setTransactionExecutor { it.run() }
             .build()
         repo = CaptureRepositoryImpl(
-            db, db.captureDao(), db.merchantRuleDao(), db.accountAliasDao(), db.expenseDao(), db.unparsedAlertDao()
+            db, db.captureDao(), db.merchantRuleDao(), db.accountAliasDao(), db.expenseDao(), db.unparsedAlertDao(), {}
         )
         hdfc = db.accountDao().insert(AccountRecord(groupName = "Bank", accountName = "HDFC Savings", initialBalance = 0.0))
         cub = db.accountDao().insert(AccountRecord(groupName = "Bank", accountName = "CUB Savings", initialBalance = 0.0))

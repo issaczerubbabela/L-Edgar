@@ -273,6 +273,22 @@ interface ExpenseDao {
     suspend fun recentForSuggestions(type: String, since: String, limit: Int = 500): List<DescriptionUse>
 
     /**
+     * Every Expense, Income and Transfer, newest first, with the merchant and time of the capture it was
+     * confirmed from (null for a hand-typed one), for auto-capture's on-phone guessers.
+     */
+    @Query("""
+        SELECT e.id AS id, e.type AS type, e.category AS category, e.description AS description,
+               e.amount AS amount, e.date AS date, c.merchantNorm AS merchantNorm, c.txnTime AS txnTime
+        FROM expense_records e
+        LEFT JOIN captured_transactions c ON c.confirmedExpenseId = e.id AND c.status = 'CONFIRMED'
+        WHERE e.type IN ('Expense', 'Income', 'Transfer') AND e.syncAction != 'DELETE'
+        GROUP BY e.id
+        ORDER BY e.date DESC, e.id DESC
+        LIMIT :limit
+    """)
+    suspend fun predictionHistory(limit: Int = 5000): List<PredictionHistoryRow>
+
+    /**
      * Fetch all records between two dates (inclusive).
      * Used for month aggregation and weekly breakdowns.
      */
@@ -318,3 +334,16 @@ interface ExpenseDao {
     )
     fun getTransactionsForAccountInMonth(accountId: Long, startDate: String, endDate: String): Flow<List<ExpenseRecord>>
 }
+
+/** One row of [ExpenseDao.predictionHistory]. */
+data class PredictionHistoryRow(
+    val id: Long,
+    val type: String,
+    val category: String,
+    val description: String,
+    val amount: Double,
+    /** yyyy-MM-dd */
+    val date: String,
+    val merchantNorm: String?,
+    val txnTime: Long?
+)

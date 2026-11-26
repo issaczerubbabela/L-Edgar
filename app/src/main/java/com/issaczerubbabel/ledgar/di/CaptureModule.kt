@@ -1,7 +1,11 @@
 package com.issaczerubbabel.ledgar.di
 
 import android.content.Context
+import com.issaczerubbabel.ledgar.capture.CaptureHistorySource
+import com.issaczerubbabel.ledgar.capture.CaptureIngestor
+import com.issaczerubbabel.ledgar.capture.CaptureReguesser
 import com.issaczerubbabel.ledgar.capture.CaptureSettingsSource
+import com.issaczerubbabel.ledgar.capture.RoomCaptureHistorySource
 import com.issaczerubbabel.ledgar.capture.categorize.CategorizationPipeline
 import com.issaczerubbabel.ledgar.capture.categorize.KeywordDictionary
 import com.issaczerubbabel.ledgar.data.local.dao.MerchantRuleDao
@@ -27,6 +31,12 @@ abstract class CaptureBindingsModule {
     @Binds
     @Singleton
     abstract fun bindCaptureSettings(impl: CapturePreferencesRepository): CaptureSettingsSource
+
+    @Binds
+    abstract fun bindCaptureHistory(impl: RoomCaptureHistorySource): CaptureHistorySource
+
+    @Binds
+    abstract fun bindCaptureReguesser(impl: CaptureIngestor): CaptureReguesser
 }
 
 @Module

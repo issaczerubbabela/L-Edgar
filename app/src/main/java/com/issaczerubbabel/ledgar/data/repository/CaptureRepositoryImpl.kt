@@ -1,6 +1,8 @@
 package com.issaczerubbabel.ledgar.data.repository
 
 import androidx.room.withTransaction
+import com.issaczerubbabel.ledgar.capture.CaptureReguesser
+import com.issaczerubbabel.ledgar.capture.CaptureTrace
 import com.issaczerubbabel.ledgar.capture.categorize.MerchantRuleLearner
 import com.issaczerubbabel.ledgar.capture.categorize.RuleChange
 import com.issaczerubbabel.ledgar.capture.notify.displayTitle
@@ -18,6 +20,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRuleKey
 import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
 import com.issaczerubbabel.ledgar.util.TransactionType
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.time.Instant
@@ -30,7 +33,8 @@ class CaptureRepositoryImpl @Inject constructor(
     private val merchantRuleDao: MerchantRuleDao,
     private val aliasDao: AccountAliasDao,
     private val expenseDao: ExpenseDao,
-    private val unparsedDao: UnparsedAlertDao
+    private val unparsedDao: UnparsedAlertDao,
+    private val reguesser: CaptureReguesser
 ) : CaptureRepository {
 
     override fun observePending(): Flow<List<CapturedTransaction>> = captureDao.observePending()
@@ -45,9 +49,28 @@ class CaptureRepositoryImpl @Inject constructor(
         }
 
     override suspend fun titleFor(capture: CapturedTransaction): String =
-        capture.displayTitle(capture.merchantNorm?.let { merchantRuleDao.get(it, capture.direction)?.description })
+        capture.displayTitle(
+            CaptureTrace.parse(capture.traceJson)
+                .titleBeforeBankText(capture.merchantNorm?.let { merchantRuleDao.get(it, capture.direction)?.description })
+        )
 
-    override suspend fun confirm(captureId: Long, edits: CaptureEdits): Long? = database.withTransaction {
+    override suspend fun confirm(captureId: Long, edits: CaptureEdits): Long? {
+        val expenseId = confirmInTransaction(captureId, edits)
+        // What this Confirm taught (a rule, an alias, one more past Transaction) can sharpen the
+        // guesses on captures still waiting. Only the stored guesses change; a user's picks stay.
+        if (expenseId != null) {
+            try {
+                reguesser.reguessPending()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // The Confirm is saved; stale guesses are only a missed improvement.
+            }
+        }
+        return expenseId
+    }
+
+    private suspend fun confirmInTransaction(captureId: Long, edits: CaptureEdits): Long? = database.withTransaction {
         val capture = captureDao.getById(captureId) ?: return@withTransaction null
         if (capture.status != "PENDING" && capture.status != "POSSIBLE_DUPLICATE") return@withTransaction null
 
@@ -102,8 +125,10 @@ class CaptureRepositoryImpl @Inject constructor(
         }
 
         capture.merchantNorm?.let { merchant ->
+            val existing = merchantRuleDao.get(merchant, capture.direction)
+            val typed = edits.description.trim()
             val change = MerchantRuleLearner.onConfirmed(
-                existing = merchantRuleDao.get(merchant, capture.direction),
+                existing = existing,
                 merchantNorm = merchant,
                 direction = capture.direction,
                 type = edits.type,
@@ -111,7 +136,14 @@ class CaptureRepositoryImpl @Inject constructor(
                 alwaysUse = edits.alwaysUse,
                 now = System.currentTimeMillis(),
                 // Renaming is remembered; confirming with the bank's own text forgets an earlier rename.
-                description = edits.description.trim().takeIf { it.isNotEmpty() && it != capture.displayTitle() },
+                // A Suggested description is a guess for this payment, not a new name for the merchant,
+                // so keeping one (or picking one of its chips) leaves the rule's rename as it was.
+                description = when {
+                    typed.isEmpty() || typed == capture.displayTitle() -> null
+                    CaptureTrace.parse(capture.traceJson).descriptionGuesses.any { it.equals(typed, ignoreCase = true) } ->
+                        existing?.description
+                    else -> typed
+                },
                 toAccountId = otherAccountId
             )
             when (change) {

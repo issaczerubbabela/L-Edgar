@@ -72,8 +72,32 @@ interface CaptureDao {
     )
     suspend fun assignAccountToPending(hint: String, accountId: Long)
 
-    @Query("SELECT * FROM captured_transactions WHERE status IN ('PENDING', 'POSSIBLE_DUPLICATE') AND suggestedCategory IS NULL AND suggestedToAccountId IS NULL")
-    suspend fun getPendingWithoutCategory(): List<CapturedTransaction>
+    /**
+     * Writes a re-guess onto a capture that is still waiting. Only the guess columns change, and a
+     * capture confirmed or dismissed meanwhile is left alone, so a re-guess can never undo a Confirm.
+     */
+    @Query(
+        """
+        UPDATE captured_transactions
+        SET suggestedType = :suggestedType, suggestedCategory = :suggestedCategory,
+            suggestedToAccountId = :suggestedToAccountId, confidence = :confidence,
+            decidedBy = :decidedBy, traceJson = :traceJson
+        WHERE id = :id AND status IN ('PENDING', 'POSSIBLE_DUPLICATE')
+        """
+    )
+    suspend fun updateGuesses(
+        id: Long,
+        suggestedType: String?,
+        suggestedCategory: String?,
+        suggestedToAccountId: Long?,
+        confidence: Double,
+        decidedBy: String?,
+        traceJson: String?
+    )
+
+    /** Every waiting capture, for re-guessing. */
+    @Query("SELECT * FROM captured_transactions WHERE status IN ('PENDING', 'POSSIBLE_DUPLICATE')")
+    suspend fun getPendingSnapshot(): List<CapturedTransaction>
 
     /** R3-Q1: turning auto-capture off clears queued work but never touches learned data. */
     @Query("DELETE FROM captured_transactions WHERE status = 'PENDING'")

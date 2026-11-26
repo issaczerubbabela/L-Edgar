@@ -36,14 +36,15 @@ interface CaptureRepository {
     /** Merchants the user renamed, by normalized merchant name and direction. */
     fun observeRenames(): Flow<Map<MerchantRuleKey, String>>
 
-    /** The capture's title: its merchant's rename, else the bank's text, else "Payment" or "Money received". */
+    /** The capture's title: its merchant's rename, else its Suggested description, else the bank's text, else "Payment" or "Money received". */
     suspend fun titleFor(capture: CapturedTransaction): String
 
     /**
      * Turns a pending capture into a real Transaction and returns its id, or null if the capture
      * is gone or already resolved. The Transaction, the capture's new status and what the app
      * learns from it are saved together or not at all. A description other than the bank's text
-     * is remembered on the merchant's rule; the bank's text clears it.
+     * is remembered on the merchant's rule; the bank's text clears it, and a Suggested description
+     * leaves it as it was. Afterwards the captures still waiting are guessed again.
      *
      * A Transfer also resolves its other half in the same Room transaction when exactly one waiting
      * capture matches (see [findTransferPair]): that capture becomes PAIRED with the same Transaction id.

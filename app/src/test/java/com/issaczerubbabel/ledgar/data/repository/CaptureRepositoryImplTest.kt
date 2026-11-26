@@ -33,6 +33,7 @@ class CaptureRepositoryImplTest {
     private lateinit var repo: CaptureRepositoryImpl
     private var accountId = 0L
     private var hash = 0
+    private var reguessed = 0
 
     @Before
     fun setUp() = runBlocking {
@@ -40,7 +41,7 @@ class CaptureRepositoryImplTest {
             .allowMainThreadQueries()
             .build()
         repo = CaptureRepositoryImpl(
-            db, db.captureDao(), db.merchantRuleDao(), db.accountAliasDao(), db.expenseDao(), db.unparsedAlertDao()
+            db, db.captureDao(), db.merchantRuleDao(), db.accountAliasDao(), db.expenseDao(), db.unparsedAlertDao(), { reguessed++ }
         )
         accountId = db.accountDao().insert(AccountRecord(groupName = "Bank", accountName = "HDFC Savings", initialBalance = 0.0))
     }

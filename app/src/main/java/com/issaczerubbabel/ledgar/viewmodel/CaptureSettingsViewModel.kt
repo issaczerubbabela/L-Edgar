@@ -52,7 +52,7 @@ class CaptureSettingsViewModel @Inject constructor(
     fun mapCategory(canonical: String, category: String?) {
         viewModelScope.launch {
             preferences.mapCategory(canonical, category)
-            ingestor.recategorizePending()
+            ingestor.reguessPending()
         }
     }
 }

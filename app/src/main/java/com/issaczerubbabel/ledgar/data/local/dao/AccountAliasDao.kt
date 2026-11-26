@@ -17,4 +17,11 @@ interface AccountAliasDao {
 
     @Query("SELECT * FROM account_aliases")
     suspend fun getAllSnapshot(): List<AccountAlias>
+
+    /** The Accounts that aliases seen on [sender]'s alerts point to, for guessing an unknown number's Account. */
+    @Query(
+        "SELECT DISTINCT a.accountId FROM account_aliases a " +
+            "INNER JOIN captured_transactions c ON c.accountHint = a.alias WHERE c.sender = :sender"
+    )
+    suspend fun accountIdsAliasedForSender(sender: String): List<Long>
 }
