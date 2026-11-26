@@ -63,7 +63,7 @@ class CaptureFlowInstrumentedTest {
         )
 
         val pipeline = CategorizationPipeline(KeywordDictionary(mapOf("fuel" to listOf("fuels")))) {
-            db.merchantRuleDao().getByMerchant(it)
+            db.merchantRuleDao().get(it)
         }
         ingestor = CaptureIngestor(
             db.captureDao(), db.accountAliasDao(), DropdownOptionRepositoryImpl(db.dropdownOptionDao()), pipeline, settings, db.unparsedAlertDao()
@@ -127,7 +127,7 @@ class CaptureFlowInstrumentedTest {
     fun aHighConfidenceCaptureWithAKnownAccountShouldNotify() = runBlocking {
         db.accountAliasDao().upsert(AccountAlias("1236", accountId))
         db.merchantRuleDao().upsert(
-            MerchantRule("SHRI UJAGAR FUELS", "Fuel", "Expense", origin = MerchantRuleOrigin.USER, updatedAt = 0)
+            MerchantRule("SHRI UJAGAR FUELS", "DEBIT", "Fuel", "Expense", origin = MerchantRuleOrigin.USER, updatedAt = 0)
         )
 
         val result = ingestor.ingest(CaptureSource.NOTIFICATION, "AXISBK", axisFuel("435476373861")) as IngestResult.Captured
@@ -140,7 +140,7 @@ class CaptureFlowInstrumentedTest {
     @Test
     fun aHighConfidenceCaptureWithAnUnknownAccountStaysQuiet() = runBlocking {
         db.merchantRuleDao().upsert(
-            MerchantRule("SHRI UJAGAR FUELS", "Fuel", "Expense", origin = MerchantRuleOrigin.USER, updatedAt = 0)
+            MerchantRule("SHRI UJAGAR FUELS", "DEBIT", "Fuel", "Expense", origin = MerchantRuleOrigin.USER, updatedAt = 0)
         )
 
         val result = ingestor.ingest(CaptureSource.NOTIFICATION, "AXISBK", axisFuel("435476373861")) as IngestResult.Captured
@@ -195,7 +195,7 @@ class CaptureFlowInstrumentedTest {
             val id = (ingestor.ingest(CaptureSource.NOTIFICATION, "AXISBK", axisFuel(ref)) as IngestResult.Captured).id
             repository.confirm(id, CaptureEdits("Expense", "Fuel", accountId, "Ujagar Fuels"))
         }
-        assertEquals(MerchantRuleOrigin.LEARNED, db.merchantRuleDao().getByMerchant("SHRI UJAGAR FUELS")!!.origin)
+        assertEquals(MerchantRuleOrigin.LEARNED, db.merchantRuleDao().get("SHRI UJAGAR FUELS", "DEBIT")!!.origin)
 
         val next = ingestor.ingest(CaptureSource.NOTIFICATION, "AXISBK", axisFuel("435476373864")) as IngestResult.Captured
 
@@ -207,7 +207,7 @@ class CaptureFlowInstrumentedTest {
     fun turningCaptureOffClearsQueuedWorkButKeepsWhatWasLearned() = runBlocking {
         db.accountAliasDao().upsert(AccountAlias("1236", accountId))
         db.merchantRuleDao().upsert(
-            MerchantRule("SHRI UJAGAR FUELS", "Fuel", "Expense", origin = MerchantRuleOrigin.USER, updatedAt = 0)
+            MerchantRule("SHRI UJAGAR FUELS", "DEBIT", "Fuel", "Expense", origin = MerchantRuleOrigin.USER, updatedAt = 0)
         )
         ingestor.ingest(CaptureSource.NOTIFICATION, "AXISBK", axisFuel("435476373861"))
         ingestor.ingest(CaptureSource.NOTIFICATION, "HDFC Bank", hdfcP2p)
@@ -215,7 +215,7 @@ class CaptureFlowInstrumentedTest {
         repository.clearPending()
 
         assertTrue(pending().isEmpty())
-        assertNotNull(db.merchantRuleDao().getByMerchant("SHRI UJAGAR FUELS"))
+        assertNotNull(db.merchantRuleDao().get("SHRI UJAGAR FUELS", "DEBIT"))
         assertNotNull(db.accountAliasDao().getByAlias("1236"))
     }
 
@@ -261,7 +261,7 @@ class CaptureFlowInstrumentedTest {
         val first = (ingestor.ingest(CaptureSource.NOTIFICATION, "AXISBK", axisFuel("435476373861")) as IngestResult.Captured).id
         repository.confirm(first, CaptureEdits("Expense", "Fuel", accountId, "Ujagar Fuels", alwaysUse = true))
 
-        val rule = db.merchantRuleDao().getByMerchant("SHRI UJAGAR FUELS")!!
+        val rule = db.merchantRuleDao().get("SHRI UJAGAR FUELS", "DEBIT")!!
         assertEquals(MerchantRuleOrigin.USER, rule.origin)
         assertEquals("Fuel", rule.category)
 
@@ -278,7 +278,7 @@ class CaptureFlowInstrumentedTest {
 
         repository.confirm(second, CaptureEdits("Expense", "Groceries", accountId, "x"))
 
-        assertEquals("Fuel", db.merchantRuleDao().getByMerchant("SHRI UJAGAR FUELS")!!.category)
+        assertEquals("Fuel", db.merchantRuleDao().get("SHRI UJAGAR FUELS", "DEBIT")!!.category)
     }
 
     @Test

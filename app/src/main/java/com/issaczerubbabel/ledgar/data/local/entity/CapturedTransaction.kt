@@ -46,12 +46,22 @@ data class CapturedTransaction(
     val accountHint: String? = null,
     val accountId: Long? = null,
     val refNumber: String? = null,
-    val suggestedType: String? = null, // Expense | Income
+    val suggestedType: String? = null, // Expense | Income | Transfer
+    /** Null for a suggested Transfer, which suggests [suggestedToAccountId] instead. */
     val suggestedCategory: String? = null,
     val confidence: Double = 0.0,
     val decidedBy: String? = null,
     val traceJson: String? = null,
-    val status: String = "PENDING", // PENDING | CONFIRMED | DISMISSED | DUPLICATE | POSSIBLE_DUPLICATE | TRIP
+    /**
+     * PENDING | CONFIRMED | DISMISSED | DUPLICATE | POSSIBLE_DUPLICATE | TRIP | PAIRED. PAIRED is the
+     * other half of a confirmed Transfer (ADR-0006): it shares that Transfer's [confirmedExpenseId].
+     */
+    val status: String = "PENDING",
     val confirmedExpenseId: Long? = null,
-    val finalCategory: String? = null
+    val finalCategory: String? = null,
+    /**
+     * A suggested Transfer's other Account, from a Merchant rule: the To-account of a debit, the
+     * From-account of a credit. Not a foreign key, so it can point at a deleted Account; check it.
+     */
+    val suggestedToAccountId: Long? = null
 )

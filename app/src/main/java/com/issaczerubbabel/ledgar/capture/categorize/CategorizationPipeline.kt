@@ -3,6 +3,7 @@ package com.issaczerubbabel.ledgar.capture.categorize
 import com.issaczerubbabel.ledgar.capture.parse.Direction
 import com.issaczerubbabel.ledgar.capture.parse.ParsedTxn
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRule
+import com.issaczerubbabel.ledgar.data.local.entity.MerchantRuleKey
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRuleOrigin
 import com.issaczerubbabel.ledgar.util.TransactionType
 
@@ -22,7 +23,7 @@ enum class ConfidenceBand {
 /**
  * [category] is always one of the user's own Categories or null. [unmappedCanonical] is set when
  * the keyword dictionary recognised the merchant but that key has no mapping yet, so Settings can
- * offer to map it.
+ * offer to map it. A Transfer has no Category: [transferAccountId] is its other Account instead.
  */
 data class Categorization(
     val merchantNorm: String,
@@ -31,9 +32,10 @@ data class Categorization(
     val confidence: Double,
     val decidedBy: String,
     val why: String,
-    val unmappedCanonical: String? = null
+    val unmappedCanonical: String? = null,
+    val transferAccountId: Long? = null
 ) {
-    val band: ConfidenceBand get() = ConfidenceBand.of(confidence, category != null)
+    val band: ConfidenceBand get() = ConfidenceBand.of(confidence, category != null || transferAccountId != null)
 }
 
 /**
@@ -42,7 +44,7 @@ data class Categorization(
  */
 class CategorizationPipeline(
     private val keywords: KeywordDictionary,
-    private val lookupRule: suspend (merchantNorm: String) -> MerchantRule?
+    private val lookupRule: suspend (MerchantRuleKey) -> MerchantRule?
 ) {
 
     suspend fun categorize(
@@ -54,9 +56,18 @@ class CategorizationPipeline(
         val type = if (parsed.direction == Direction.CREDIT) TransactionType.INCOME else TransactionType.EXPENSE
 
         if (merchantNorm.isNotBlank()) {
-            val rule = lookupRule(merchantNorm)
-            if (rule != null && rule.origin != MerchantRuleOrigin.CANDIDATE && rule.type == type) {
-                return Categorization(merchantNorm, type, rule.category, 0.98, "R1", "Saved rule for this merchant")
+            val direction = if (parsed.direction == Direction.CREDIT) "CREDIT" else "DEBIT"
+            val rule = lookupRule(MerchantRuleKey(merchantNorm, direction))
+            if (rule != null && rule.origin != MerchantRuleOrigin.CANDIDATE) {
+                if (rule.type != TransactionType.TRANSFER) {
+                    return Categorization(merchantNorm, rule.type, rule.category, 0.98, "R1", "Saved rule for this merchant")
+                }
+                if (rule.toAccountId != null) {
+                    return Categorization(
+                        merchantNorm, TransactionType.TRANSFER, null, 0.98, "R1", "Saved Transfer rule for this merchant",
+                        transferAccountId = rule.toAccountId
+                    )
+                }
             }
         }
 

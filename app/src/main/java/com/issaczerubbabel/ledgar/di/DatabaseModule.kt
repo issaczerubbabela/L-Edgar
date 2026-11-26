@@ -185,6 +185,13 @@ object DatabaseModule {
         }
     }
 
+    /** Merchant rules are keyed by merchant and direction and can mean a Transfer. */
+    internal val MIGRATION_26_27 = object : Migration(26, 27) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            CaptureMigration.upgradeTo27(db)
+        }
+    }
+
     private fun columnsOf(db: SupportSQLiteDatabase, table: String): Set<String> =
         db.query("PRAGMA table_info($table)").use { cursor ->
             val nameColumn = cursor.getColumnIndexOrThrow("name")
@@ -333,6 +340,7 @@ object DatabaseModule {
             .addMigrations(MIGRATION_23_24)
             .addMigrations(MIGRATION_24_25)
             .addMigrations(MIGRATION_25_26)
+            .addMigrations(MIGRATION_26_27)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .addCallback(callback)
             .build()

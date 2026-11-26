@@ -47,6 +47,17 @@ interface CaptureDao {
     )
     suspend fun markConfirmed(id: Long, expenseId: Long, finalCategory: String?)
 
+    /** The other half of a confirmed Transfer (ADR-0006): resolved by the same Transaction. */
+    @Query("UPDATE captured_transactions SET status = 'PAIRED', confirmedExpenseId = :expenseId, finalCategory = 'Transfer' WHERE id = :id")
+    suspend fun markPaired(id: Long, expenseId: Long)
+
+    /** Captures still waiting in one direction within a time window: a Transfer's possible other halves. */
+    @Query(
+        "SELECT * FROM captured_transactions WHERE status IN ('PENDING', 'POSSIBLE_DUPLICATE') " +
+            "AND direction = :direction AND txnTime BETWEEN :from AND :to"
+    )
+    suspend fun getWaiting(direction: String, from: Long, to: Long): List<CapturedTransaction>
+
     /** The user turned this capture into a Trip expense instead of a Transaction (ADR-0008). */
     @Query("UPDATE captured_transactions SET status = 'TRIP' WHERE id = :id")
     suspend fun markAddedToTrip(id: Long)
@@ -61,7 +72,7 @@ interface CaptureDao {
     )
     suspend fun assignAccountToPending(hint: String, accountId: Long)
 
-    @Query("SELECT * FROM captured_transactions WHERE status IN ('PENDING', 'POSSIBLE_DUPLICATE') AND suggestedCategory IS NULL")
+    @Query("SELECT * FROM captured_transactions WHERE status IN ('PENDING', 'POSSIBLE_DUPLICATE') AND suggestedCategory IS NULL AND suggestedToAccountId IS NULL")
     suspend fun getPendingWithoutCategory(): List<CapturedTransaction>
 
     /** R3-Q1: turning auto-capture off clears queued work but never touches learned data. */

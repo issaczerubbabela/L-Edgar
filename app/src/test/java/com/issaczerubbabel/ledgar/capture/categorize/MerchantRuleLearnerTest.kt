@@ -9,7 +9,7 @@ import org.junit.Test
 class MerchantRuleLearnerTest {
 
     private fun confirm(existing: MerchantRule?, category: String = "Food", alwaysUse: Boolean = false) =
-        MerchantRuleLearner.onConfirmed(existing, "SWIGGY", "Expense", category, alwaysUse, now = 1)
+        MerchantRuleLearner.onConfirmed(existing, "SWIGGY", "DEBIT", "Expense", category, alwaysUse, now = 1)
 
     private fun applied(change: RuleChange, previous: MerchantRule?): MerchantRule? = when (change) {
         is RuleChange.Upsert -> change.rule
@@ -47,7 +47,7 @@ class MerchantRuleLearnerTest {
 
     @Test
     fun twoOverridesInARowDeleteALearnedRule() {
-        val learned = MerchantRule("SWIGGY", "Food", "Expense", origin = MerchantRuleOrigin.LEARNED, hitCount = 5, updatedAt = 0)
+        val learned = MerchantRule("SWIGGY", "DEBIT", "Food", "Expense", origin = MerchantRuleOrigin.LEARNED, hitCount = 5, updatedAt = 0)
 
         val first = confirm(learned, category = "Groceries")
         assertTrue(first is RuleChange.Upsert)
@@ -55,12 +55,12 @@ class MerchantRuleLearnerTest {
         assertEquals(1, afterFirst.streak)
         assertEquals("Food", afterFirst.category)
 
-        assertEquals(RuleChange.Delete("SWIGGY"), confirm(afterFirst, category = "Groceries"))
+        assertEquals(RuleChange.Delete("SWIGGY", "DEBIT"), confirm(afterFirst, category = "Groceries"))
     }
 
     @Test
     fun agreeingResetsTheOverrideCount() {
-        val overridden = MerchantRule("SWIGGY", "Food", "Expense", origin = MerchantRuleOrigin.LEARNED, streak = 1, updatedAt = 0)
+        val overridden = MerchantRule("SWIGGY", "DEBIT", "Food", "Expense", origin = MerchantRuleOrigin.LEARNED, streak = 1, updatedAt = 0)
 
         val change = confirm(overridden, category = "Food") as RuleChange.Upsert
 
@@ -69,7 +69,7 @@ class MerchantRuleLearnerTest {
 
     @Test
     fun aUserRuleIsNeverChangedAutomatically() {
-        val user = MerchantRule("SWIGGY", "Food", "Expense", origin = MerchantRuleOrigin.USER, updatedAt = 0)
+        val user = MerchantRule("SWIGGY", "DEBIT", "Food", "Expense", origin = MerchantRuleOrigin.USER, updatedAt = 0)
 
         assertEquals(RuleChange.None, confirm(user, category = "Groceries"))
         assertEquals(RuleChange.None, confirm(user, category = "Groceries"))
@@ -87,7 +87,66 @@ class MerchantRuleLearnerTest {
     fun blankMerchantsAreNeverLearned() {
         assertEquals(
             RuleChange.None,
-            MerchantRuleLearner.onConfirmed(null, "", "Expense", "Food", alwaysUse = true, now = 1)
+            MerchantRuleLearner.onConfirmed(null, "", "DEBIT", "Expense", "Food", alwaysUse = true, now = 1)
         )
+    }
+
+    private fun transfer(existing: MerchantRule?, toAccountId: Long = CUB) =
+        MerchantRuleLearner.onConfirmed(existing, "CRED", "DEBIT", "Transfer", "", alwaysUse = false, now = 1, toAccountId = toAccountId)
+
+    @Test
+    fun threeTransfersToTheSameAccountEarnALearnedTransferRule() {
+        var rule: MerchantRule? = null
+        repeat(3) { rule = applied(transfer(rule), rule) }
+
+        assertEquals(MerchantRuleOrigin.LEARNED, rule?.origin)
+        assertEquals("Transfer", rule?.type)
+        assertEquals("Transfer", rule?.category)
+        assertEquals(CUB, rule?.toAccountId)
+        assertEquals("DEBIT", rule?.direction)
+    }
+
+    @Test
+    fun aTransferToAnotherAccountRestartsTheRun() {
+        var rule: MerchantRule? = null
+        repeat(2) { rule = applied(transfer(rule), rule) }
+
+        rule = applied(transfer(rule, toAccountId = AXIS), rule)
+
+        assertEquals(MerchantRuleOrigin.CANDIDATE, rule?.origin)
+        assertEquals(AXIS, rule?.toAccountId)
+        assertEquals(1, rule?.streak)
+    }
+
+    @Test
+    fun confirmingALearnedExpenseMerchantAsATransferIsAnOverride() {
+        val learned = MerchantRule("CRED", "DEBIT", "Bills", "Expense", origin = MerchantRuleOrigin.LEARNED, hitCount = 5, updatedAt = 0)
+
+        val afterFirst = (transfer(learned) as RuleChange.Upsert).rule
+        assertEquals(1, afterFirst.streak)
+        assertEquals("Expense", afterFirst.type)
+
+        assertEquals(RuleChange.Delete("CRED", "DEBIT"), transfer(afterFirst))
+    }
+
+    @Test
+    fun aUserRuleIsNeverTurnedIntoATransfer() {
+        val user = MerchantRule("CRED", "DEBIT", "Bills", "Expense", origin = MerchantRuleOrigin.USER, updatedAt = 0)
+
+        assertEquals(RuleChange.None, transfer(user))
+    }
+
+    @Test
+    fun alwaysUseCanSaveATransferRule() {
+        val change = MerchantRuleLearner.onConfirmed(null, "CRED", "DEBIT", "Transfer", "", alwaysUse = true, now = 1, toAccountId = CUB)
+
+        val rule = (change as RuleChange.Upsert).rule
+        assertEquals(MerchantRuleOrigin.USER, rule.origin)
+        assertEquals(CUB, rule.toAccountId)
+    }
+
+    private companion object {
+        const val CUB = 2L
+        const val AXIS = 3L
     }
 }

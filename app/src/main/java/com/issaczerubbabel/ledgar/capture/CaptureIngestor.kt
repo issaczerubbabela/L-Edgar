@@ -85,6 +85,7 @@ class CaptureIngestor @Inject constructor(
             refNumber = parsed.refNumber,
             suggestedType = result.type,
             suggestedCategory = result.category,
+            suggestedToAccountId = result.transferAccountId,
             confidence = result.confidence,
             decidedBy = result.decidedBy,
             traceJson = gson.toJson(
@@ -94,7 +95,9 @@ class CaptureIngestor @Inject constructor(
 
         val id = captureDao.insert(row)
         if (id == -1L) return IngestResult.Duplicate
-        return IngestResult.Captured(id, result.band, shouldNotify = result.band == ConfidenceBand.HIGH && accountId != null)
+        // The notification's Confirm doesn't cover Transfers yet (#143).
+        val shouldNotify = result.band == ConfidenceBand.HIGH && accountId != null && result.type != TransactionType.TRANSFER
+        return IngestResult.Captured(id, result.band, shouldNotify)
     }
 
     /**

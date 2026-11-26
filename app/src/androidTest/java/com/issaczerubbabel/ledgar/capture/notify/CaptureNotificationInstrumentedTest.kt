@@ -61,11 +61,11 @@ class CaptureNotificationInstrumentedTest {
         accountId = db.accountDao().insert(AccountRecord(groupName = "Accounts", accountName = "Axis Savings", initialBalance = 0.0))
         db.dropdownOptionDao().insertAll(listOf(DropdownOption(optionType = "EXPENSE_CATEGORY", name = "Fuel", displayOrder = 0)))
         db.merchantRuleDao().upsert(
-            MerchantRule("SHRI UJAGAR FUELS", "Fuel", "Expense", origin = MerchantRuleOrigin.USER, updatedAt = 0)
+            MerchantRule("SHRI UJAGAR FUELS", "DEBIT", "Fuel", "Expense", origin = MerchantRuleOrigin.USER, updatedAt = 0)
         )
         ingestor = CaptureIngestor(
             db.captureDao(), db.accountAliasDao(), DropdownOptionRepositoryImpl(db.dropdownOptionDao()),
-            CategorizationPipeline(KeywordDictionary(emptyMap())) { db.merchantRuleDao().getByMerchant(it) }, settings, db.unparsedAlertDao()
+            CategorizationPipeline(KeywordDictionary(emptyMap())) { db.merchantRuleDao().get(it) }, settings, db.unparsedAlertDao()
         )
         val repository = CaptureRepositoryImpl(db, db.captureDao(), db.merchantRuleDao(), db.accountAliasDao(), db.expenseDao(), db.unparsedAlertDao())
         handler = CaptureActionHandler(db.captureDao(), repository, ReminderPreferences(context))

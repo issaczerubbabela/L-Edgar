@@ -7,15 +7,21 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.issaczerubbabel.ledgar.capture.CaptureConfirmation
+import com.issaczerubbabel.ledgar.capture.CaptureConfirmer
+import com.issaczerubbabel.ledgar.capture.CaptureDraftHandoff
+import com.issaczerubbabel.ledgar.capture.notify.displayTitle
 import com.issaczerubbabel.ledgar.data.bucket.BucketPreview
 import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewCalculator
 import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewContext
 import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewSource
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
+import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.RecurringRule
 import com.issaczerubbabel.ledgar.data.preferences.ReminderPreferences
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
+import com.issaczerubbabel.ledgar.data.repository.CaptureRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
 import com.issaczerubbabel.ledgar.data.repository.RecurringRepository
@@ -62,7 +68,10 @@ class LogViewModel @Inject constructor(
     private val reminderPreferences: ReminderPreferences,
     bucketPreviewSource: BucketPreviewSource,
     private val savedStateHandle: SavedStateHandle,
-    private val undoableActions: UndoableActions
+    private val undoableActions: UndoableActions,
+    private val captureRepository: CaptureRepository,
+    private val captureConfirmer: CaptureConfirmer,
+    private val captureDraftHandoff: CaptureDraftHandoff
 ) : ViewModel() {
 
     val accounts: StateFlow<List<AccountRecord>> = accountRepository
@@ -141,13 +150,28 @@ class LogViewModel @Inject constructor(
 
     private var editingRecordId: Long? = null
 
+    /**
+     * Opened with Edit on a To review card: Save is that capture's Confirm, with the same learning,
+     * Transfer pairing and Undo, and Back leaves it waiting.
+     */
+    val captureId: Long? = savedStateHandle.get<Long>("captureId")?.takeIf { it > 0L }
+    val isCaptureMode: Boolean get() = captureId != null
+    private var capture by mutableStateOf<CapturedTransaction?>(null)
+
+    /** The "Always use this for <merchant>" box, offered only for a capture with a merchant. */
+    var alwaysUse by mutableStateOf(false)
+
+    /** The merchant's name for the "Always use this" box, or null when it can't be offered. */
+    val alwaysUseMerchant: String?
+        get() = capture?.takeIf { !it.merchantNorm.isNullOrBlank() }?.displayTitle()
+
     /** The record being edited, as first loaded: its amount is already in its bucket's spend. */
     private var editingOriginal by mutableStateOf<ExpenseRecord?>(null)
     private var hasStartedSyncObserver = false
     val isEditMode: Boolean get() = editingRecordId != null
 
-    /** Editing, or one of the Repeat modes: the screen closes after Save instead of starting another. */
-    val closesAfterSave: Boolean get() = isEditMode || repeatEditMode != RepeatEditMode.None
+    /** Editing, a capture, or one of the Repeat modes: the screen closes after Save instead of starting another. */
+    val closesAfterSave: Boolean get() = isEditMode || isCaptureMode || repeatEditMode != RepeatEditMode.None
 
     init {
         val navId = savedStateHandle.get<Long>("transactionId")
@@ -155,7 +179,9 @@ class LogViewModel @Inject constructor(
         val copyTransactionId = savedStateHandle.get<Long>("copyTransactionId")?.takeIf { it > 0L }
         val copyDateMode = savedStateHandle.get<String>("copyDateMode") ?: "original"
 
-        if (repeatEditMode != RepeatEditMode.None) {
+        if (captureId != null) {
+            viewModelScope.launch { loadCapture(captureId) }
+        } else if (repeatEditMode != RepeatEditMode.None) {
             viewModelScope.launch { loadRepeatRule(savedStateHandle.get<Long>("repeatRuleId") ?: return@launch) }
         } else if (editingRecordId != null) {
             viewModelScope.launch {
@@ -230,6 +256,29 @@ class LogViewModel @Inject constructor(
         }
     }
 
+    /** Fills the form from the capture, with the choices its card already had. */
+    private suspend fun loadCapture(id: Long) {
+        val found = captureRepository.getById(id)
+        if (found == null || found.status !in CaptureForm.WAITING) {
+            errorMessage = "This capture was already confirmed or dismissed"
+            return
+        }
+        capture = found
+        val form = CaptureForm.prefill(found, captureDraftHandoff.take(id), captureRepository.titleFor(found))
+        if (!savedStateHandle.contains(KEY_SELECTED_DATE)) selectedDate = form.date
+        selectedType = form.type
+        selectedCategory = form.category
+        selectedAccountId = form.accountId
+        selectedFromAccountId = form.fromAccountId
+        selectedToAccountId = form.toAccountId
+        categoryChosenByUser = form.category.isNotBlank()
+        accountChosenByUser = form.accountId != null
+        description = form.description
+        amount = if (form.amount % 1.0 == 0.0) form.amount.toLong().toString() else form.amount.toString()
+        remarks = ""
+        alwaysUse = form.alwaysUse
+    }
+
     /** Fills the form from the rule's template, dated on its due occurrence (or its next date, for the rule). */
     private suspend fun loadRepeatRule(ruleId: Long) {
         val rule = recurringRepository.getById(ruleId)
@@ -271,6 +320,11 @@ class LogViewModel @Inject constructor(
         } else {
             if (selectedCategory.isBlank()) { errorMessage = "Select a category"; return }
             if (selectedAccountId == null) { errorMessage = "Select an account"; return }
+        }
+
+        if (isCaptureMode) {
+            capture?.let { confirmCapture(it, parsedAmount) }
+            return
         }
 
         viewModelScope.launch {
@@ -376,6 +430,29 @@ class LogViewModel @Inject constructor(
         }
     }
 
+    /** Save from a capture is its Confirm, offering Undo on To review once this screen closes. */
+    private fun confirmCapture(capture: CapturedTransaction, parsedAmount: Double) {
+        val edits = CaptureForm.toEdits(
+            capture = capture,
+            type = selectedType,
+            category = selectedCategory,
+            accountId = selectedAccountId,
+            fromAccountId = selectedFromAccountId,
+            toAccountId = selectedToAccountId,
+            // Left empty, the Description is the bank's own text, as on the card.
+            description = description.trim().ifEmpty { capture.displayTitle() },
+            remarks = remarks,
+            amount = parsedAmount,
+            date = selectedDate,
+            alwaysUse = alwaysUse && alwaysUseMerchant != null
+        ) ?: run { errorMessage = "Select an account"; return }
+        val accountNames = accounts.value.associate { it.id to it.accountName }
+        viewModelScope.launch {
+            captureConfirmer.confirm(listOf(CaptureConfirmation(capture, edits, edits.description)), accountNames)
+            saveSuccess = true
+        }
+    }
+
     fun setRepeat(frequency: String?, interval: Int) {
         repeatFrequency = frequency
         repeatInterval = interval
@@ -430,8 +507,15 @@ class LogViewModel @Inject constructor(
         categoryChosenByUser = true
     }
 
-    /** Switching type clears the Category and Accounts, and with them the user's choices. */
+    /**
+     * Switching type clears the Category and Accounts, and with them the user's choices. A
+     * capture keeps its own Account, on the side the bank's direction puts it.
+     */
     fun selectType(type: String) {
+        val captured = capture
+        val captureSide = captured?.let {
+            CaptureForm.captureSideAccountId(it, selectedType, selectedAccountId, selectedFromAccountId, selectedToAccountId)
+        }
         selectedType = type
         selectedCategory = if (type == TransactionType.TRANSFER) TransactionType.TRANSFER else ""
         selectedAccountId = null
@@ -439,6 +523,12 @@ class LogViewModel @Inject constructor(
         selectedToAccountId = null
         categoryChosenByUser = false
         accountChosenByUser = false
+        if (captured != null && captureSide != null) {
+            val placed = CaptureForm.place(captured, type, captureSide, otherAccountId = null)
+            selectedAccountId = placed.accountId
+            selectedFromAccountId = placed.fromAccountId
+            selectedToAccountId = placed.toAccountId
+        }
     }
 
     // Bumped after each save, so the Description just used is offered next time.

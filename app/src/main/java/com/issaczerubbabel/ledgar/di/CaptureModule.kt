@@ -45,5 +45,5 @@ object CaptureProvidersModule {
     fun provideCategorizationPipeline(
         keywords: KeywordDictionary,
         ruleDao: MerchantRuleDao
-    ): CategorizationPipeline = CategorizationPipeline(keywords) { ruleDao.getByMerchant(it) }
+    ): CategorizationPipeline = CategorizationPipeline(keywords) { ruleDao.get(it) }
 }

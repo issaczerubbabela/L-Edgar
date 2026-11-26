@@ -4,6 +4,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -33,6 +35,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SuggestionChip
@@ -82,6 +87,7 @@ import com.issaczerubbabel.ledgar.ui.theme.IncomeBlue
 import com.issaczerubbabel.ledgar.util.DescriptionSuggestion
 import com.issaczerubbabel.ledgar.util.DescriptionSuggestions
 import com.issaczerubbabel.ledgar.util.DescriptionUse
+import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.util.formatRupeesExact
 import com.issaczerubbabel.ledgar.viewmodel.CaptureRowUi
 import com.issaczerubbabel.ledgar.viewmodel.ReviewInboxViewModel
@@ -93,7 +99,16 @@ import java.time.format.DateTimeFormatter
 private sealed interface Picker {
     data class ForCategory(val row: CaptureRowUi) : Picker
     data class ForAccount(val row: CaptureRowUi) : Picker
+
+    /** A Transfer's other side: the To-account of a debit, the From-account of a credit. */
+    data class ForOtherAccount(val row: CaptureRowUi) : Picker
 }
+
+private val CAPTURE_TYPES = listOf(TransactionType.EXPENSE, TransactionType.INCOME, TransactionType.TRANSFER)
+
+/** "To CUB Savings" for a debit Transfer, "From HDFC Savings" for a credit one. */
+private fun otherSideLabel(row: CaptureRowUi, name: String?): String =
+    (if (row.isDebit) "To " else "From ") + (name ?: "account")
 
 private val timeFormat = DateTimeFormatter.ofPattern("d MMM, h:mm a")
 private val dateFormat = DateTimeFormatter.ofPattern("d MMM")
@@ -113,6 +128,8 @@ fun CaptureInboxScreen(
     innerPadding: PaddingValues,
     onBack: () -> Unit,
     onAddToTrip: (tripId: Long, captureId: Long) -> Unit = { _, _ -> },
+    /** Edit: the Add Transaction form, filled in from the capture. Saving there is Confirm. */
+    onEdit: (captureId: Long) -> Unit = {},
     vm: ReviewInboxViewModel = hiltViewModel(),
     activeTripVm: com.issaczerubbabel.ledgar.viewmodel.ActiveTripViewModel = hiltViewModel()
 ) {
@@ -219,17 +236,24 @@ fun CaptureInboxScreen(
                     SwipeableCaptureCard(
                         row = row,
                         accountName = row.accountId?.let { accountNames[it] },
+                        otherAccountName = row.otherAccountId?.let { accountNames[it] },
                         descriptionUses = descriptionUses[row.type].orEmpty(),
                         validCategories = categories.toSet(),
                         validAccountIds = accountNames.keys,
                         onPickCategory = { picker = Picker.ForCategory(row) },
                         onPickAccount = { picker = Picker.ForAccount(row) },
+                        onPickOtherAccount = { picker = Picker.ForOtherAccount(row) },
+                        onTypeChange = { vm.setType(row.capture.id, it) },
+                        onEdit = {
+                            vm.prepareEdit(row)
+                            onEdit(row.capture.id)
+                        },
                         onAlwaysUseChange = { vm.setAlwaysUse(row.capture.id, it) },
                         onDescriptionChange = { vm.setDescription(row.capture.id, it) },
                         onConfirm = { vm.confirm(row) },
                         onDismiss = { vm.dismiss(row) },
                         // ADR-0008: a shared trip payment becomes a Trip expense, never a full personal Transaction.
-                        onAddToTrip = activeTrip?.takeIf { !row.isIncome }?.let { trip -> { onAddToTrip(trip.tripId, row.capture.id) } },
+                        onAddToTrip = activeTrip?.takeIf { row.type == TransactionType.EXPENSE }?.let { trip -> { onAddToTrip(trip.tripId, row.capture.id) } },
                         modifier = Modifier.animateItem()
                     )
                 }
@@ -253,6 +277,14 @@ fun CaptureInboxScreen(
             onDismiss = { picker = null },
             manageHint = p.row.capture.accountHint?.let { "We'll remember XX$it for next time." }
         )
+        is Picker.ForOtherAccount -> OptionPickerSheet(
+            title = if (p.row.isDebit) "Transfer to" else "Transfer from",
+            // The capture's own Account is the other side already.
+            options = accounts.filter { it.id != p.row.accountId }.map { PickerOption(it.id.toString(), it.accountName) },
+            selectedKey = p.row.otherAccountId?.toString(),
+            onSelect = { vm.setOtherAccount(p.row.capture.id, it.toLong()); picker = null },
+            onDismiss = { picker = null }
+        )
         null -> Unit
     }
 
@@ -275,11 +307,15 @@ fun CaptureInboxScreen(
 private fun SwipeableCaptureCard(
     row: CaptureRowUi,
     accountName: String?,
+    otherAccountName: String?,
     descriptionUses: List<DescriptionUse>,
     validCategories: Set<String>,
     validAccountIds: Set<Long>,
     onPickCategory: () -> Unit,
     onPickAccount: () -> Unit,
+    onPickOtherAccount: () -> Unit,
+    onTypeChange: (String) -> Unit,
+    onEdit: () -> Unit,
     onAlwaysUseChange: (Boolean) -> Unit,
     onDescriptionChange: (String) -> Unit,
     onConfirm: () -> Unit,
@@ -316,7 +352,8 @@ private fun SwipeableCaptureCard(
             customActions = listOf(
                 CustomAccessibilityAction("Confirm") { confirmOrShowMissing(); true },
                 CustomAccessibilityAction("Dismiss") { onDismiss(); true },
-                CustomAccessibilityAction("Edit description") { editingTitle = true; true }
+                CustomAccessibilityAction("Edit description") { editingTitle = true; true },
+                CustomAccessibilityAction("Edit in full") { onEdit(); true }
             )
         },
         gesturesEnabled = !editingTitle,
@@ -339,6 +376,7 @@ private fun SwipeableCaptureCard(
         CaptureCard(
             row = row,
             accountName = accountName,
+            otherAccountName = otherAccountName,
             descriptionUses = descriptionUses,
             validCategories = validCategories,
             validAccountIds = validAccountIds,
@@ -347,6 +385,9 @@ private fun SwipeableCaptureCard(
             onEditingTitleChange = { editingTitle = it },
             onPickCategory = onPickCategory,
             onPickAccount = onPickAccount,
+            onPickOtherAccount = onPickOtherAccount,
+            onTypeChange = onTypeChange,
+            onEdit = onEdit,
             onAlwaysUseChange = onAlwaysUseChange,
             onDescriptionChange = onDescriptionChange,
             onConfirm = confirmOrShowMissing,
@@ -392,10 +433,12 @@ private fun SwipeBackground(direction: SwipeToDismissBoxValue, canConfirm: Boole
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CaptureCard(
     row: CaptureRowUi,
     accountName: String?,
+    otherAccountName: String?,
     descriptionUses: List<DescriptionUse>,
     validCategories: Set<String>,
     validAccountIds: Set<Long>,
@@ -404,6 +447,9 @@ private fun CaptureCard(
     onEditingTitleChange: (Boolean) -> Unit,
     onPickCategory: () -> Unit,
     onPickAccount: () -> Unit,
+    onPickOtherAccount: () -> Unit,
+    onTypeChange: (String) -> Unit,
+    onEdit: () -> Unit,
     onAlwaysUseChange: (Boolean) -> Unit,
     onDescriptionChange: (String) -> Unit,
     onConfirm: () -> Unit,
@@ -412,7 +458,11 @@ private fun CaptureCard(
 ) {
     var showOriginal by remember { mutableStateOf(false) }
     val capture = row.capture
-    val amountColor = if (row.isIncome) IncomeBlue else ExpenseOrange
+    val amountColor = when {
+        row.isTransfer -> MaterialTheme.colorScheme.onSurface
+        row.isIncome -> IncomeBlue
+        else -> ExpenseOrange
+    }
     val missingBorder = BorderStroke(2.dp, MaterialTheme.colorScheme.error)
 
     Card(
@@ -445,7 +495,7 @@ private fun CaptureCard(
                     )
                 }
                 Text(
-                    (if (row.isIncome) "+" else "−") + formatRupeesExact(capture.amount),
+                    (if (row.isDebit) "−" else "+") + formatRupeesExact(capture.amount),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = amountColor,
@@ -462,12 +512,31 @@ private fun CaptureCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            // The bank's direction stays: a Transfer only decides where the money went or came from.
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                CAPTURE_TYPES.forEachIndexed { index, type ->
+                    SegmentedButton(
+                        shape = SegmentedButtonDefaults.itemShape(index, CAPTURE_TYPES.size),
+                        selected = row.type == type,
+                        onClick = { if (row.type != type) onTypeChange(type) },
+                        label = { Text(type, maxLines = 1) }
+                    )
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AssistChip(
-                    onClick = onPickCategory,
-                    label = { Text(row.category ?: "Pick category", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    border = if (highlightMissing && row.category.isNullOrBlank()) missingBorder else AssistChipDefaults.assistChipBorder(true)
-                )
+                if (row.isTransfer) {
+                    AssistChip(
+                        onClick = onPickOtherAccount,
+                        label = { Text(otherSideLabel(row, otherAccountName), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        border = if (highlightMissing && row.otherAccountId == null) missingBorder else AssistChipDefaults.assistChipBorder(true)
+                    )
+                } else {
+                    AssistChip(
+                        onClick = onPickCategory,
+                        label = { Text(row.category ?: "Pick category", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        border = if (highlightMissing && row.category.isNullOrBlank()) missingBorder else AssistChipDefaults.assistChipBorder(true)
+                    )
+                }
                 AssistChip(
                     onClick = onPickAccount,
                     label = { Text(accountName ?: "Map account", maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -477,7 +546,8 @@ private fun CaptureCard(
             Text(
                 text = when {
                     row.categoryPickedByUser -> "Your pick"
-                    row.category == null -> "Needs a category"
+                    row.isTransfer && row.otherAccountId == null -> if (row.isDebit) "Needs the To account" else "Needs the From account"
+                    !row.isTransfer && row.category == null -> "Needs a category"
                     row.band == ConfidenceBand.HIGH -> "High confidence"
                     else -> "Check this guess"
                 } + (row.why?.takeUnless { row.categoryPickedByUser }?.let { " · $it" } ?: ""),
@@ -493,7 +563,7 @@ private fun CaptureCard(
                 ) {
                     Checkbox(checked = row.alwaysUse, onCheckedChange = onAlwaysUseChange)
                     Text(
-                        "Always use ${row.category} for ${row.title}",
+                        "Always use ${if (row.isTransfer) "Transfer " + otherSideLabel(row, otherAccountName).replaceFirstChar { it.lowercase() } else row.category} for ${row.title}",
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.weight(1f)
                     )
@@ -510,7 +580,13 @@ private fun CaptureCard(
                 TextButton(onClick = { showOriginal = !showOriginal }) {
                     Text(if (showOriginal) "Hide original" else "Original text")
                 }
-                Box(modifier = Modifier.weight(1f))
+                TextButton(onClick = onEdit) { Text("Edit…") }
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 TextButton(onClick = onDismiss) { Text("Dismiss") }
                 if (onAddToTrip != null) TextButton(onClick = onAddToTrip) { Text("Add to trip") }
                 Button(onClick = onConfirm, enabled = row.canConfirm) { Text("Confirm") }
@@ -603,7 +679,11 @@ private fun BulkConfirmDialog(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(row.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                "${row.category} · ${accountNames[row.accountId].orEmpty()}",
+                                if (row.isTransfer) {
+                                    "Transfer · ${otherSideLabel(row, accountNames[row.otherAccountId])}"
+                                } else {
+                                    "${row.category} · ${accountNames[row.accountId].orEmpty()}"
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,

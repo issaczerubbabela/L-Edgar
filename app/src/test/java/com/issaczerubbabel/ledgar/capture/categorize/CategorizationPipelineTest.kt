@@ -4,6 +4,7 @@ import com.issaczerubbabel.ledgar.capture.parse.Channel
 import com.issaczerubbabel.ledgar.capture.parse.Direction
 import com.issaczerubbabel.ledgar.capture.parse.ParsedTxn
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRule
+import com.issaczerubbabel.ledgar.data.local.entity.MerchantRuleKey
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRuleOrigin
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -30,7 +31,7 @@ class CategorizationPipelineTest {
     )
 
     private fun rule(origin: String, category: String = "Transportation", type: String = "Expense") = MerchantRule(
-        merchantNorm = "UBER", category = category, type = type, origin = origin, updatedAt = 0
+        merchantNorm = "UBER", direction = "DEBIT", category = category, type = type, origin = origin, updatedAt = 0
     )
 
     @Test
@@ -88,5 +89,28 @@ class CategorizationPipelineTest {
 
         assertEquals("Income", result.type)
         assertNull(result.category)
+    }
+
+    @Test
+    fun aLearnedTransferRuleSuggestsATransferToItsAccountAtHigh() = runBlocking {
+        val rule = rule(MerchantRuleOrigin.LEARNED, category = "Transfer", type = "Transfer").copy(toAccountId = 7)
+
+        val result = pipeline(rule).categorize(debit("Uber"), mapping, categories)
+
+        assertEquals("Transfer", result.type)
+        assertNull("a Transfer has no Category", result.category)
+        assertEquals(7L, result.transferAccountId)
+        assertEquals(ConfidenceBand.HIGH, result.band)
+    }
+
+    @Test
+    fun theRuleIsLookedUpByMerchantAndTheBanksDirection() = runBlocking {
+        val asked = mutableListOf<MerchantRuleKey>()
+        val pipeline = CategorizationPipeline(keywords) { asked += it; null }
+
+        pipeline.categorize(debit("Uber"), mapping, categories)
+        pipeline.categorize(debit("Uber").copy(direction = Direction.CREDIT), mapping, categories)
+
+        assertEquals(listOf(MerchantRuleKey("UBER", "DEBIT"), MerchantRuleKey("UBER", "CREDIT")), asked)
     }
 }

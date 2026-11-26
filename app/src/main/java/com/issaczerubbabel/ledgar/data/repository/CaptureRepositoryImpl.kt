@@ -4,6 +4,8 @@ import androidx.room.withTransaction
 import com.issaczerubbabel.ledgar.capture.categorize.MerchantRuleLearner
 import com.issaczerubbabel.ledgar.capture.categorize.RuleChange
 import com.issaczerubbabel.ledgar.capture.notify.displayTitle
+import com.issaczerubbabel.ledgar.capture.pair.TransferPairMatcher
+import com.issaczerubbabel.ledgar.capture.pair.TransferPairing
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.dao.AccountAliasDao
 import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
@@ -13,6 +15,7 @@ import com.issaczerubbabel.ledgar.data.local.dao.UnparsedAlertDao
 import com.issaczerubbabel.ledgar.data.local.entity.AccountAlias
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.data.local.entity.MerchantRuleKey
 import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
 import com.issaczerubbabel.ledgar.util.TransactionType
 import kotlinx.coroutines.flow.Flow
@@ -36,37 +39,59 @@ class CaptureRepositoryImpl @Inject constructor(
 
     override suspend fun getById(captureId: Long): CapturedTransaction? = captureDao.getById(captureId)
 
-    override fun observeRenames(): Flow<Map<String, String>> =
-        merchantRuleDao.observeRenames().map { renames -> renames.associate { it.merchantNorm to it.description } }
+    override fun observeRenames(): Flow<Map<MerchantRuleKey, String>> =
+        merchantRuleDao.observeRenames().map { renames ->
+            renames.associate { MerchantRuleKey(it.merchantNorm, it.direction) to it.description }
+        }
 
     override suspend fun titleFor(capture: CapturedTransaction): String =
-        capture.displayTitle(capture.merchantNorm?.let { merchantRuleDao.getByMerchant(it)?.description })
+        capture.displayTitle(capture.merchantNorm?.let { merchantRuleDao.get(it, capture.direction)?.description })
 
     override suspend fun confirm(captureId: Long, edits: CaptureEdits): Long? = database.withTransaction {
         val capture = captureDao.getById(captureId) ?: return@withTransaction null
         if (capture.status != "PENDING" && capture.status != "POSSIBLE_DUPLICATE") return@withTransaction null
 
-        val category = edits.category.trim()
-        require(category.isNotEmpty()) { "A category is needed to confirm a capture" }
+        val isTransfer = edits.type == TransactionType.TRANSFER
+        val otherAccountId = edits.otherAccountId.takeIf { isTransfer }
+        val category = if (isTransfer) TransactionType.TRANSFER else edits.category.trim()
+        if (isTransfer) {
+            require(otherAccountId != null && otherAccountId != edits.accountId) { "A Transfer needs a different other Account" }
+        } else {
+            require(category.isNotEmpty()) { "A category is needed to confirm a capture" }
+        }
+        val amount = edits.amount ?: capture.amount
+        require(amount > 0) { "A capture's amount must be positive" }
 
-        val date = Instant.ofEpochMilli(capture.txnTime).atZone(ZoneId.systemDefault()).toLocalDate().toString()
-        val isExpense = edits.type == TransactionType.EXPENSE
+        val date = edits.date ?: Instant.ofEpochMilli(capture.txnTime).atZone(ZoneId.systemDefault()).toLocalDate()
+        val isDebit = capture.direction != "CREDIT"
+        val (fromAccountId, toAccountId) = when (edits.type) {
+            // The bank's direction decides the side: a debit leaves the capture's Account.
+            TransactionType.TRANSFER -> if (isDebit) edits.accountId to otherAccountId else otherAccountId to edits.accountId
+            TransactionType.EXPENSE -> edits.accountId to null
+            else -> null to edits.accountId
+        }
         val expenseId = expenseDao.insert(
             ExpenseRecord(
-                date = date,
+                date = date.toString(),
                 type = edits.type,
                 category = category,
                 description = edits.description,
-                amount = capture.amount,
-                accountId = edits.accountId,
-                remarks = "",
-                fromAccountId = if (isExpense) edits.accountId else null,
-                toAccountId = if (isExpense) null else edits.accountId,
+                amount = amount,
+                accountId = if (isTransfer) null else edits.accountId,
+                remarks = edits.remarks,
+                fromAccountId = fromAccountId,
+                toAccountId = toAccountId,
                 isSynced = false,
                 syncAction = "INSERT"
             )
         )
         captureDao.markConfirmed(captureId, expenseId, category)
+
+        // ADR-0006: the other half of the Transfer is resolved with it, only when it's unambiguous.
+        if (otherAccountId != null) {
+            val pairing = pairingFor(capture, amount, otherAccountId)
+            if (pairing is TransferPairing.One) captureDao.markPaired(pairing.capture.id, expenseId)
+        }
 
         // Picking an account for an alert we couldn't place teaches the alias for next time.
         capture.accountHint?.let { hint ->
@@ -78,22 +103,43 @@ class CaptureRepositoryImpl @Inject constructor(
 
         capture.merchantNorm?.let { merchant ->
             val change = MerchantRuleLearner.onConfirmed(
-                existing = merchantRuleDao.getByMerchant(merchant),
+                existing = merchantRuleDao.get(merchant, capture.direction),
                 merchantNorm = merchant,
+                direction = capture.direction,
                 type = edits.type,
                 finalCategory = category,
                 alwaysUse = edits.alwaysUse,
                 now = System.currentTimeMillis(),
                 // Renaming is remembered; confirming with the bank's own text forgets an earlier rename.
-                description = edits.description.trim().takeIf { it.isNotEmpty() && it != capture.displayTitle() }
+                description = edits.description.trim().takeIf { it.isNotEmpty() && it != capture.displayTitle() },
+                toAccountId = otherAccountId
             )
             when (change) {
                 is RuleChange.Upsert -> merchantRuleDao.upsert(change.rule)
-                is RuleChange.Delete -> merchantRuleDao.delete(change.merchantNorm)
+                is RuleChange.Delete -> merchantRuleDao.delete(change.merchantNorm, change.direction)
                 RuleChange.None -> Unit
             }
         }
         expenseId
+    }
+
+    override suspend fun findTransferPair(captureId: Long, edits: CaptureEdits): TransferPairing {
+        if (edits.type != TransactionType.TRANSFER) return TransferPairing.None
+        val otherAccountId = edits.otherAccountId ?: return TransferPairing.None
+        val capture = captureDao.getById(captureId) ?: return TransferPairing.None
+        return pairingFor(capture, edits.amount ?: capture.amount, otherAccountId)
+    }
+
+    private suspend fun pairingFor(capture: CapturedTransaction, amount: Double, otherAccountId: Long): TransferPairing {
+        val waiting = captureDao.getWaiting(
+            direction = TransferPairMatcher.opposite(capture.direction),
+            from = capture.txnTime - TransferPairMatcher.WINDOW_MS,
+            to = capture.txnTime + TransferPairMatcher.WINDOW_MS
+        )
+        val aliases = waiting.mapNotNull { it.accountHint }.distinct()
+            .mapNotNull { hint -> aliasDao.getByAlias(hint)?.let { hint to it.accountId } }
+            .toMap()
+        return TransferPairMatcher.match(capture, amount, otherAccountId, waiting) { aliases[it] }
     }
 
     override suspend fun dismiss(captureId: Long) = captureDao.markDismissed(captureId)
