@@ -6,6 +6,16 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `app/src/main/java/com/issaczerubbabel/ledgar/ui/screens/ChangelogData.kt`,
 which is also what the app shows under More > Changelog. Developer notes appear here only.
 
+## [1.7.0] - 2026-11-26
+
+### Fixed
+
+- Auto-capture: a bank alert saying "debited ... NAME credited" is filed as an Expense, not Income
+
+### Developer
+
+- ParsingUtils.directionOf picks whichever debit/credit word comes first, shared by Generic/HDFC/Axis parsers
+
 ## [1.6.0] - 2026-10-13
 
 ### Added
@@ -27,13 +37,8 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Search: find Categories, Accounts and amounts, and narrow with Type, Date, Category, Account and Amount chips
 - Search: totals show Spent and Earned the way Stats counts them, and your search stays after rotating
 
-### Fixed
-
-- Auto-capture: a bank alert saying "debited ... NAME credited" is filed as an Expense, not Income
-
 ### Developer
 
-- ParsingUtils.directionOf picks whichever debit/credit word comes first, shared by Generic/HDFC/Axis parsers
 - CONTEXT.md defines Repeat rule and Repeating transaction, and Merchant rules remember a renamed description
 - Daily reminder: ReminderRules.message is pure and unit tested; MainActivity takes an open-Add-Transaction extra
 - Repeat rules: local-only recurring_rules table (Room 24 → 25), pure RepeatSchedule, repository and migration tests
@@ -299,6 +304,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - Room database, Vico charts and date-parsing tests
 
+[1.7.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.7.0
 [1.6.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.6.0
 [1.5.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.5.0
 [1.4.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.4.0
