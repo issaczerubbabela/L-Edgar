@@ -44,6 +44,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import com.issaczerubbabel.ledgar.ui.screens.BucketDetailScreen
 import com.issaczerubbabel.ledgar.ui.screens.BudgetHomeScreen
+import com.issaczerubbabel.ledgar.ui.screens.FundDetailScreen
+import com.issaczerubbabel.ledgar.ui.screens.FundsScreen
 import com.issaczerubbabel.ledgar.ui.screens.HistoryScreen
 import com.issaczerubbabel.ledgar.viewmodel.HistoryViewModel
 import com.issaczerubbabel.ledgar.ui.screens.TripExpenseScreen
@@ -109,6 +111,8 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object Trip : Screen("trip/{tripId}", "Trip", Icons.Filled.Settings)
     object TripExpense : Screen("trip_expense/{tripId}?expenseId={expenseId}&captureId={captureId}", "TripExpense", Icons.Filled.Settings)
     object TripReview : Screen("trip_review/{tripId}", "TripReview", Icons.Filled.Settings)
+    object Funds : Screen("funds", "Funds", Icons.Filled.Settings)
+    object FundDetail : Screen("fund/{fundId}", "FundDetail", Icons.Filled.Settings)
 }
 
 private fun tripExpenseRoute(tripId: Long, expenseId: Long = 0L, captureId: Long = 0L) =
@@ -121,7 +125,9 @@ private val MORE_SUB_ROUTES = setOf(
     Screen.Trips.route,
     Screen.Trip.route,
     Screen.TripExpense.route,
-    Screen.TripReview.route
+    Screen.TripReview.route,
+    Screen.Funds.route,
+    Screen.FundDetail.route
 )
 
 private const val LOG_BASE_ROUTE = "log"
@@ -870,6 +876,24 @@ fun AppNavigation(
                     innerPadding = innerPadding,
                     onBack = { navController.popBackStack() },
                     onPosted = { navController.popBackStack() }
+                )
+            }
+            composable(Screen.Funds.route) {
+                FundsScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
+                    onOpenFund = { fundId -> navController.navigate("fund/$fundId") { launchSingleTop = true } }
+                )
+            }
+            composable(
+                route = Screen.FundDetail.route,
+                arguments = listOf(navArgument("fundId") { type = NavType.LongType })
+            ) {
+                FundDetailScreen(
+                    innerPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
+                    onEditTransaction = editTransaction,
+                    onCopyTransaction = copyTransaction
                 )
             }
             composable(Screen.CaptureSettings.route) {

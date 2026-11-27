@@ -18,6 +18,12 @@ val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
         version = "v1.8.0",
         date = "2026-11-27",
+        added = listOf(
+            "Funds: label money for a purpose in More > Funds, holding a whole account or a fixed amount of one",
+            "Funds: each Fund shows its holdings, this cycle's planned and transferred amounts, and its history",
+            "Funds: after a Transfer out of a Fund's account, Keep earmarked labels the money where it landed",
+            "Accounts: an Account's page shows Free next to its balance once you have a Fund"
+        ),
         fixed = listOf(
             "Accounts: renaming one updates its transactions in the Sheet, and Re-send to Sheet repairs older renames",
             "Budget: an expense dated after the Salary cycle ends no longer comes off this cycle's Left to spend"
