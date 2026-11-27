@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Luggage
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Savings
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /** A feature shown on the More tab. Add one entry here and More shows it; no other screen changes. */
@@ -43,6 +44,13 @@ object MoreFeatures {
             subtitle = "Rent, SIPs, salary",
             icon = Icons.Filled.Repeat,
             route = REPEATING_ROUTE
+        ),
+        MoreFeature(
+            id = "funds",
+            title = "Funds",
+            subtitle = "Emergency, RDs, giving",
+            icon = Icons.Filled.Savings,
+            route = Screen.Funds.route
         )
     )
 
