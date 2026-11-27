@@ -43,17 +43,26 @@ data class Categorization(
  * The categorizer, all on the phone: an exact merchant rule (R1, the only step that reaches High,
  * ADR-0010), then the [HistoryPredictor]'s history match (R2) and Naive Bayes, both at most Check,
  * then the keyword dictionary (R7, Expenses only), else "needs category" (R11).
+ *
+ * A rule only counts while its Category is still one of the user's own (ADR-0005). Rules outlive a
+ * Category deleted in the app or renamed in the Sheet, and such a stale rule would file captures
+ * under the old name at High, so the pipeline carries on as if there were no rule, keeping only
+ * the rule's rename, and says why.
  */
 class CategorizationPipeline(
     private val keywords: KeywordDictionary,
     private val lookupRule: suspend (MerchantRuleKey) -> MerchantRule?
 ) {
 
-    /** [at] is when the payment happened, which the Naive Bayes step reads as time of day and weekday. */
+    /**
+     * [categoriesByType] holds the user's own Categories per type (Expense, Income): R1 and R7 only
+     * ever return one of them, in the user's spelling. [at] is when the payment happened, which the
+     * Naive Bayes step reads as time of day and weekday.
+     */
     suspend fun categorize(
         parsed: ParsedTxn,
         categoryMapping: Map<String, String>,
-        expenseCategories: List<String>,
+        categoriesByType: Map<String, Collection<String>>,
         predictor: HistoryPredictor = HistoryPredictor.EMPTY,
         at: LocalDateTime = LocalDateTime.now()
     ): Categorization {
@@ -61,14 +70,18 @@ class CategorizationPipeline(
         val type = if (parsed.direction == Direction.CREDIT) TransactionType.INCOME else TransactionType.EXPENSE
 
         var rename: String? = null
+        var staleRule: String? = null
         if (merchantNorm.isNotBlank()) {
             val direction = if (parsed.direction == Direction.CREDIT) "CREDIT" else "DEBIT"
             val rule = lookupRule(MerchantRuleKey(merchantNorm, direction))
             if (rule != null && rule.origin != MerchantRuleOrigin.CANDIDATE) {
                 if (rule.type != TransactionType.TRANSFER) {
-                    return Categorization(merchantNorm, rule.type, rule.category, 0.98, "R1", "Saved rule for this merchant")
-                }
-                if (rule.toAccountId != null) {
+                    val category = categoriesByType[rule.type].orEmpty().firstOrNull { it.equals(rule.category.trim(), ignoreCase = true) }
+                    if (category != null) {
+                        return Categorization(merchantNorm, rule.type, category, 0.98, "R1", "Saved rule for this merchant")
+                    }
+                    staleRule = "Saved rule's Category ${rule.category} no longer exists"
+                } else if (rule.toAccountId != null) {
                     return Categorization(
                         merchantNorm, TransactionType.TRANSFER, null, 0.98, "R1", "Saved Transfer rule for this merchant",
                         transferAccountId = rule.toAccountId
@@ -78,22 +91,25 @@ class CategorizationPipeline(
             rename = rule?.description
         }
 
-        predictor.categorize(CaptureFacts(merchantNorm, type, parsed.amount, at), rename)?.let { return it }
+        /** A guess's own reason, after the note that the saved rule was passed over. */
+        fun why(reason: String) = staleRule?.let { "$it · $reason" } ?: reason
+
+        predictor.categorize(CaptureFacts(merchantNorm, type, parsed.amount, at), rename)?.let { return it.copy(why = why(it.why)) }
 
         if (type == TransactionType.INCOME) {
-            return Categorization(merchantNorm, type, null, 0.0, "R11", "No saved rule for this payer")
+            return Categorization(merchantNorm, type, null, 0.0, "R11", staleRule ?: "No saved rule for this payer")
         }
 
         val hit = keywords.match(merchantNorm, parsed.merchantRaw)
-            ?: return Categorization(merchantNorm, type, null, 0.0, "R11", "Nothing recognised")
+            ?: return Categorization(merchantNorm, type, null, 0.0, "R11", staleRule ?: "Nothing recognised")
 
-        val category = CategoryResolver.resolve(hit.canonical, categoryMapping, expenseCategories)
+        val category = CategoryResolver.resolve(hit.canonical, categoryMapping, categoriesByType[TransactionType.EXPENSE].orEmpty())
         return if (category != null) {
-            Categorization(merchantNorm, type, category, 0.75, "R7", "Keyword \"${hit.keyword}\"")
+            Categorization(merchantNorm, type, category, 0.75, "R7", why("Keyword \"${hit.keyword}\""))
         } else {
             Categorization(
                 merchantNorm, type, null, 0.0, "R11",
-                "Keyword \"${hit.keyword}\" matched, but ${hit.canonical} isn't mapped to a category yet",
+                why("Keyword \"${hit.keyword}\" matched, but ${hit.canonical} isn't mapped to a category yet"),
                 unmappedCanonical = hit.canonical
             )
         }

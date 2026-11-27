@@ -6,6 +6,16 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `app/src/main/java/com/issaczerubbabel/ledgar/ui/screens/ChangelogData.kt`,
 which is also what the app shows under More > Changelog. Developer notes appear here only.
 
+## [1.8.1] - 2026-11-28
+
+### Fixed
+
+- Auto-capture: a saved rule no longer files captures under a Category you've removed
+
+### Developer
+
+- CategorizationPipeline takes categoriesByType and passes over a stale rule; withGuesses drops a kept guess whose Category is gone (#158)
+
 ## [1.8.0] - 2026-11-27
 
 ### Added
@@ -371,6 +381,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - Room database, Vico charts and date-parsing tests
 
+[1.8.1]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.8.1
 [1.8.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.8.0
 [1.7.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.7.0
 [1.6.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.6.0

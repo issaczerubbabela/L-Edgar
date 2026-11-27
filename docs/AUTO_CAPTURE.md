@@ -208,7 +208,7 @@ punctuation and company words are dropped, and a phone-number handle becomes `P2
 
 | Rule | When | Confidence |
 | --- | --- | --- |
-| R1 | A saved Merchant rule exists for the merchant and the bank's direction: its type and Category, or Transfer and its other Account | 0.98 |
+| R1 | A saved Merchant rule exists for the merchant and the bank's direction: its type and Category, while the Category is still one of the user's, or Transfer and its other Account | 0.98 |
 | R2 | History match: the user's past picks for this merchant agree at least 60% of the time | that share, at most 0.89 |
 | NB | Naive Bayes: the on-phone guesser's top Category clears 0.6 | its probability, at most 0.89 |
 | R7 | A keyword matches and its kind is mapped to a Category the user still has | 0.75 |
@@ -234,7 +234,11 @@ Transfer comes from a rule alone, and past Transfers only feed the Suggested des
   match wins, so "instamart" beats "swiggy" for `SWIGGY INSTAMART`.
 - **The app never invents a Category.** Every step only suggests one of the user's own Categories. A kind
   with no mapping, or mapped to a Category since deleted, leaves the capture uncategorized and records which
-  kind to map.
+  kind to map. A rule naming a Category the user no longer has of its type (deleted in the app, or renamed in
+  the Sheet) is passed over: the steps after R1 run as if there were no rule, still using its rename, so the
+  capture is at most Check and the why line starts "Saved rule's Category Food & Snacks no longer exists". The
+  rule stays and is re-taught by Confirms as usual (two overrides replace a learned rule's outcome); a `USER`
+  rule changes only when "Always use" is ticked again.
 - **Credits** are Income and get a Category from a rule, R2 or Naive Bayes, never from a keyword.
 - **Bands.** High is 0.90 or more, Check is 0.60 to 0.89, Low is less or no Category. Only a rule reaches
   High ([ADR-0010](adr/0010-only-a-saved-rule-reaches-high.md)), so a history, Naive Bayes or keyword guess is
@@ -255,7 +259,7 @@ mapped in Settings, every waiting capture is guessed again (`CaptureIngestor.reg
 stored on the capture change: its suggested type and Category (or Transfer and other Account), the Suggested
 description and the Account guess. What the user picked or typed on a card, including switching it to a
 Transfer, lives in the inbox until Confirm, so it always wins, and a pass with no suggestion keeps the one
-already there. The guesses, why text and alternatives are kept in the capture's `traceJson`
+already there, unless its Category is no longer one of the user's. The guesses, why text and alternatives are kept in the capture's `traceJson`
 (`CaptureTrace`), so no table changed.
 
 **Merchant rules** (`MerchantRuleLearner`), keyed by merchant and **direction** (`DEBIT` or `CREDIT`, as the

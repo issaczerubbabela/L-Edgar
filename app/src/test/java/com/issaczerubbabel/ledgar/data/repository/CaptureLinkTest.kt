@@ -20,6 +20,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.AccountAlias
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRule
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRuleOrigin
 import com.issaczerubbabel.ledgar.data.preferences.ReminderPreferences
@@ -270,6 +271,8 @@ class CaptureLinkTest {
 
     private suspend fun highConfidenceSwiggy() {
         db.accountAliasDao().upsert(AccountAlias("1234", hdfc))
+        // A rule only counts while its Category is one of the user's (#158).
+        db.dropdownOptionDao().insert(DropdownOption(optionType = TransactionType.EXPENSE_CATEGORY_OPTION, name = "Food", displayOrder = 0))
         db.merchantRuleDao().upsert(
             MerchantRule("SWIGGY", "DEBIT", "Food", TransactionType.EXPENSE, origin = MerchantRuleOrigin.USER, updatedAt = 0)
         )

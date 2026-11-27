@@ -169,7 +169,7 @@ Resolving a Captured transaction as the bank's alert for a Transaction the user 
 _Avoid_: merge, match (as the user's action)
 
 **Merchant rule**:
-A saved mapping from a normalized merchant name and the bank's direction (debit or credit) to an outcome, and to the description the user last renamed it to, used for future Captured transactions from the same merchant. The outcome is an Expense or Income with a Category, or a Transfer with the other Account (the To-account of a debit, the From-account of a credit). It is either set by the user or learned from repeated identical confirmations. Changing the type or Category of a captured Transaction in the Ledger counts like a Confirm with that outcome.
+A saved mapping from a normalized merchant name and the bank's direction (debit or credit) to an outcome, and to the description the user last renamed it to, used for future Captured transactions from the same merchant. The outcome is an Expense or Income with a Category, or a Transfer with the other Account (the To-account of a debit, the From-account of a credit). It is either set by the user or learned from repeated identical confirmations. Changing the type or Category of a captured Transaction in the Ledger counts like a Confirm with that outcome. A rule whose Category the user no longer has is passed over, as if there were none, keeping only its rename.
 _Avoid_: category rule
 
 **Account alias**:

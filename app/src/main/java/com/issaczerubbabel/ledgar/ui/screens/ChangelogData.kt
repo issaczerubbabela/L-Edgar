@@ -16,6 +16,16 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
+        version = "v1.8.1",
+        date = "2026-11-28",
+        fixed = listOf(
+            "Auto-capture: a saved rule no longer files captures under a Category you've removed"
+        ),
+        developer = listOf(
+            "CategorizationPipeline takes categoriesByType and passes over a stale rule; withGuesses drops a kept guess whose Category is gone (#158)"
+        )
+    ),
+    ChangelogRelease(
         version = "v1.8.0",
         date = "2026-11-27",
         added = listOf(
