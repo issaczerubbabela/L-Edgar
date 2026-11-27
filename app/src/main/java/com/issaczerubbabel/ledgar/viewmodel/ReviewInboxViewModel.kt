@@ -203,7 +203,9 @@ class ReviewInboxViewModel @Inject constructor(
     }
 
     /** The type the card shows right now; a pick made on it pins it (see [CaptureRows.pickCategory]). */
-    private fun shownType(captureId: Long): String? = rows.value.firstOrNull { it.capture.id == captureId }?.type
+    private fun shownType(captureId: Long): String? = rows.value
+        .flatMap { listOfNotNull(it, it.transferPartner) }
+        .firstOrNull { it.capture.id == captureId }?.type
 
     private fun edit(captureId: Long, change: (CaptureRowEdit) -> CaptureRowEdit) {
         edits.update { it + (captureId to change(it[captureId] ?: CaptureRowEdit())) }

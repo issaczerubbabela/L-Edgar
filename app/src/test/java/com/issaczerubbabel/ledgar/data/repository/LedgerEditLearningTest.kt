@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.issaczerubbabel.ledgar.capture.LedgerEditLearner
+import com.issaczerubbabel.ledgar.capture.categorize.MerchantRuleTeacher
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
@@ -45,6 +46,7 @@ class LedgerEditLearningTest {
     private var cub = 0L
     private var hash = 0
     private var reguessed = 0
+    private var failReguess = false
 
     @Before
     fun setUp() = runBlocking {
@@ -66,7 +68,10 @@ class LedgerEditLearningTest {
             db.expenseDao(), db.accountDao(), api, DropdownOptionRepositoryImpl(db.dropdownOptionDao()), db.budgetDao(),
             BucketBudgetRepositoryImpl(db, db.bucketBudgetDao()), ThemePreferenceRepository(context),
             TransactionSyncer(store, api), store, SyncStateRepository(context),
-            LedgerEditLearner(db.captureDao(), db.expenseDao(), db.merchantRuleDao()) { reguessed++ }
+            LedgerEditLearner(db, db.captureDao(), db.expenseDao(), MerchantRuleTeacher(db.merchantRuleDao())) {
+                if (failReguess) error("re-guess failed")
+                reguessed++
+            }
         )
         hdfc = db.accountDao().insert(AccountRecord(groupName = "Bank", accountName = "HDFC Savings", initialBalance = 0.0))
         cub = db.accountDao().insert(AccountRecord(groupName = "Bank", accountName = "CUB Savings", initialBalance = 0.0))
@@ -119,6 +124,18 @@ class LedgerEditLearningTest {
         assertNull("two overrides drop it", rule())
         assertEquals("Snacks", db.expenseDao().getById(swiggy.id)!!.category)
         assertEquals(2, reguessed)
+    }
+
+    @Test
+    fun aFailureAfterLearningNeverFailsTheEditOrLosesTheLesson() = runBlocking {
+        learnedFoodRule()
+        val swiggy = confirmedSwiggy()
+        failReguess = true
+
+        recategorise(swiggy, "Groceries")
+
+        assertEquals("Groceries", db.expenseDao().getById(swiggy.id)!!.category)
+        assertEquals("the rule's own transaction committed: one override", 1, rule()!!.streak)
     }
 
     @Test

@@ -382,7 +382,7 @@ Deliberate omissions and gaps, so nobody assumes otherwise:
   Link, by `confirmedExpenseId`; a Transfer's PAIRED half doesn't count) records an override, or a confirmation,
   on that merchant's rule, exactly as a Confirm with that outcome would; for a Transfer a new other Account is a
   new outcome. Amount, date, Account and Description edits teach nothing, and a Ledger edit never renames the
-  merchant. A Sheet pull that changes a Category doesn't teach. Learning is best effort: it never fails the
+  merchant. A Sheet pull that changes a Category doesn't teach. Learning is best effort, each rule updated in its own Room transaction after the edit: it never fails the
   edit, and changing a Transaction back counts as one more decision, not an undo.
 - **Linking.** Only Transactions dated in the last 35 days are offered, and only the best match: there is
   no picker for "2 other matches", no Unlink, and a link never corrects the Transaction's date or amount to

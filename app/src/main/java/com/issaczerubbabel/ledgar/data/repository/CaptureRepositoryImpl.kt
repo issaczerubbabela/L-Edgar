@@ -3,6 +3,7 @@ package com.issaczerubbabel.ledgar.data.repository
 import androidx.room.withTransaction
 import com.issaczerubbabel.ledgar.capture.CaptureReguesser
 import com.issaczerubbabel.ledgar.capture.CaptureTrace
+import com.issaczerubbabel.ledgar.capture.bestEffort
 import com.issaczerubbabel.ledgar.capture.categorize.MerchantRuleTeacher
 import com.issaczerubbabel.ledgar.capture.notify.displayTitle
 import com.issaczerubbabel.ledgar.capture.pair.LedgerCandidates
@@ -23,7 +24,6 @@ import com.issaczerubbabel.ledgar.data.local.entity.MerchantRule
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRuleKey
 import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
 import com.issaczerubbabel.ledgar.util.TransactionType
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.time.Instant
@@ -68,14 +68,9 @@ class CaptureRepositoryImpl @Inject constructor(
         return expenseId
     }
 
+    // The decision is saved; stale guesses are only a missed improvement.
     private suspend fun reguessQuietly() {
-        try {
-            reguesser.reguessPending()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            // The decision is saved; stale guesses are only a missed improvement.
-        }
+        bestEffort { reguesser.reguessPending() }
     }
 
     private suspend fun confirmInTransaction(captureId: Long, edits: CaptureEdits): Long? = database.withTransaction {

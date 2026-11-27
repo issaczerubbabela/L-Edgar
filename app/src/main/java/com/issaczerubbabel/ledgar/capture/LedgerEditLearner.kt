@@ -1,13 +1,13 @@
 package com.issaczerubbabel.ledgar.capture
 
+import androidx.room.withTransaction
 import com.issaczerubbabel.ledgar.capture.categorize.MerchantRuleTeacher
+import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
-import com.issaczerubbabel.ledgar.data.local.dao.MerchantRuleDao
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.util.TransactionType
-import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 
 /**
@@ -17,24 +17,27 @@ import javax.inject.Inject
  * or one more confirmation of it. For a Transfer, a new other Account is a new outcome too. Amount,
  * date, Account and Description edits teach nothing, and a Ledger edit never renames the merchant.
  *
- * ExpenseRepository wraps its edits in [around], so every edit path in the Ledger is covered.
+ * ExpenseRepository wraps its edits in [around], so every edit path in the Ledger is covered. Each
+ * rule's read-modify-write runs in its own Room transaction, so a Confirm teaching the same rule at
+ * the same moment can't lose an update; the edit itself is not part of it.
  */
 class LedgerEditLearner @Inject constructor(
+    private val database: SheetSyncDatabase,
     private val captureDao: CaptureDao,
     private val expenseDao: ExpenseDao,
-    merchantRuleDao: MerchantRuleDao,
+    private val teacher: MerchantRuleTeacher,
     private val reguesser: CaptureReguesser
 ) {
-    private val teacher = MerchantRuleTeacher(merchantRuleDao)
 
     /**
      * Runs [edit] on the Transactions [expenseIds], then teaches from those whose outcome it changed.
      * Learning never fails the edit: the edit is saved either way.
      */
     suspend fun <T> around(expenseIds: List<Long>, edit: suspend () -> T): T {
-        val before = quietly { snapshot(expenseIds) }
+        // The edit is what matters; a lesson missed is only a guess not sharpened.
+        val before = bestEffort { snapshot(expenseIds) }
         val result = edit()
-        if (!before.isNullOrEmpty()) quietly { learn(before) }
+        if (!before.isNullOrEmpty()) bestEffort { learn(before) }
         return result
     }
 
@@ -51,22 +54,27 @@ class LedgerEditLearner @Inject constructor(
     private suspend fun learn(before: List<Pair<CapturedTransaction, ExpenseRecord>>) {
         var taught = false
         before.forEach { (capture, old) ->
-            val new = expenseDao.getById(old.id)?.takeIf { it.syncAction != "DELETE" } ?: return@forEach
-            val outcome = outcomeOf(new, capture) ?: return@forEach
-            if (outcome == outcomeOf(old, capture)) return@forEach
-            teacher.teach(
-                capture,
-                type = outcome.type,
-                category = outcome.category,
-                alwaysUse = false,
-                // Description edits never teach, so the merchant keeps the name it has.
-                description = { existing -> existing?.description },
-                toAccountId = outcome.otherAccountId
-            )
-            taught = true
+            if (database.withTransaction { teachFrom(capture, old) }) taught = true
         }
         // A changed rule can sharpen the guesses on captures still waiting, as after a Confirm.
         if (taught) reguesser.reguessPending()
+    }
+
+    /** Teaches [capture]'s merchant what its Transaction says now, if that changed since [old]. */
+    private suspend fun teachFrom(capture: CapturedTransaction, old: ExpenseRecord): Boolean {
+        val new = expenseDao.getById(old.id)?.takeIf { it.syncAction != "DELETE" } ?: return false
+        val outcome = outcomeOf(new, capture) ?: return false
+        if (outcome == outcomeOf(old, capture)) return false
+        teacher.teach(
+            capture,
+            type = outcome.type,
+            category = outcome.category,
+            alwaysUse = false,
+            // Description edits never teach, so the merchant keeps the name it has.
+            description = { existing -> existing?.description },
+            toAccountId = outcome.otherAccountId
+        )
+        return true
     }
 
     private data class Outcome(val type: String, val category: String, val otherAccountId: Long?)
@@ -83,14 +91,5 @@ class LedgerEditLearner @Inject constructor(
         TransactionType.EXPENSE, TransactionType.INCOME ->
             record.category.trim().takeIf { it.isNotEmpty() }?.let { Outcome(record.type, it, null) }
         else -> null
-    }
-
-    private suspend fun <R> quietly(block: suspend () -> R): R? = try {
-        block()
-    } catch (e: CancellationException) {
-        throw e
-    } catch (_: Exception) {
-        // The edit is what matters; a lesson missed is only a guess not sharpened.
-        null
     }
 }

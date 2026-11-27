@@ -3,12 +3,13 @@ package com.issaczerubbabel.ledgar.capture.categorize
 import com.issaczerubbabel.ledgar.data.local.dao.MerchantRuleDao
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRule
+import javax.inject.Inject
 
 /**
  * Saves what a capture's outcome teaches its merchant's rule ([MerchantRuleLearner]). Shared by
  * Confirm, Same one and an edit in the Ledger, so all three learn exactly the same way.
  */
-class MerchantRuleTeacher(private val merchantRuleDao: MerchantRuleDao) {
+class MerchantRuleTeacher @Inject constructor(private val merchantRuleDao: MerchantRuleDao) {
 
     /**
      * [description] picks the rule's description from the existing rule: the user's rename, or

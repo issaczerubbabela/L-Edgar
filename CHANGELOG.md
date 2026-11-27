@@ -10,14 +10,14 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 ### Added
 
-- Auto-capture: make a capture a Transfer or edit it in full, and its other half is matched for you
+- Auto-capture: switch a capture to a Transfer, or open it in full with Edit
 - Auto-capture: a merchant you keep confirming as a Transfer to one Account is suggested that way next time
 - Auto-capture: guesses Category and Description from what you logged before, like Lunch or Tea
 - To review: up to 2 other guessed titles show as chips under a card, and tapping one uses it
 - Auto-capture: an alert from your bank's app with an unknown account number suggests your Account
 - To review: each Confirm sharpens the guesses on waiting captures, never changing what you picked
 - Auto-capture: a capture you already logged by hand says so, and Same one links it instead of adding it twice
-- Auto-capture: spots transfers between your own accounts and lets you confirm them from the notification
+- Auto-capture: a debit and credit between your own Accounts pair up as one Transfer, even from the notification
 - Ledger: changing a captured transaction's Category or type teaches Auto-capture, as a Confirm would
 
 ### Changed
@@ -44,6 +44,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Pure TransferSuggestions reuses TransferPairMatcher's rules; a Split is kept in traceJson, so no migration
 - LedgerEditLearner in ExpenseRepository teaches rules from Category/type edits via MerchantRuleTeacher, as Confirm does
 - CaptureIngestor notifies High Transfer rules; CaptureActionHandler confirms them with the inbox's pairing
+- LedgerEditLearner teaches each rule in its own Room transaction, best effort via the shared bestEffort helper
 
 ## [1.6.0] - 2026-10-13
 
