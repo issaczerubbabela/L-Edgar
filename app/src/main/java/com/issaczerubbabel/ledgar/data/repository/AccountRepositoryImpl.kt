@@ -57,16 +57,26 @@ class AccountRepositoryImpl @Inject constructor(
             return dao.insert(record)
         }
 
-        val existing = dao.getAccountById(record.id)
-        return if (existing != null) {
-            // Avoid INSERT OR REPLACE for edits because REPLACE deletes then reinserts,
-            // which can null linked transaction foreign keys.
-            dao.update(record)
-            record.id
-        } else {
-            dao.insert(record)
+        return database.withTransaction {
+            val existing = dao.getAccountById(record.id)
+            if (existing != null) {
+                // Avoid INSERT OR REPLACE for edits because REPLACE deletes then reinserts,
+                // which can null linked transaction foreign keys.
+                dao.update(record)
+                // The Sheet stores Accounts by name and Import matches them by name, so a rename
+                // re-sends the Account's Transactions under the new one (#152).
+                if (existing.accountName != record.accountName) {
+                    expenseDao.markTransactionsForResendForAccount(record.id)
+                }
+                record.id
+            } else {
+                dao.insert(record)
+            }
         }
     }
+
+    override suspend fun resendTransactions(accountId: Long): Int =
+        expenseDao.markTransactionsForResendForAccount(accountId)
 
     override suspend fun toggleHidden(accountId: Long) {
         val account = dao.getAccountById(accountId) ?: return

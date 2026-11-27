@@ -219,6 +219,22 @@ interface ExpenseDao {
     )
     suspend fun markLinkedTransactionsDeletedForAccount(accountId: Long)
 
+    /**
+     * Marks every Transaction on the Account (any side) to be sent to the Sheet again, so the Sheet
+     * shows its current name. Pending inserts and deletes keep their action; the trigger raises
+     * `localVersion` (ADR-0003). Returns how many rows were marked.
+     */
+    @Query(
+        """
+        UPDATE expense_records
+        SET isSynced = 0,
+            syncAction = CASE WHEN syncAction = 'INSERT' THEN 'INSERT' ELSE 'UPDATE' END
+        WHERE (accountId = :accountId OR fromAccountId = :accountId OR toAccountId = :accountId)
+          AND syncAction != 'DELETE'
+        """
+    )
+    suspend fun markTransactionsForResendForAccount(accountId: Long): Int
+
     @Query(
         """
         UPDATE expense_records
