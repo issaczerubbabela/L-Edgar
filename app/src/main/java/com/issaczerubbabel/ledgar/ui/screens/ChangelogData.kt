@@ -18,6 +18,9 @@ val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
         version = "v1.8.0",
         date = "2026-11-27",
+        fixed = listOf(
+            "Budget: an expense dated after the Salary cycle ends no longer comes off this cycle's Left to spend"
+        ),
         developer = listOf(
             "Funds: glossary terms (Fund, Holding, Set aside, Free, Unallocated) and ADR-0011, Funds are labels on Account money"
         )

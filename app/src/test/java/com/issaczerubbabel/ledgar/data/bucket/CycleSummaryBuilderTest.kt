@@ -138,6 +138,48 @@ class CycleSummaryBuilderTest {
     }
 
     @Test
+    fun aRunningCycleLeavesAnExpenseDatedAfterItsEndAndTodayForLater() {
+        // Next month's rent logged early must not come off this cycle's Left to spend.
+        val summary = build(
+            buckets = listOf(bucket(1, "Essentials", 18000.0)),
+            assignments = listOf(route(1, "Rent")),
+            records = listOf(expense("2026-09-01", "Rent", 100.0), expense("2026-09-26", "Rent", 14000.0))
+        )
+
+        assertEquals(100.0, summary.totalSpent, 0.0)
+        assertEquals(100.0, summary.buckets.single().spent, 0.0)
+        assertEquals(70000.0 - 100.0, summary.leftToSpend, 0.0)
+        assertEquals((70000.0 - 100.0) / 12, summary.dailyPace, 0.0001)
+    }
+
+    @Test
+    fun aRunningCycleCountsAnExpenseLaterInTheCycleThanToday() {
+        val summary = build(
+            buckets = listOf(bucket(1, "Essentials", 18000.0)),
+            assignments = listOf(route(1, "Utilities")),
+            records = listOf(expense("2026-09-20", "Utilities", 1500.0))
+        )
+
+        assertEquals(1500.0, summary.totalSpent, 0.0)
+    }
+
+    @Test
+    fun anOverdueCycleStopsAtToday() {
+        val summary = build(
+            buckets = listOf(bucket(1, "Food", 5000.0)),
+            assignments = listOf(route(1, "Food")),
+            records = listOf(
+                expense("2026-09-25", "Food", 100.0),
+                expense("2026-09-28", "Food", 200.0),
+                expense("2026-09-30", "Food", 400.0)
+            ),
+            today = LocalDate.of(2026, 9, 29)
+        )
+
+        assertEquals(300.0, summary.totalSpent, 0.0)
+    }
+
+    @Test
     fun aClosedCycleStopsAtItsEndDate() {
         val summary = build(
             cycle = cycle(closedAt = "2026-09-26"),

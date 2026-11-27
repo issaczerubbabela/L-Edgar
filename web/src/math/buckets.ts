@@ -40,7 +40,11 @@ export interface CycleSummary {
   unbucketedSpent: number;
 }
 
-/** The running cycle keeps absorbing spend past its end date until the next one starts. */
+/**
+ * The days whose Expenses a cycle counts: start to end, and a running cycle reaches today when today is
+ * later, so an overdue cycle keeps absorbing spend until the next one starts. Anything dated after both
+ * its end date and today is left for later. Port of CycleCalendar.countsUntil.
+ */
 export const cycleRange = (cycle: Cycle, todayDay: Day): { start: Day; end: Day } => ({
   start: cycle.start,
   end: cycle.closedAt === null && todayDay > cycle.end ? todayDay : cycle.end,
@@ -48,9 +52,10 @@ export const cycleRange = (cycle: Cycle, todayDay: Day): { start: Day; end: Day 
 
 export function cycleSummary(cycle: Cycle, transactions: Txn[], todayDay: Day): CycleSummary {
   const isClosed = cycle.closedAt !== null;
+  const range = cycleRange(cycle, todayDay);
   const spend = new Map<string, CategorySpend>();
   for (const txn of transactions) {
-    if (txn.type !== "Expense" || txn.date < cycle.start || (isClosed && txn.date > cycle.end)) continue;
+    if (txn.type !== "Expense" || txn.date < range.start || txn.date > range.end) continue;
     const name = key(txn.category);
     const existing = spend.get(name);
     if (existing) existing.amount += txn.amount;

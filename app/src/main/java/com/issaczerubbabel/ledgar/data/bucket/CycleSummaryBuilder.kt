@@ -24,7 +24,7 @@ object CycleSummaryBuilder {
         val end = LocalDate.parse(cycle.endDate)
         val isClosed = cycle.closedAt != null
 
-        val spendByCategory = spendByCategory(records, start, if (isClosed) end else null)
+        val spendByCategory = spendByCategory(records, start, CycleCalendar.countsUntil(end, today, isClosed))
 
         val bucketIdByCategory = assignments.associate { categoryKey(it.category) to it.bucketId }
         val knownBucketIds = buckets.map { it.id }.toSet()
@@ -66,14 +66,14 @@ object CycleSummaryBuilder {
     }
 
     /**
-     * Expense totals per category from [start] on. A running cycle passes a null [end]: it keeps
-     * absorbing spend past its end date until the next cycle is started, so nothing is orphaned.
+     * Expense totals per category from [start] to [end], both included. For a running cycle [end] is
+     * the later of its end date and today (see [CycleCalendar.countsUntil]).
      * Categories are keyed ignoring case, matching how they are routed into buckets.
      */
     private fun spendByCategory(
         records: List<ExpenseRecord>,
         start: LocalDate,
-        end: LocalDate?
+        end: LocalDate
     ): Map<String, CategorySpend> {
         val totals = LinkedHashMap<String, CategorySpend>()
         records.forEach { record ->
@@ -81,7 +81,7 @@ object CycleSummaryBuilder {
             val date = parseFlexibleDate(record.date)
                 ?: record.remoteTimestamp?.let(::parseFlexibleDate)
                 ?: return@forEach
-            if (date.isBefore(start) || (end != null && date.isAfter(end))) return@forEach
+            if (date.isBefore(start) || date.isAfter(end)) return@forEach
 
             val key = categoryKey(record.category)
             val existing = totals[key]

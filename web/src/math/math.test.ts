@@ -97,6 +97,14 @@ describe("buckets", () => {
     expect(cycleSummary(cycle, [txn({ date: "2026-04-02" })], "2026-04-03").totalSpent).toBe(100);
     expect(cycleSummary({ ...cycle, closedAt: "2026-03-31" }, [txn({ date: "2026-04-02" })], "2026-04-03").totalSpent).toBe(0);
   });
+  it("leaves an Expense dated after both the end date and today for later", () => {
+    const s = cycleSummary(cycle, [txn({ date: "2026-03-05" }), txn({ date: "2026-03-31", amount: 900 })], "2026-03-10");
+    expect(s.totalSpent).toBe(100);
+    expect(s.buckets[0].spent).toBe(100);
+    expect(s.leftToSpend).toBe(2900);
+    expect(cycleSummary(cycle, [txn({ date: "2026-03-20" })], "2026-03-10").totalSpent).toBe(100);
+    expect(cycleSummary(cycle, [txn({ date: "2026-04-02" }), txn({ date: "2026-04-04", amount: 900 })], "2026-04-03").totalSpent).toBe(100);
+  });
 });
 
 describe("stats", () => {

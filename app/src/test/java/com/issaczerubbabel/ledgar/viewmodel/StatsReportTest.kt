@@ -342,6 +342,20 @@ class StatsReportTest {
     }
 
     @Test
+    fun aRunningCyclesLeftToSpendLeavesOutAPostDatedExpenseLikeItsSpent() {
+        val cycle = cycle("2026-08-25", "2026-09-24", 43000.0).copy(id = 7)
+        val today = LocalDate.of(2026, 9, 13)
+        val period = StatsPeriod.cycleOn(today, listOf(cycle), today)!!
+        val result = build(
+            listOf(expense("2026-09-01", 18000.0, "Rent"), expense("2026-09-26", 18000.0, "Rent")),
+            period = period, cycles = listOf(cycle), today = today
+        )
+
+        assertEquals(18000.0, result.totals.spent, 0.0)
+        assertEquals(43000.0 - result.totals.spent, result.cycle!!.summary.leftToSpend, 0.0)
+    }
+
+    @Test
     fun cyclesStepThroughEachOtherAndPastTheEndsByTheirLength() {
         val cycles = listOf(
             cycle("2026-07-25", "2026-08-24", 1.0, closedAt = "2026-08-25").copy(id = 1),
