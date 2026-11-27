@@ -16,6 +16,16 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
+        version = "v1.8.1",
+        date = "2026-11-28",
+        fixed = listOf(
+            "Budget: after you set up Funds mid-cycle, offers to raise spendable so transfers into Funds don't count twice"
+        ),
+        developer = listOf(
+            "Budget: SpendableTopUp decides the raise-spendable card, with the first whole-Account Fund date and answers in DataStore"
+        )
+    ),
+    ChangelogRelease(
         version = "v1.8.0",
         date = "2026-11-27",
         added = listOf(

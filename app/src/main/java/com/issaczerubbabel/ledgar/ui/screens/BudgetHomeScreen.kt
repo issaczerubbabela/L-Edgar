@@ -101,7 +101,9 @@ fun BudgetHomeScreen(
         onOpenBucket = onOpenBucket,
         onPlanBuckets = onPlanBuckets,
         onStartCycle = onStartCycle,
-        onOpenFund = onOpenFund
+        onOpenFund = onOpenFund,
+        onRaiseSpendable = vm::raiseSpendable,
+        onKeepSpendable = vm::keepSpendable
     )
 }
 
@@ -114,13 +116,25 @@ private fun BudgetHomeContent(
     onOpenBucket: (Long) -> Unit,
     onPlanBuckets: () -> Unit,
     onStartCycle: () -> Unit,
-    onOpenFund: (Long) -> Unit
+    onOpenFund: (Long) -> Unit,
+    onRaiseSpendable: (Double) -> Unit,
+    onKeepSpendable: () -> Unit
 ) {
     val summary = state.summary
     var showingSplit by rememberSaveable { mutableStateOf(false) }
     val yourMoney = state.yourMoney
     if (showingSplit && yourMoney != null) {
         YourMoneySheet(money = yourMoney, onDismiss = { showingSplit = false })
+    }
+    val topUp = state.spendableTopUp.takeIf { state.isRunning }
+    var raisingSpendable by rememberSaveable { mutableStateOf(false) }
+    if (raisingSpendable && summary != null && topUp != null) {
+        AmountDialog(
+            title = "Spendable this cycle",
+            initial = summary.cycle.spendableAmount + topUp,
+            onDismiss = { raisingSpendable = false },
+            onConfirm = { onRaiseSpendable(it); raisingSpendable = false }
+        )
     }
 
     when {
@@ -158,6 +172,16 @@ private fun BudgetHomeContent(
             }
             if (summary.isOverdue && state.isRunning) {
                 item { OverdueBanner(summary = summary, onStartCycle = onStartCycle) }
+            }
+            if (topUp != null) {
+                item {
+                    SpendableTopUpCard(
+                        spendable = summary.cycle.spendableAmount,
+                        topUp = topUp,
+                        onRaise = { raisingSpendable = true },
+                        onKeep = onKeepSpendable
+                    )
+                }
             }
             item { Hero(summary = summary, hasFunds = state.hasFunds) }
             item { StatRow(summary = summary, isRunning = state.isRunning, hasFunds = state.hasFunds) }
@@ -324,6 +348,36 @@ private fun OverdueBanner(summary: CycleSummary, onStartCycle: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         OutlinedButton(onClick = onStartCycle) { Text("Start new cycle") }
+    }
+}
+
+/**
+ * Shown once for a running cycle planned before Funds (#156): its spendable was likely entered net
+ * of what is now Set aside, so those Transfers would come off Left to spend twice.
+ */
+@Composable
+private fun SpendableTopUpCard(spendable: Double, topUp: Double, onRaise: () -> Unit, onKeep: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f), RoundedCornerShape(14.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Filled.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            Text(text = "Planned before Funds", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+        }
+        Text(
+            text = "This cycle's spendable may already leave out what you now Set aside into Funds. " +
+                "Raise spendable by ${formatRupees(topUp)} to ${formatRupees(spendable + topUp)}?",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = onRaise) { Text("Raise") }
+            OutlinedButton(onClick = onKeep) { Text("Keep ${formatRupees(spendable)}") }
+        }
     }
 }
 

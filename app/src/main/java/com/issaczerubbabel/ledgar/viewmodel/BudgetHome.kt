@@ -4,6 +4,7 @@ import com.issaczerubbabel.ledgar.account.AccountMath
 import com.issaczerubbabel.ledgar.data.bucket.CycleCalendar
 import com.issaczerubbabel.ledgar.data.bucket.CycleSummary
 import com.issaczerubbabel.ledgar.data.bucket.CycleSummaryBuilder
+import com.issaczerubbabel.ledgar.data.bucket.SpendableTopUp
 import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetBucket
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetCycle
@@ -26,7 +27,9 @@ data class BudgetUiState(
     /** The Your money card; only for the running cycle, and only with Funds. */
     val yourMoney: YourMoneySplit? = null,
     /** Transfers this cycle into a Savings-group Account no Fund holds: shown as "Set aside, no Fund". */
-    val setAsideNoFund: Double = 0.0
+    val setAsideNoFund: Double = 0.0,
+    /** How much the "raise spendable" card offers to add, or null for no card (see [SpendableTopUp]). */
+    val spendableTopUp: Double? = null
 ) {
     val hasCycles: Boolean get() = cycleCount > 0
     val canGoOlder: Boolean get() = cycleIndex < cycleCount - 1
@@ -82,7 +85,8 @@ data class YourMoneySplit(
 
 /**
  * The Budget tab for [cycle], worked out the same way everywhere a cycle is shown (ADR-0011). Pure:
- * no Room, no Android. With no active Fund it's the state the tab had before Funds.
+ * no Room, no Android. With no active Fund it's the state the tab had before Funds. [fundsSince] and
+ * [answeredTopUps] decide the "raise spendable" card (#156, [SpendableTopUp]).
  */
 fun budgetHome(
     cycle: BudgetCycle,
@@ -93,7 +97,9 @@ fun budgetHome(
     book: AccountBook,
     funds: FundsSnapshot,
     roles: StatsRoles,
-    today: LocalDate
+    today: LocalDate,
+    fundsSince: LocalDate? = null,
+    answeredTopUps: Set<Long> = emptySet()
 ): BudgetUiState {
     val summary = CycleSummaryBuilder.build(cycle, buckets, assignments, book.transactionRecords, today, funds)
     val base = BudgetUiState(isLoading = false, summary = summary, cycleIndex = cycleIndex, cycleCount = cycleCount)
@@ -103,7 +109,8 @@ fun budgetHome(
     return base.copy(
         hasFunds = true,
         yourMoney = if (cycle.closedAt == null) yourMoney(book, funds, summary.leftToSpend) else null,
-        setAsideNoFund = setAsideNoFund(cycle, book, holdings, roles, today)
+        setAsideNoFund = setAsideNoFund(cycle, book, holdings, roles, today),
+        spendableTopUp = SpendableTopUp.suggest(summary, fundsSince, answeredTopUps)
     )
 }
 

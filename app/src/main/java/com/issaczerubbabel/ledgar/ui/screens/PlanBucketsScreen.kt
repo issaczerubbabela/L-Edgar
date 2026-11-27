@@ -429,8 +429,9 @@ private fun NoCycleYet(onStartCycle: () -> Unit) {
     }
 }
 
+/** The amount editor Plan buckets uses; the Budget tab's "raise spendable" card opens it too. */
 @Composable
-private fun AmountDialog(title: String, initial: Double, onDismiss: () -> Unit, onConfirm: (Double) -> Unit) {
+internal fun AmountDialog(title: String, initial: Double, onDismiss: () -> Unit, onConfirm: (Double) -> Unit) {
     // A zero allocation starts blank, and any existing figure is pre-selected, so typing replaces it.
     val startText = if (initial == 0.0) "" else amountToInput(initial)
     var field by remember { mutableStateOf(TextFieldValue(startText, TextRange(0, startText.length))) }
