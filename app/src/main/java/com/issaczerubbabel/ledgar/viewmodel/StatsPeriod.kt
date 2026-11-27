@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.viewmodel
 
+import com.issaczerubbabel.ledgar.data.bucket.CycleCalendar
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetCycle
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import java.time.DayOfWeek
@@ -9,8 +10,8 @@ import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 
 /**
- * A Salary cycle's dates as Stats sees them. A running cycle stays open past its end date until the
- * next one starts, so it reaches today when today is later.
+ * A Salary cycle's dates as Stats sees them: the days whose Expenses it counts, the same window the
+ * Budget tab uses ([CycleCalendar.countsUntil]).
  */
 data class CycleSpan(val id: Long, val start: LocalDate, val end: LocalDate, val isRunning: Boolean) {
     companion object {
@@ -19,7 +20,7 @@ data class CycleSpan(val id: Long, val start: LocalDate, val end: LocalDate, val
                 val start = parseFlexibleDate(c.startDate) ?: return@mapNotNull null
                 val end = parseFlexibleDate(c.endDate) ?: return@mapNotNull null
                 val running = c.closedAt == null
-                CycleSpan(c.id, start, if (running) maxOf(end, today) else end, running)
+                CycleSpan(c.id, start, CycleCalendar.countsUntil(end, today, isClosed = !running), running)
             }.sortedBy { it.start }
     }
 }

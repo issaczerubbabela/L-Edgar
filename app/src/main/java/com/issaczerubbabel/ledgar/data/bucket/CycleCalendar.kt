@@ -32,6 +32,14 @@ object CycleCalendar {
     fun daysOverdue(end: LocalDate, today: LocalDate, isClosed: Boolean): Int =
         if (isClosed) 0 else ChronoUnit.DAYS.between(end, today).toInt().coerceAtLeast(0)
 
+    /**
+     * The last day whose Expenses the cycle counts. A running cycle reaches today when today is past its
+     * end date, so an overdue cycle keeps absorbing spend until the next one starts; anything dated after
+     * both its end date and today is left for later. A closed cycle stops at its end date.
+     */
+    fun countsUntil(end: LocalDate, today: LocalDate, isClosed: Boolean): LocalDate =
+        if (isClosed) end else maxOf(end, today)
+
     /** How far through the cycle today is, 0..1. This is where the pace tick sits on every bar. */
     fun elapsedFraction(start: LocalDate, end: LocalDate, today: LocalDate): Float =
         dayNumber(start, end, today).toFloat() / totalDays(start, end)

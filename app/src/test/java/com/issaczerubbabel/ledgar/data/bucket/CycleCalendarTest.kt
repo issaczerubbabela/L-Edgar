@@ -70,4 +70,21 @@ class CycleCalendarTest {
         // Month lengths clamp rather than throwing: 31 Jan + 1 month = 28 Feb, less a day.
         assertEquals(LocalDate.of(2026, 2, 27), CycleCalendar.defaultEnd(LocalDate.of(2026, 1, 31)))
     }
+
+    @Test
+    fun aRunningCycleCountsUpToItsEndDateWhileItHasTimeLeft() {
+        assertEquals(end, CycleCalendar.countsUntil(end, LocalDate.of(2026, 9, 13), isClosed = false))
+        assertEquals(end, CycleCalendar.countsUntil(end, end, isClosed = false))
+    }
+
+    @Test
+    fun anOverdueCycleCountsUpToToday() {
+        val today = LocalDate.of(2026, 9, 29)
+        assertEquals(today, CycleCalendar.countsUntil(end, today, isClosed = false))
+    }
+
+    @Test
+    fun aClosedCycleCountsUpToItsEndDateOnly() {
+        assertEquals(end, CycleCalendar.countsUntil(end, LocalDate.of(2026, 9, 29), isClosed = true))
+    }
 }

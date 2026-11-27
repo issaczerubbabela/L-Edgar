@@ -19,7 +19,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
         version = "v1.8.0",
         date = "2026-11-27",
         fixed = listOf(
-            "Accounts: renaming one updates its transactions in the Sheet, and Re-send to Sheet repairs older renames"
+            "Accounts: renaming one updates its transactions in the Sheet, and Re-send to Sheet repairs older renames",
+            "Budget: an expense dated after the Salary cycle ends no longer comes off this cycle's Left to spend"
         ),
         developer = listOf(
             "Funds: glossary terms (Fund, Holding, Set aside, Free, Unallocated) and ADR-0011, Funds are labels on Account money"

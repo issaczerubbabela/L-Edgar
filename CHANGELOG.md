@@ -11,6 +11,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 ### Fixed
 
 - Accounts: renaming one updates its transactions in the Sheet, and Re-send to Sheet repairs older renames
+- Budget: an expense dated after the Salary cycle ends no longer comes off this cycle's Left to spend
 
 ### Developer
 

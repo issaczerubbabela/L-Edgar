@@ -60,7 +60,7 @@ The label that classifies an Expense or Income, picked from the `EXPENSE_CATEGOR
 The legacy plan: an amount for one Category in one month. Each month and Category pair has at most one. Salary cycles replaced it, but it's still kept and backed up so old backups restore.
 
 **Salary cycle**:
-The money the user has to spend between two paydays. The running cycle has no close date, and it stays open past its end date until the next one starts.
+The money the user has to spend between two paydays. The running cycle has no close date, and it stays open past its end date until the next one starts, counting spend up to today; anything dated after both its end date and today is left for later.
 _Avoid_: month, period (a cycle rarely lines up with either)
 
 **Bucket**:
