@@ -110,6 +110,10 @@ object FundMath {
         return whole[to]?.fundId
     }
 
+    /** The Fund holding [accountId] whole on [date] (from that holding's start date), or null. */
+    fun heldWholeOn(accountId: Long, date: LocalDate, holdings: List<FundHolding>): Long? =
+        wholeHoldingsOn(holdings, date)[accountId]?.fundId
+
     /** [cycle]'s Expenses paid from an Account a Fund holds whole, by Fund. They don't count in the cycle. */
     fun drawn(cycle: BudgetCycle, transactions: List<TransactionSnapshot>, holdings: List<FundHolding>, today: LocalDate): FundFlow =
         flow(cycle, transactions, today) { drawnFrom(it, holdings) }

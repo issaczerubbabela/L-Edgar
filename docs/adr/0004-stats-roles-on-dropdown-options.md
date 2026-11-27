@@ -4,7 +4,7 @@ status: accepted
 
 # Stats roles live on Dropdown options
 
-> The Transfer half of the **Saved** rule is superseded by ADR-0011 once Funds reach Stats: a Transfer into an Account a Fund holds whole counts as Saved, whatever its Account group.
+> The Transfer half of the **Saved** rule is superseded by ADR-0011: a Transfer into an Account a Fund holds whole counts as Saved, whatever its Account group. The Savings-group rule below still applies to Transfers that touch no Fund's Account.
 
 The Stats tab counted every Expense as spending and every Income as earnings. The monthly SIP (Category "Investments/Savings") then showed up as a fifth of all spending, and an Amazon refund (Category "Return") as income. Getting the numbers right needs to know which Categories are really saving, which are refunds, and which Account groups hold savings. Category and Account group names are user-editable, so hard-coding names would break as soon as someone renames one.
 

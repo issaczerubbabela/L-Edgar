@@ -108,6 +108,7 @@ import com.issaczerubbabel.ledgar.ui.theme.rememberChartColors
 import com.issaczerubbabel.ledgar.viewmodel.CategoryDetail
 import com.issaczerubbabel.ledgar.viewmodel.DayCell
 import com.issaczerubbabel.ledgar.viewmodel.DetailRequest
+import com.issaczerubbabel.ledgar.viewmodel.FundSaved
 import com.issaczerubbabel.ledgar.viewmodel.StatsPeriod
 import com.issaczerubbabel.ledgar.viewmodel.StatsReportUi
 import com.issaczerubbabel.ledgar.viewmodel.StatsScope
@@ -272,6 +273,7 @@ private fun statsCards(
         cards += "empty" to { EmptyPeriodCard(state, vm::previousPeriod) }
         return cards
     }
+    if (report.savedByFund.isNotEmpty()) cards += "saved-by-fund" to { SavedByFundCard(report.savedByFund, report.totals.saved, colors, rupees) }
     cards += "pace" to { PaceCard(state, colors, rupees, onSetUpCycle) }
     val cycle = report.cycle
     if (cycle != null) {
@@ -520,6 +522,18 @@ private fun CycleHeadline(s: StatsUiState, cycle: com.issaczerubbabel.ledgar.vie
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
+    if (summary.setAside > 0) {
+        Text(
+            "${rupees(summary.setAside)} set aside into Funds also comes off it, as on the Budget tab.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+    if (summary.drawnFromFunds > 0) {
+        Text(
+            "${rupees(summary.drawnFromFunds)} paid from Funds doesn't count against this cycle.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
 @Composable
@@ -551,6 +565,40 @@ private fun LeftOverHeadline(report: StatsReportUi, period: StatsPeriod, colors:
     }
     if (t.refunds > 0) {
         Text("Spent is after ${rupees(t.refunds)} of refunds.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/**
+ * Saved split by the Funds it went into, with the rest (Saving Categories and Savings groups) as one
+ * row. Rows aren't tappable yet: RankedRow takes an onClick once Fund detail exists.
+ */
+@Composable
+private fun SavedByFundCard(rows: List<FundSaved>, saved: Double, colors: ChartColors, rupees: (Double) -> String) {
+    val other = saved - rows.sumOf { it.amount }
+    val max = maxOf(rows.maxOf { it.amount }, other).coerceAtLeast(1.0)
+    val track = MaterialTheme.colorScheme.surfaceContainerHighest
+    StatsCard {
+        CardTitle("Saved by Fund")
+        rows.forEach { row ->
+            RankedRow(
+                name = listOf(row.fund.emoji.trim(), row.fund.name).filter { it.isNotEmpty() }.joinToString(" "),
+                amount = rupees(row.amount),
+                fraction = (row.amount / max).toFloat(),
+                barColor = colors.saved,
+                track = track,
+                leading = { ColorDot(bucketColor(row.fund.colorIndex)) }
+            )
+        }
+        if (abs(other) >= 1) {
+            RankedRow(
+                name = "Other savings",
+                amount = rupees(other),
+                fraction = (other.coerceAtLeast(0.0) / max).toFloat(),
+                barColor = colors.muted,
+                track = track,
+                note = "Saving Categories and Savings accounts"
+            )
+        }
     }
 }
 
