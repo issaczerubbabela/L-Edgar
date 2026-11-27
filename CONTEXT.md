@@ -70,6 +70,34 @@ _Avoid_: envelope, budget (the legacy per-category plan)
 **Bucket category**:
 The routing of one expense Category into one Bucket for one cycle. A Category sits in at most one Bucket per cycle; Categories in none count as Unbucketed.
 
+**Unallocated**:
+The part of a Salary cycle's spendable amount not yet planned: spendable minus every Bucket's allocation and every Fund's Planned contribution. It's a planning figure, so spending doesn't change it; Unbucketed spend is shown next to it, not taken out of it.
+_Avoid_: buffer, spare
+
+**Fund**:
+A label on money for a purpose, such as an emergency fund or a ministry fund. It lives outside Salary cycles and keeps its balance until the money is spent or released. It can have a target and a due date. It's a label, not a place: the money stays in the Accounts its Holdings name.
+_Avoid_: sinking fund, goal, pot, rollover
+
+**Holding**:
+Where a Fund's money sits: either a **whole Account**, whose balance is the holding (a recurring deposit, a SIP, an Account kept only for giving), or a **fixed amount** in a shared Account, such as ₹70,000 of the salary Account. An Account is the whole holding of at most one Fund. A holding can start with an opening amount for money that was there before tracking began.
+_Avoid_: kept in, earmark (as a noun)
+
+**Free**:
+Money in an Account, or in all of them, that no Fund holds and no running Salary cycle still plans to spend: Your money minus Funds minus what is left of This cycle (never less than zero). Free can go below zero, which means the plan uses more money than there is.
+_Avoid_: available, spare
+
+**Your money**:
+Net worth over the Accounts Included in totals, as the Budget tab shows it, split into Funds, This cycle and Free.
+_Avoid_: balance, total
+
+**Set aside**:
+A Transfer in a Salary cycle from an Account no Fund holds whole into an Account a Fund holds whole. It's how a cycle puts money into a Fund. A Transfer between two such Fund Accounts is a move between Funds, and interest, growth and Balance adjustments grow a Fund without being Set aside.
+_Avoid_: saved (Stats' figure), invested
+
+**Planned contribution**:
+How much a Salary cycle means to Set aside into one Fund. Carry over copies it into the next cycle, like a Bucket's allocation.
+_Avoid_: set-aside amount, instalment
+
 **Stats role**:
 The part a Dropdown option plays in Stats, stored in its `role`: an expense Category can be **Saving**, an income Category can be **Refund**, and an Account group can be **Savings** or **Liability**. Most options have no role.
 _Avoid_: flag, tag
@@ -83,7 +111,7 @@ Expenses in a period, not counting Saving Categories, minus Refunds.
 _Avoid_: total expenses (when Saving Categories are included)
 
 **Saved**:
-Money put aside in a period: Expenses in Saving Categories, plus Transfers into a Savings Account group from outside it, minus Transfers out of one. Saved money is never Spent.
+Money put aside in a period: Expenses in Saving Categories, plus Transfers into a Savings Account group from outside it, minus Transfers out of one. Saved money is never Spent. (Once Funds reach Stats, a Transfer into an Account a Fund holds whole counts too, whatever its group: see ADR-0011.)
 _Avoid_: invested, spent (for Saving Categories)
 
 **Refund**:
@@ -102,7 +130,7 @@ The tab that lists every Transaction, one month at a time: day by day, on a cale
 _Avoid_: Trans., history
 
 **Left to spend**:
-A Salary cycle's spendable amount minus every Expense in it, Saving Categories included and Refunds not taken off: the same figure the Budget tab shows, because a Bucket can hold savings. Once the cycle is over, the Stats tab calls it "Left unspent".
+A Salary cycle's spendable amount minus every Expense in it, Saving Categories included and Refunds not taken off, minus its Set aside: the same figure the Budget tab shows, because a Bucket can hold savings. An Expense paid from an Account a Fund holds whole comes out of that Fund, not the cycle. Once the cycle is over, the Stats tab calls it "Left unspent". The Budget tab also calls it **This cycle** when splitting Your money.
 _Avoid_: left over (which is based on Earned, not the spendable amount)
 
 **Usual**:
