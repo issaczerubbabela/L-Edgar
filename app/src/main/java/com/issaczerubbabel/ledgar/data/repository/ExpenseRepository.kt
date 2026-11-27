@@ -17,6 +17,7 @@ data class GoogleSheetsImportResult(
     val restoredBudgets: Int = 0,
     val restoredCycles: Int = 0,
     val restoredAccounts: Int = 0,
+    val restoredFunds: Int = 0,
     val conflicts: List<SyncConflict> = emptyList()
 )
 

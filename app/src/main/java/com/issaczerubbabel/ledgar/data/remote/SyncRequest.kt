@@ -14,5 +14,7 @@ data class SyncRequest(
 	 * Bucket-budget cycles. Sent here rather than in [records], which is left empty: a script that
 	 * predates this field files records as transactions, and would add junk rows to the sheet.
 	 */
-	val cycles: List<CycleSyncDto>? = null
+	val cycles: List<CycleSyncDto>? = null,
+	/** Funds with their holdings and plans. Like [cycles], never sent in [records]. */
+	val funds: List<FundSyncDto>? = null
 )
