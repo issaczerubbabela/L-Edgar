@@ -510,12 +510,23 @@ class StatsReportTest {
     }
 
     @Test
-    fun takingMoneyOutOfAFundIsNotSavedAndNotTakenBack() {
-        // Budget's Set aside never nets releases, so Stats doesn't either.
+    fun takingMoneyOutOfAFundTakesItBackFromSaved() {
+        // As the Savings group did before Funds: maturing an RD into the bank doesn't inflate Saved.
         val result = build(listOf(transfer("2026-09-05", 2000.0, from = 4, to = 8), transfer("2026-09-20", 500.0, from = 8, to = 4)), funds = funds())
 
-        assertEquals(2000.0, result.totals.saved, 0.0)
+        assertEquals(1500.0, result.totals.saved, 0.0)
+        // Saved by Fund lists what was Set aside, which never nets releases (the Budget tab's Set aside).
         assertEquals(listOf(emergency to 2000.0), result.savedByFund.map { it.fund to it.amount })
+    }
+
+    @Test
+    fun aReleaseOnlyCountsFromTheHoldingsStartDate() {
+        val result = build(
+            listOf(transfer("2026-09-10", 1000.0, from = 7, to = 4), transfer("2026-09-20", 300.0, from = 7, to = 4)),
+            funds = funds(ministryFrom = "2026-09-15")
+        )
+
+        assertEquals(-300.0, result.totals.saved, 0.0) // before the 15th Ministry Fund is a plain Accounts-group Account
     }
 
     @Test
@@ -558,13 +569,14 @@ class StatsReportTest {
             transfer("2026-09-05", 2000.0, from = 4, to = 7),
             transfer("2026-09-06", 500.0, from = 4, to = 5),
             expense("2026-09-07", 1000.0, "Investments/Savings"),
-            expense("2026-09-08", 4000.0, "Rent")
+            expense("2026-09-08", 4000.0, "Rent"),
+            transfer("2026-09-09", 300.0, from = 7, to = 4) // a release out of Ministry Fund
         )
         val month = build(records, cycles = listOf(cycle), funds = funds())
         val period = StatsPeriod.cycleOn(LocalDate.of(2026, 9, 10), listOf(cycle), afterSeptember)!!
         val cycleView = build(records, period = period, cycles = listOf(cycle), funds = funds())
 
-        assertEquals(3500.0, month.totals.saved, 0.0)
+        assertEquals(3200.0, month.totals.saved, 0.0)
         assertEquals(month.totals.saved, cycleView.totals.saved, 0.0)
         assertEquals(month.savedByFund, cycleView.savedByFund)
         assertEquals(2000.0, cycleView.cycle!!.summary.setAside, 0.0)

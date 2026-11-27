@@ -14,7 +14,7 @@ The user wanted to see where all of their salary goes, not just the part spent t
 - A cycle splits as Buckets + Planned contributions + Unallocated. **This cycle** (Left to spend) = spendable − Expenses not drawn from a Fund − Set aside. **Free** = Your money − Funds − max(This cycle, 0), so a Transfer into a Fund leaves Free unchanged and overspending never makes Free look larger.
 - **The label doesn't follow the money.** A Transfer out of a Fund's Account releases it; the app offers "Keep earmarked" to add a fixed Holding where it lands.
 - Funds are plan data, like Buckets. They aren't throwaway local state like captures (ADR-0005) or Trips (ADR-0008), so they're backed up through the Apps Script from the first slice that creates them. Backups key Holdings by Account **name** and Planned contributions by cycle **start date**, because Import rebuilds Account and cycle ids.
-- Stats will count a Transfer into an Account a Fund holds whole as **Saved**, whatever its Account group. This supersedes the Transfer half of ADR-0004's Saved rule once that slice ships, and Transfers into a Savings group with no Fund keep counting.
+- Stats will count a Transfer into an Account a Fund holds whole as **Saved**, and take back one out of it into an Account no Fund holds whole, whatever the Account groups. This supersedes the Transfer half of ADR-0004's Saved rule once that slice ships, and Transfers into a Savings group with no Fund keep counting.
 
 ## Considered options
 

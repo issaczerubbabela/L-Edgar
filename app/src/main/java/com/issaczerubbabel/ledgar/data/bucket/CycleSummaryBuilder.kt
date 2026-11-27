@@ -1,6 +1,6 @@
 package com.issaczerubbabel.ledgar.data.bucket
 
-import com.issaczerubbabel.ledgar.account.TransactionSnapshot
+import com.issaczerubbabel.ledgar.account.toTransactionSnapshot
 import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetBucket
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetCycle
@@ -33,7 +33,7 @@ object CycleSummaryBuilder {
         val isClosed = cycle.closedAt != null
 
         val holdings = funds.activeHoldings
-        val snapshots = if (funds.isEmpty) emptyList() else records.map { it to snapshotOf(it) }
+        val snapshots = if (funds.isEmpty) emptyList() else records.map { it to it.toTransactionSnapshot() }
         val transactions = snapshots.mapNotNull { it.second }
         val counted = if (funds.isEmpty) records else snapshots.filter { (_, txn) ->
             txn == null || FundMath.drawnFrom(txn, holdings) == null
@@ -94,25 +94,6 @@ object CycleSummaryBuilder {
             drawnFromFunds = drawn.total,
             plannedContributions = plannedContributions,
             fundContributions = fundContributions
-        )
-    }
-
-    /**
-     * What [FundMath] needs of a record, dated the way [spendByCategory] dates it. Null for a record
-     * without a readable date, which no cycle counts.
-     */
-    private fun snapshotOf(record: ExpenseRecord): TransactionSnapshot? {
-        val date = parseFlexibleDate(record.date)
-            ?: record.remoteTimestamp?.let(::parseFlexibleDate)
-            ?: return null
-        return TransactionSnapshot(
-            id = record.id,
-            type = record.type,
-            date = date,
-            amount = record.amount,
-            accountId = record.accountId,
-            fromAccountId = record.fromAccountId,
-            toAccountId = record.toAccountId
         )
     }
 

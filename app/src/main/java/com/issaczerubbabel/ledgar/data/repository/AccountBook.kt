@@ -2,6 +2,7 @@ package com.issaczerubbabel.ledgar.data.repository
 
 import com.issaczerubbabel.ledgar.account.AccountSnapshot
 import com.issaczerubbabel.ledgar.account.TransactionSnapshot
+import com.issaczerubbabel.ledgar.account.toTransactionSnapshot
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownRole
@@ -44,19 +45,8 @@ data class AccountBook(
                         includedInTotals = record.includeInTotals
                     )
                 },
-                // A Transaction without a readable date can't be placed after an As-of date, so it never counts.
-                transactions = transactions.mapNotNull { record ->
-                    val date = parseFlexibleDate(record.date) ?: return@mapNotNull null
-                    TransactionSnapshot(
-                        id = record.id,
-                        type = record.type,
-                        date = date,
-                        amount = record.amount,
-                        accountId = record.accountId,
-                        fromAccountId = record.fromAccountId,
-                        toAccountId = record.toAccountId
-                    )
-                },
+                // A Transaction without a readable date (or remote timestamp) can't be placed after an As-of date, so it never counts.
+                transactions = transactions.mapNotNull { it.toTransactionSnapshot() },
                 transactionRecords = transactions
             )
         }

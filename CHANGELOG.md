@@ -18,10 +18,11 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Budget: a Set aside section shows each Fund's planned contribution and what is still to transfer
 - Stats: tap a Fund in Saved by Fund, or in the Budget tab's Set aside, to open its page
 - Budget: Plan this cycle sets each Fund's planned contribution, adds a New fund, and Carry over copies them
+- Database Setup: a hint asks you to redeploy the script when a Backup had to skip your Funds
 
 ### Changed
 
-- Stats: money you move into a Fund's Account counts as Saved, with a Saved by Fund breakdown
+- Stats: money moved into a Fund's Account counts as Saved and money taken out comes off it, with Saved by Fund
 - Budget: Left to spend takes off money Set aside, and spending from a Fund's Account leaves the cycle
 - Budget: Start new cycle asks for your whole salary, since Set aside now comes out of it
 
@@ -37,6 +38,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Funds: backed up to the Sheet's Fund tabs (script version 3) and restored on Import by Account name and cycle start date
 - Funds: StatsReport counts Set aside as Saved via FundMath and passes the Funds snapshot to the cycle view (#153)
 - Funds: budgetHome and planBuckets build the Budget and Plan state, and every Left to spend gets the Funds snapshot (#41)
+- Funds review: Free counts only Included holdings, releases reduce Saved, one TransactionSnapshot mapper, atomic saveFund
 
 ## [1.7.0] - 2026-11-27
 

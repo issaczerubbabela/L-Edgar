@@ -515,7 +515,9 @@ private fun CycleHeadline(s: StatsUiState, cycle: com.issaczerubbabel.ledgar.vie
     val sub = if (cycle.isRunning && summary.daysLeft > 0) {
         "of ${rupees(summary.cycle.spendableAmount)} · ${summary.daysLeft} days left · ${rupees(summary.dailyPace)} a day"
     } else {
-        "of ${rupees(summary.cycle.spendableAmount)} · spent ${rupees(summary.totalSpent)}"
+        // Spent below counts Expenses paid from Funds too; this figure is only what came out of the cycle.
+        val spent = if (summary.drawnFromFunds > 0) "${rupees(summary.totalSpent)} spent from this cycle" else "spent ${rupees(summary.totalSpent)}"
+        "of ${rupees(summary.cycle.spendableAmount)} · $spent"
     }
     Text(sub, style = tabularNumbers(MaterialTheme.typography.bodyMedium), color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (cycle.saved > 0) {

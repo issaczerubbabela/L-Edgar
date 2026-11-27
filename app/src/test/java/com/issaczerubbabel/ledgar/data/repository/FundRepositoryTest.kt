@@ -182,6 +182,63 @@ class FundRepositoryTest {
     }
 
     @Test
+    fun savingAFundWritesItAndItsHoldingsTogether() = runBlocking {
+        accounts.forEach { db.accountDao().insert(it) }
+        val rd = accountId("Emergency Fund RD")
+        val hdfc = accountId("HDFC")
+
+        val result = funds.saveFund(
+            Fund(name = " Emergency ", createdDate = "2026-09-01"),
+            listOf(
+                FundHolding(fundId = 0, accountId = rd, kind = HoldingKind.WHOLE.name, startDate = "2026-09-01"),
+                FundHolding(fundId = 0, accountId = hdfc, kind = HoldingKind.FIXED.name, amount = 70_000.0, startDate = "2026-09-01")
+            ),
+            removedHoldingIds = emptyList()
+        ) as SaveFundResult.Saved
+
+        val snapshot = funds.getSnapshot()
+        assertEquals("Emergency", snapshot.funds.single().name)
+        assertEquals(result.fundId, snapshot.funds.single().id)
+        assertEquals(setOf(rd, hdfc), snapshot.holdings.filter { it.fundId == result.fundId }.mapTo(HashSet()) { it.accountId })
+        assertEquals(snapshot.holdings.associate { it.accountId to it.id }, result.holdingIds)
+    }
+
+    @Test
+    fun aRefusedHoldingLeavesTheFundAsItWas() = runBlocking {
+        accounts.forEach { db.accountDao().insert(it) }
+        val rd = accountId("Emergency Fund RD")
+        val hdfc = accountId("HDFC")
+        val emergency = funds.createFund(Fund(name = "Emergency", createdDate = "2026-09-01"))
+        saved(funds.saveHolding(FundHolding(fundId = emergency, accountId = rd, kind = HoldingKind.WHOLE.name, startDate = "2026-09-01")))
+        val before = funds.getSnapshot()
+
+        // A new Fund whose second holding asks for the RD Emergency already holds whole: nothing is written.
+        val refusedNew = funds.saveFund(
+            Fund(name = "Insurance", createdDate = "2026-09-01"),
+            listOf(
+                FundHolding(fundId = 0, accountId = hdfc, kind = HoldingKind.FIXED.name, amount = 5_000.0, startDate = "2026-09-01"),
+                FundHolding(fundId = 0, accountId = rd, kind = HoldingKind.WHOLE.name, startDate = "2026-09-01")
+            ),
+            removedHoldingIds = emptyList()
+        )
+        assertEquals(SaveFundResult.Refused(rd, HoldingResult.AccountHeldWhole(emergency)), refusedNew)
+        assertEquals(before, funds.getSnapshot())
+
+        // An edit that renames, removes the RD holding and adds a refused one rolls back the rename and removal too.
+        val insurance = funds.createFund(Fund(name = "Insurance", createdDate = "2026-09-01"))
+        saved(funds.saveHolding(FundHolding(fundId = insurance, accountId = hdfc, kind = HoldingKind.FIXED.name, amount = 5_000.0, startDate = "2026-09-01")))
+        val beforeEdit = funds.getSnapshot()
+        val rdHolding = beforeEdit.holdings.single { it.accountId == rd }
+        val refusedEdit = funds.saveFund(
+            beforeEdit.funds.single { it.id == emergency }.copy(name = "Rainy day"),
+            listOf(FundHolding(fundId = emergency, accountId = hdfc, kind = HoldingKind.WHOLE.name, startDate = "2026-09-01")),
+            removedHoldingIds = listOf(rdHolding.id)
+        )
+        assertEquals(SaveFundResult.Refused(hdfc, HoldingResult.AccountHasOtherHoldings), refusedEdit)
+        assertEquals(beforeEdit, funds.getSnapshot())
+    }
+
+    @Test
     fun aPlannedContributionOfZeroIsRemovedAndDeletingAFundTakesItsHoldingsAndPlans() = runBlocking {
         givenTheUsersFunds()
         val ministry = funds.observeFunds().first().single { it.name == "Ministry" }.id

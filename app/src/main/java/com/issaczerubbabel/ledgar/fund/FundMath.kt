@@ -49,8 +49,11 @@ data class FundFlow(val byFund: Map<Long, Double>) {
     }
 }
 
-/** Your money (CONTEXT.md), and the holdings it can't see because their Account isn't Included in totals. */
-data class YourMoney(val total: Double, val excludedHoldings: List<FundHolding>)
+/**
+ * Your money (CONTEXT.md): [total], the [funds] held inside it (holdings in Accounts Included in
+ * totals), and the holdings it can't see because their Account isn't Included in totals.
+ */
+data class YourMoney(val total: Double, val funds: Double, val excludedHoldings: List<FundHolding>)
 
 /**
  * The only place Fund figures are worked out (Fund, Holding, Set aside, Free and Your money in
@@ -110,6 +113,20 @@ object FundMath {
         return whole[to]?.fundId
     }
 
+    /**
+     * The Fund a Transaction releases money out of: a Transfer from an Account a Fund holds whole
+     * into one no Fund does, from the holding's start date. Null for anything else, including a
+     * move between two Funds. Set aside never nets releases; Stats' Saved does (ADR-0004).
+     */
+    fun releasedFrom(txn: TransactionSnapshot, holdings: List<FundHolding>): Long? {
+        if (!txn.type.trim().equals("transfer", ignoreCase = true)) return null
+        val from = txn.fromAccountId ?: return null
+        val to = txn.toAccountId ?: return null
+        val whole = wholeHoldingsOn(holdings, txn.date)
+        if (to in whole) return null
+        return whole[from]?.fundId
+    }
+
     /** The Fund holding [accountId] whole on [date] (from that holding's start date), or null. */
     fun heldWholeOn(accountId: Long, date: LocalDate, holdings: List<FundHolding>): Long? =
         wholeHoldingsOn(holdings, date)[accountId]?.fundId
@@ -128,12 +145,17 @@ object FundMath {
         return wholeHoldingsOn(holdings, txn.date)[account]?.fundId
     }
 
-    /** Net worth over the Accounts Included in totals, flagging holdings in Accounts that aren't. */
+    /**
+     * Net worth over the Accounts Included in totals and the Funds held in those Accounts, flagging
+     * holdings in Accounts that aren't. A holding outside Your money is never taken off its Free.
+     */
     fun yourMoney(accounts: List<AccountSnapshot>, transactions: List<TransactionSnapshot>, holdings: List<FundHolding>): YourMoney {
         val included = accounts.filter { it.includedInTotals }.mapTo(HashSet()) { it.id }
+        val (inside, outside) = holdings.partition { it.accountId in included }
         return YourMoney(
             total = AccountMath.totals(accounts, transactions).netWorth,
-            excludedHoldings = holdings.filter { it.accountId !in included }
+            funds = fundsTotal(inside, AccountMath.balances(accounts, transactions)),
+            excludedHoldings = outside
         )
     }
 

@@ -39,8 +39,18 @@ class SyncStateRepository @Inject constructor(@ApplicationContext private val co
         }
     }
 
+    /** Whether the last Backup found the Apps Script too old for Funds (see [com.issaczerubbabel.ledgar.sync.FundsBackupStatus]). */
+    val fundsBackupNeedsRedeploy: Flow<Boolean> = context.syncStateStore.data.map { it[FUNDS_NEED_REDEPLOY] ?: false }
+
+    suspend fun setFundsBackupNeedsRedeploy(needsRedeploy: Boolean) {
+        context.syncStateStore.edit { prefs ->
+            if (needsRedeploy) prefs[FUNDS_NEED_REDEPLOY] = true else prefs.remove(FUNDS_NEED_REDEPLOY)
+        }
+    }
+
     private companion object {
         val LISTS_MERGED = booleanPreferencesKey("lists_merged_from_sheet")
         val HELD_SHEET_DELETIONS = stringSetPreferencesKey("held_sheet_deletions")
+        val FUNDS_NEED_REDEPLOY = booleanPreferencesKey("funds_backup_needs_redeploy")
     }
 }

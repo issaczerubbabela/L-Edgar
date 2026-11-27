@@ -62,7 +62,7 @@ data class YourMoneySplit(
     val thisCycle: Double,
     val free: Double,
     val accounts: List<AccountSplit>,
-    /** Fund holdings in Accounts not Included in totals: counted in Funds but not in Your money. */
+    /** Fund holdings in Accounts not Included in totals: left out of Your money, [funds] and [free]. */
     val holdingsOutsideTotals: Int
 ) {
     val isFreeNegative: Boolean get() = free < 0
@@ -111,7 +111,6 @@ private fun yourMoney(book: AccountBook, funds: FundsSnapshot, leftToSpend: Doub
     val holdings = funds.activeHoldings
     val balances = AccountMath.balances(book.accounts, book.transactions)
     val money = FundMath.yourMoney(book.accounts, book.transactions, holdings)
-    val fundsTotal = FundMath.fundsTotal(holdings, balances)
     val thisCycle = leftToSpend.coerceAtLeast(0.0)
 
     val fundNames = funds.activeFunds.associate { it.id to it.name }
@@ -138,9 +137,9 @@ private fun yourMoney(book: AccountBook, funds: FundsSnapshot, leftToSpend: Doub
 
     return YourMoneySplit(
         total = money.total,
-        funds = fundsTotal,
+        funds = money.funds,
         thisCycle = thisCycle,
-        free = FundMath.free(money.total, fundsTotal, thisCycle),
+        free = FundMath.free(money.total, money.funds, thisCycle),
         accounts = accounts,
         holdingsOutsideTotals = money.excludedHoldings.size
     )

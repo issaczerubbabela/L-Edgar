@@ -22,6 +22,8 @@ import com.issaczerubbabel.ledgar.sync.BackupWorker
 import com.issaczerubbabel.ledgar.sync.SyncScheduler
 import com.issaczerubbabel.ledgar.sync.SyncStatus
 import com.issaczerubbabel.ledgar.data.preferences.SyncStateRepository
+import com.issaczerubbabel.ledgar.data.repository.FundRepository
+import com.issaczerubbabel.ledgar.sync.FundsBackupStatus
 import com.issaczerubbabel.ledgar.ui.theme.AppThemeOption
 import com.issaczerubbabel.ledgar.util.CsvParser
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -32,6 +34,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -76,7 +79,8 @@ class SettingsViewModel @Inject constructor(
     private val syncScheduler: SyncScheduler,
     private val syncState: SyncStateRepository,
     private val reminderPreferences: ReminderPreferences,
-    private val reminderScheduler: DailyReminderScheduler
+    private val reminderScheduler: DailyReminderScheduler,
+    private val fundRepository: FundRepository
 ) : ViewModel() {
 
     init {
@@ -92,6 +96,12 @@ class SettingsViewModel @Inject constructor(
 
     val scriptUrl: StateFlow<String?> = themeRepository.scriptUrl
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** Database Setup's "Redeploy the script to back up Funds", set by any Backup, scheduled or not. */
+    val showFundsRedeployHint: StateFlow<Boolean> =
+        combine(syncState.fundsBackupNeedsRedeploy, fundRepository.observeFunds()) { needsRedeploy, funds ->
+            FundsBackupStatus.showHint(needsRedeploy, funds.size)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     val appLockEnabled: StateFlow<Boolean> = themeRepository.appLockEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)

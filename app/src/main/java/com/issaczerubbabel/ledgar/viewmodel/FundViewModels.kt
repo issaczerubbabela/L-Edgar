@@ -10,6 +10,7 @@ import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.BucketBudgetRepository
 import com.issaczerubbabel.ledgar.data.repository.FundRepository
 import com.issaczerubbabel.ledgar.data.repository.HoldingResult
+import com.issaczerubbabel.ledgar.data.repository.SaveFundResult
 import com.issaczerubbabel.ledgar.data.repository.UndoableActions
 import com.issaczerubbabel.ledgar.fund.FundMath
 import com.issaczerubbabel.ledgar.fund.FundsSnapshot
@@ -159,36 +160,28 @@ class FundEditorViewModel @Inject constructor(
         viewModelScope.launch {
             val snapshot = funds.getSnapshot()
             val existing = snapshot.funds.firstOrNull { it.id == current.fundId }
-            val today = LocalDate.now()
-            val fundId = if (existing == null) {
-                funds.createFund(FundEditor.toFund(current, existing = null, today = today))
-            } else {
-                funds.updateFund(FundEditor.toFund(current, existing, today))
-                existing.id
-            }
-            FundEditor.removedHoldingIds(current, snapshot).forEach { funds.removeHolding(it) }
-
-            val names = uiState.value.accountNames
-            val fundNames = snapshot.funds.associate { it.id to it.name }
-            var saved = current.copy(fundId = fundId)
-            var error: String? = null
-            FundEditor.toHoldings(current, fundId).forEach { holding ->
-                val name = names[holding.accountId].orEmpty()
-                when (val result = funds.saveHolding(holding)) {
-                    is HoldingResult.Saved -> saved = saved.copy(holdings = saved.holdings.map {
-                        if (it.accountId == holding.accountId) it.copy(holdingId = result.holdingId) else it
-                    })
-                    is HoldingResult.AccountHeldWhole -> error = "$name is already ${fundNames[result.fundId] ?: "another Fund"}'s whole account"
-                    HoldingResult.AccountHasOtherHoldings -> error = "Other Funds hold part of $name, so it can't be held whole"
-                    HoldingResult.AlreadyInFund -> error = "This Fund already holds $name"
-                    HoldingResult.FundNotFound -> error = "This Fund no longer exists"
+            val result = funds.saveFund(
+                fund = FundEditor.toFund(current, existing, LocalDate.now()),
+                holdings = FundEditor.toHoldings(current, current.fundId),
+                removedHoldingIds = FundEditor.removedHoldingIds(current, snapshot)
+            )
+            when (result) {
+                is SaveFundResult.Saved -> {
+                    draft.value = current.copy(
+                        fundId = result.fundId,
+                        holdings = current.holdings.map { it.copy(holdingId = result.holdingIds[it.accountId] ?: it.holdingId) }
+                    )
+                    startedFor = result.fundId
+                    status.value = Status()
+                    onSaved(result.fundId)
                 }
+                is SaveFundResult.Refused -> {
+                    val name = uiState.value.accountNames[result.accountId].orEmpty()
+                    val fundNames = snapshot.funds.associate { it.id to it.name }
+                    status.value = Status(error = refusalText(result.reason, name, fundNames))
+                }
+                SaveFundResult.FundNotFound -> status.value = Status(error = "This Fund no longer exists")
             }
-            // A second Save after an error updates the Fund just created instead of making another.
-            draft.value = saved
-            startedFor = fundId
-            status.value = Status(error = error)
-            if (error == null) onSaved(fundId)
         }
     }
 
@@ -216,4 +209,13 @@ class FundEditorViewModel @Inject constructor(
             onDone()
         }
     }
+}
+
+/** Why the holding of [accountName] was refused, as the Fund sheet says it. */
+private fun refusalText(reason: HoldingResult, accountName: String, fundNames: Map<Long, String>): String = when (reason) {
+    is HoldingResult.AccountHeldWhole -> "$accountName is already ${fundNames[reason.fundId] ?: "another Fund"}'s whole account"
+    HoldingResult.AccountHasOtherHoldings -> "Other Funds hold part of $accountName, so it can't be held whole"
+    HoldingResult.AlreadyInFund -> "This Fund already holds $accountName"
+    HoldingResult.FundNotFound -> "This Fund no longer exists"
+    is HoldingResult.Saved -> ""
 }

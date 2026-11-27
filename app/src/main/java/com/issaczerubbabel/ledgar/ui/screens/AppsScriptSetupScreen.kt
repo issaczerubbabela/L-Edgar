@@ -1654,6 +1654,7 @@ fun AppsScriptSetupScreen(
   val keyboardController = LocalSoftwareKeyboardController.current
   val configuredUrl by vm.scriptUrl.collectAsStateWithLifecycle()
   val connectionState by vm.connectionTestState.collectAsStateWithLifecycle()
+  val showFundsRedeployHint by vm.showFundsRedeployHint.collectAsStateWithLifecycle()
 
     var urlInput by remember(configuredUrl) { mutableStateOf(configuredUrl.orEmpty()) }
     var showValidationError by remember { mutableStateOf(false) }
@@ -1684,6 +1685,14 @@ fun AppsScriptSetupScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            if (showFundsRedeployHint) {
+              // Set by the last Backup, scheduled or not, when the deployed script skipped Funds.
+              Text(
+                "Redeploy the script to back up Funds: copy it below and deploy a new version.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error
+              )
+            }
             Text("Step 1: The Code", style = MaterialTheme.typography.titleMedium)
             Text(
               "Deploy a private Google Apps Script as your sync backend. Copy this script and paste it into Apps Script.",

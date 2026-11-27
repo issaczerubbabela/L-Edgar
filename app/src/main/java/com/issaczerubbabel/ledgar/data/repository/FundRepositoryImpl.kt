@@ -22,13 +22,40 @@ class FundRepositoryImpl @Inject constructor(
 
     override fun observeFunds(): Flow<List<Fund>> = dao.observeFunds()
 
-    override fun observeFund(fundId: Long): Flow<Fund?> = dao.observeFund(fundId)
-
     override fun observeSnapshot(): Flow<FundsSnapshot> =
         combine(dao.observeFunds(), dao.observeHoldings(), dao.observeAllPlans(), ::FundsSnapshot)
 
     override suspend fun getSnapshot(): FundsSnapshot = db.withTransaction {
         FundsSnapshot(dao.getAllFunds(), dao.getAllHoldings(), dao.getAllPlans())
+    }
+
+    override suspend fun saveFund(fund: Fund, holdings: List<FundHolding>, removedHoldingIds: List<Long>): SaveFundResult =
+        try {
+            db.withTransaction { writeFund(fund, holdings, removedHoldingIds) }
+        } catch (refusal: Refusal) {
+            refusal.result
+        }
+
+    /** Thrown inside the transaction so Room rolls it back. */
+    private class Refusal(val result: SaveFundResult) : Exception()
+
+    private suspend fun writeFund(fund: Fund, holdings: List<FundHolding>, removedHoldingIds: List<Long>): SaveFundResult {
+        val fundId = if (fund.id == 0L) {
+            createFund(fund)
+        } else {
+            if (dao.getFund(fund.id) == null) throw Refusal(SaveFundResult.FundNotFound)
+            updateFund(fund)
+            fund.id
+        }
+        removedHoldingIds.forEach { removeHolding(it) }
+        val ids = LinkedHashMap<Long, Long>()
+        holdings.forEach { holding ->
+            when (val result = saveHolding(holding.copy(fundId = fundId))) {
+                is HoldingResult.Saved -> ids[holding.accountId] = result.holdingId
+                else -> throw Refusal(SaveFundResult.Refused(holding.accountId, result))
+            }
+        }
+        return SaveFundResult.Saved(fundId, ids)
     }
 
     override suspend fun createFund(fund: Fund): Long = dao.insertFund(fund.copy(id = 0, name = fund.name.trim()))
@@ -70,8 +97,6 @@ class FundRepositoryImpl @Inject constructor(
     override suspend fun removeHolding(holdingId: Long) {
         db.withTransaction { dao.getHolding(holdingId)?.let { dao.deleteHolding(it) } }
     }
-
-    override fun observePlans(cycleId: Long): Flow<List<FundPlan>> = dao.observePlans(cycleId)
 
     override suspend fun setPlannedContribution(fundId: Long, cycleId: Long, amount: Double) {
         if (amount > 0.0 && amount.isFinite()) dao.upsertPlan(FundPlan(fundId, cycleId, amount))

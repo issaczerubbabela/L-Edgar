@@ -1,6 +1,6 @@
 package com.issaczerubbabel.ledgar.viewmodel
 
-import com.issaczerubbabel.ledgar.account.TransactionSnapshot
+import com.issaczerubbabel.ledgar.account.toTransactionSnapshot
 import com.issaczerubbabel.ledgar.data.bucket.CycleSummary
 import com.issaczerubbabel.ledgar.data.bucket.CycleSummaryBuilder
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
@@ -407,28 +407,37 @@ object StatsReport {
         val budgetBasis: Boolean,
         val holdings: List<FundHolding> = emptyList()
     ) {
-        /** How a Transfer touches Funds: the Fund it's Set aside into, and whether either side is a Fund's whole Account. */
-        private class FundSides(val setAsideInto: Long?, val touchesFund: Boolean)
+        /**
+         * How a Transfer touches Funds: the Fund it's Set aside into, the Fund it releases money
+         * out of, and whether either side is a Fund's whole Account.
+         */
+        private class FundSides(val setAsideInto: Long?, val releasedFrom: Long?, val touchesFund: Boolean)
 
-        private val noFund = FundSides(null, false)
+        private val noFund = FundSides(null, null, false)
         private val sides = IdentityHashMap<ExpenseRecord, FundSides>()
 
         private fun fundSides(r: ExpenseRecord): FundSides {
             if (holdings.isEmpty()) return noFund
             return sides.getOrPut(r) {
-                val date = parseFlexibleDate(r.date) ?: return@getOrPut noFund
-                val txn = TransactionSnapshot(r.id, r.type, date, r.amount, r.accountId, r.fromAccountId, r.toAccountId)
+                val txn = r.toTransactionSnapshot() ?: return@getOrPut noFund
                 val into = FundMath.setAsideInto(txn, holdings)
-                val touches = into != null || listOfNotNull(r.fromAccountId, r.toAccountId).any { FundMath.heldWholeOn(it, date, holdings) != null }
-                FundSides(into, touches)
+                val out = FundMath.releasedFrom(txn, holdings)
+                val touches = into != null || out != null ||
+                    listOfNotNull(r.fromAccountId, r.toAccountId).any { FundMath.heldWholeOn(it, txn.date, holdings) != null }
+                FundSides(into, out, touches)
             }
         }
 
         /** What [r], a Transfer, adds to Saved. */
         private fun transferSaved(r: ExpenseRecord): Double {
             val funds = fundSides(r)
-            // Set aside counts whatever the Account group; a move between Funds or out of one doesn't count either way.
-            if (funds.touchesFund) return if (funds.setAsideInto != null) r.amount else 0.0
+            // Whatever the Account group: Set aside is saved, a release out of a Fund is taken back
+            // (as the Savings group was before Funds), and a move between Funds is neither.
+            if (funds.touchesFund) return when {
+                funds.setAsideInto != null -> r.amount
+                funds.releasedFrom != null -> -r.amount
+                else -> 0.0
+            }
             val intoSavings = roles.isSavingsGroup(groupOf(r.toAccountId, r.toAccountName))
             val outOfSavings = roles.isSavingsGroup(groupOf(r.fromAccountId, r.fromAccountName))
             return when {

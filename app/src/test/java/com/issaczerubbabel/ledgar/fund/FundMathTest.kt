@@ -165,6 +165,15 @@ class FundMathTest {
     }
 
     @Test
+    fun yourMoneysFundsCountOnlyHoldingsInIncludedAccounts() {
+        val yourMoney = FundMath.yourMoney(accounts, emptyList(), holdings)
+
+        // Emergency 20,000 + 70,000 and Ministry 5,000; the Insurance RD's 12,000 isn't in Your money either.
+        assertEquals(95_000.0, yourMoney.funds, 0.0)
+        assertEquals(107_000.0, FundMath.fundsTotal(holdings, balances(emptyList())), 0.0)
+    }
+
+    @Test
     fun freeIsYourMoneyLessFundsLessWhatIsLeftOfThisCycle() {
         assertEquals(20_000.0, FundMath.free(yourMoney = 150_000.0, funds = 100_000.0, thisCycle = 30_000.0), 0.0)
     }

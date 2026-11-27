@@ -83,7 +83,7 @@ Where a Fund's money sits: either a **whole Account**, whose balance is the hold
 _Avoid_: kept in, earmark (as a noun)
 
 **Free**:
-Money in an Account, or in all of them, that no Fund holds and no running Salary cycle still plans to spend: Your money minus Funds minus what is left of This cycle (never less than zero). Free can go below zero, which means the plan uses more money than there is.
+Money in an Account, or in all of them, that no Fund holds and no running Salary cycle still plans to spend: Your money minus the Funds held in it (holdings in Accounts Included in totals) minus what is left of This cycle (never less than zero). Free can go below zero, which means the plan uses more money than there is.
 _Avoid_: available, spare
 
 **Your money**:
@@ -111,7 +111,7 @@ Expenses in a period, not counting Saving Categories, minus Refunds.
 _Avoid_: total expenses (when Saving Categories are included)
 
 **Saved**:
-Money put aside in a period: Expenses in Saving Categories, plus every Set aside Transfer (from an Account no Fund holds whole into one a Fund does, whatever its Account group). A Transfer between two Fund Accounts is a move, and a Transfer out of a Fund's Account to one no Fund holds isn't taken back, as on the Budget tab. Transfers that touch no Fund's Account still follow the Account groups: into a Savings group from outside it counts, out of one is taken back. Saved money is never Spent; an Expense paid from a Fund's Account is still Spent on its date. Stats breaks Saved down by Fund.
+Money put aside in a period: Expenses in Saving Categories, plus every Set aside Transfer (from an Account no Fund holds whole into one a Fund does, whatever its Account group). A Transfer between two Fund Accounts is a move, and a Transfer out of a Fund's Account to one no Fund holds whole is taken back, as the Savings group's were before Funds (the Budget tab's Set aside never nets them). Transfers that touch no Fund's Account still follow the Account groups: into a Savings group from outside it counts, out of one is taken back. Saved money is never Spent; an Expense paid from a Fund's Account is still Spent on its date. Stats breaks Saved down by Fund.
 _Avoid_: invested, spent (for Saving Categories)
 
 **Refund**:

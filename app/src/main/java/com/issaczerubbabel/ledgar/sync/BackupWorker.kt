@@ -7,6 +7,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.issaczerubbabel.ledgar.data.bucket.BucketBackupMapper
+import com.issaczerubbabel.ledgar.data.preferences.SyncStateRepository
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
 import com.issaczerubbabel.ledgar.data.remote.AccountSyncDto
 import com.issaczerubbabel.ledgar.data.remote.ApiService
@@ -39,7 +40,8 @@ class BackupWorker @AssistedInject constructor(
     private val fundRepository: FundRepository,
     private val apiService: ApiService,
     private val preferenceRepository: ThemePreferenceRepository,
-    private val listsMerger: SheetListsMerger
+    private val listsMerger: SheetListsMerger,
+    private val syncState: SyncStateRepository
 ) : CoroutineWorker(context, workerParams) {
 
     private var lastSyncError: String? = null
@@ -55,6 +57,8 @@ class BackupWorker @AssistedInject constructor(
             val budgetCount = dropdownCount?.let { backupBudgets(scriptUrl) }
             val bucketCount = budgetCount?.let { backupBucketBudgets(scriptUrl) }
             val fundCount = bucketCount?.let { backupFunds(scriptUrl) }
+            // Remembered so a scheduled Backup can ask for a redeploy too, not only one run from Settings.
+            FundsBackupStatus.needsRedeploy(fundCount)?.let { syncState.setFundsBackupNeedsRedeploy(it) }
             if (accountCount == null || dropdownCount == null || budgetCount == null || bucketCount == null || fundCount == null) {
                 retryOrFail(lastSyncError ?: "Backup failed")
             } else {
@@ -228,7 +232,7 @@ class BackupWorker @AssistedInject constructor(
     /**
      * Backs up Funds with their holdings and Planned contributions. Returns the number of Funds sent,
      * [SCRIPT_OUTDATED] when the deployed script predates Funds (so the rest of the Backup still
-     * succeeds and Settings asks for a redeploy), or null when the request failed.
+     * succeeds and Database Setup asks for a redeploy), or null when the request failed.
      *
      * Funds go in `funds` with `records` empty, so an older script has nothing to file as
      * transactions. An empty list is sent too, so deleting the last Fund clears the Sheet's tabs;

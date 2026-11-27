@@ -277,6 +277,16 @@ class BudgetHomeTest {
     }
 
     @Test
+    fun aFundInAnAccountNotIncludedInTotalsDoesNotLowerFree() {
+        val withWallet = state(funds = funds.copy(holdings = funds.holdings + whole(9, 13, 7))).yourMoney!!
+        val money = state().yourMoney!!
+
+        assertEquals(money.funds, withWallet.funds, 0.001)
+        assertEquals(money.free, withWallet.free, 0.001)
+        assertEquals(withWallet.total, withWallet.funds + withWallet.thisCycle + withWallet.free, 0.001)
+    }
+
+    @Test
     fun aClosedCycleHasNoYourMoneyCard() {
         val closed = state(cycle = cycle.copy(closedAt = "2026-10-26"))
 

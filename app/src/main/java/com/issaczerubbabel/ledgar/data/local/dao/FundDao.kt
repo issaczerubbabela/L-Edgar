@@ -28,9 +28,6 @@ interface FundDao {
     @Query("SELECT * FROM funds WHERE id = :fundId")
     suspend fun getFund(fundId: Long): Fund?
 
-    @Query("SELECT * FROM funds WHERE id = :fundId")
-    fun observeFund(fundId: Long): Flow<Fund?>
-
     @Query("SELECT * FROM funds ORDER BY sortOrder ASC, id ASC")
     fun observeFunds(): Flow<List<Fund>>
 
@@ -57,10 +54,6 @@ interface FundDao {
     @Query("SELECT * FROM fund_holdings ORDER BY fundId ASC, id ASC")
     suspend fun getAllHoldings(): List<FundHolding>
 
-    /** The WHOLE holding of [accountId], whichever Fund has it. */
-    @Query("SELECT * FROM fund_holdings WHERE accountId = :accountId AND kind = 'WHOLE' ORDER BY id ASC LIMIT 1")
-    suspend fun getWholeHolding(accountId: Long): FundHolding?
-
     // ── Planned contributions ─────────────────────────────────────────────────
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -71,9 +64,6 @@ interface FundDao {
 
     @Query("DELETE FROM fund_plans WHERE fundId = :fundId AND cycleId = :cycleId")
     suspend fun deletePlan(fundId: Long, cycleId: Long)
-
-    @Query("SELECT * FROM fund_plans WHERE cycleId = :cycleId ORDER BY fundId ASC")
-    fun observePlans(cycleId: Long): Flow<List<FundPlan>>
 
     @Query("SELECT * FROM fund_plans WHERE cycleId = :cycleId ORDER BY fundId ASC")
     suspend fun getPlans(cycleId: Long): List<FundPlan>

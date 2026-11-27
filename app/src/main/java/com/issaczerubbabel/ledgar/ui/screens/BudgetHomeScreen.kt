@@ -509,7 +509,7 @@ private fun YourMoneySheet(money: YourMoneySplit, onDismiss: () -> Unit) {
                 Text(
                     text = "${money.holdingsOutsideTotals} Fund ${plural(money.holdingsOutsideTotals, "holding")} " +
                         "${if (money.holdingsOutsideTotals == 1) "is" else "are"} in an Account not Included in totals: " +
-                        "counted in Funds, but not in Your money.",
+                        "left out of Your money, Funds and Free.",
                     style = MaterialTheme.typography.bodySmall,
                     color = ExpenseOrange
                 )
