@@ -16,6 +16,13 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
+        version = "v1.8.1",
+        date = "2026-11-28",
+        changed = listOf(
+            "Daily reminder: says how many captures are waiting and what they add up to, and Review opens To review"
+        )
+    ),
+    ChangelogRelease(
         version = "v1.8.0",
         date = "2026-11-27",
         added = listOf(
