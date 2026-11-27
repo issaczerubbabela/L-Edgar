@@ -159,9 +159,9 @@ private fun StartCycleForm(
                 supportingText = {
                     Text(
                         when {
-                            state.error == StartCycleFormError.AMOUNT -> "Enter the amount you have to spend, for example 68000."
-                            state.amountWasPrefilled -> "Prefilled from your last cycle. Nothing is saved until you start."
-                            else -> "What you can spend before your next payday."
+                            state.error == StartCycleFormError.AMOUNT -> "Enter your whole salary, for example 68000."
+                            state.amountWasPrefilled -> "Prefilled from your last cycle. Enter your whole salary: Set aside comes out of it."
+                            else -> "Your whole salary. Set aside for Funds comes out of it too."
                         }
                     )
                 },
@@ -177,9 +177,10 @@ private fun StartCycleForm(
         }
 
         CarryOverRow(
-            enabled = state.carryableBucketCount > 0,
-            checked = state.carryOver && state.carryableBucketCount > 0,
-            bucketCount = state.carryableBucketCount,
+            enabled = state.canCarryOver,
+            checked = state.carryOver && state.canCarryOver,
+            title = if (state.carryablePlanCount > 0) "Carry over my plan" else "Carry over my buckets",
+            supporting = state.carryOverText,
             onCheckedChange = onCarryOverChange
         )
 
@@ -238,21 +239,16 @@ private fun DateField(
 }
 
 @Composable
-private fun CarryOverRow(enabled: Boolean, checked: Boolean, bucketCount: Int, onCheckedChange: (Boolean) -> Unit) {
+private fun CarryOverRow(enabled: Boolean, checked: Boolean, title: String, supporting: String, onCheckedChange: (Boolean) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(text = "Carry over my buckets", style = MaterialTheme.typography.bodyLarge)
+            Text(text = title, style = MaterialTheme.typography.bodyLarge)
             Text(
-                text = if (enabled) {
-                    "$bucketCount ${if (bucketCount == 1) "bucket" else "buckets"} and their categories. " +
-                        "Spending starts again from zero."
-                } else {
-                    "You have no buckets to carry over yet."
-                },
+                text = supporting,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

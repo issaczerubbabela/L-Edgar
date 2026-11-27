@@ -20,10 +20,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,6 +36,20 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -43,6 +61,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.bucket.CycleSummary
+import com.issaczerubbabel.ledgar.data.bucket.FundContribution
+import com.issaczerubbabel.ledgar.ui.components.BucketColorDot
 import com.issaczerubbabel.ledgar.ui.components.BucketRow
 import com.issaczerubbabel.ledgar.ui.components.PaceBar
 import com.issaczerubbabel.ledgar.ui.components.SectionLabel
@@ -50,9 +70,12 @@ import com.issaczerubbabel.ledgar.ui.components.StatCard
 import com.issaczerubbabel.ledgar.ui.components.tabularNumbers
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseOrange
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseRed
+import com.issaczerubbabel.ledgar.ui.theme.IncomeGreen
+import com.issaczerubbabel.ledgar.ui.theme.bucketColor
 import com.issaczerubbabel.ledgar.util.formatRupees
 import com.issaczerubbabel.ledgar.viewmodel.BudgetUiState
 import com.issaczerubbabel.ledgar.viewmodel.BudgetViewModel
+import com.issaczerubbabel.ledgar.viewmodel.YourMoneySplit
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -64,6 +87,8 @@ fun BudgetHomeScreen(
     onOpenBucket: (Long) -> Unit,
     onPlanBuckets: () -> Unit,
     onStartCycle: () -> Unit,
+    /** Opens a Fund's page from its Set aside row. */
+    onOpenFund: (Long) -> Unit,
     vm: BudgetViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -75,7 +100,8 @@ fun BudgetHomeScreen(
         onNewer = vm::showNewerCycle,
         onOpenBucket = onOpenBucket,
         onPlanBuckets = onPlanBuckets,
-        onStartCycle = onStartCycle
+        onStartCycle = onStartCycle,
+        onOpenFund = onOpenFund
     )
 }
 
@@ -87,9 +113,15 @@ private fun BudgetHomeContent(
     onNewer: () -> Unit,
     onOpenBucket: (Long) -> Unit,
     onPlanBuckets: () -> Unit,
-    onStartCycle: () -> Unit
+    onStartCycle: () -> Unit,
+    onOpenFund: (Long) -> Unit
 ) {
     val summary = state.summary
+    var showingSplit by rememberSaveable { mutableStateOf(false) }
+    val yourMoney = state.yourMoney
+    if (showingSplit && yourMoney != null) {
+        YourMoneySheet(money = yourMoney, onDismiss = { showingSplit = false })
+    }
 
     when {
         state.isLoading -> Box(
@@ -111,6 +143,9 @@ private fun BudgetHomeContent(
             item {
                 Text(text = "Budget", style = MaterialTheme.typography.headlineMedium)
             }
+            if (yourMoney != null) {
+                item { YourMoneyCard(money = yourMoney, onClick = { showingSplit = true }) }
+            }
             item {
                 CycleHeader(
                     summary = summary,
@@ -124,10 +159,10 @@ private fun BudgetHomeContent(
             if (summary.isOverdue && state.isRunning) {
                 item { OverdueBanner(summary = summary, onStartCycle = onStartCycle) }
             }
-            item { Hero(summary = summary) }
-            item { StatRow(summary = summary, isRunning = state.isRunning) }
+            item { Hero(summary = summary, hasFunds = state.hasFunds) }
+            item { StatRow(summary = summary, isRunning = state.isRunning, hasFunds = state.hasFunds) }
 
-            item { SectionLabel("Buckets") }
+            item { SectionLabel(if (state.hasFunds) "Spending" else "Buckets") }
             if (summary.buckets.isEmpty()) {
                 item { NoBucketsCard(isRunning = state.isRunning) }
             } else {
@@ -145,6 +180,22 @@ private fun BudgetHomeContent(
 
             if (summary.unbucketed.isNotEmpty()) {
                 item { UnbucketedNudge(summary = summary, isRunning = state.isRunning, onClick = onPlanBuckets) }
+            }
+
+            if (state.hasFunds && (summary.fundContributions.isNotEmpty() || state.setAsideNoFund > 0.0)) {
+                item { SectionLabel("Set aside") }
+                items(summary.fundContributions, key = { "fund-${it.fund.id}" }) { contribution ->
+                    Column {
+                        FundContributionRow(
+                            contribution = contribution,
+                            onClick = { onOpenFund(contribution.fund.id) }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
+                if (state.setAsideNoFund > 0.0) {
+                    item { SetAsideNoFundRow(amount = state.setAsideNoFund) }
+                }
             }
 
             if (state.isRunning) {
@@ -277,7 +328,7 @@ private fun OverdueBanner(summary: CycleSummary, onStartCycle: () -> Unit) {
 }
 
 @Composable
-private fun Hero(summary: CycleSummary) {
+private fun Hero(summary: CycleSummary, hasFunds: Boolean) {
     val overspent = summary.leftToSpend < 0
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         SectionLabel(if (overspent) "Overspent" else "Left to spend")
@@ -287,7 +338,8 @@ private fun Hero(summary: CycleSummary) {
             color = if (overspent) ExpenseRed else MaterialTheme.colorScheme.onSurface
         )
         Text(
-            text = "of ${formatRupees(summary.cycle.spendableAmount)} · ${formatRupees(summary.totalSpent)} spent",
+            text = "of ${formatRupees(summary.cycle.spendableAmount)} · ${formatRupees(summary.totalSpent)} spent" +
+                if (hasFunds && summary.setAside > 0.0) " · ${formatRupees(summary.setAside)} set aside" else "",
             style = tabularNumbers(MaterialTheme.typography.bodyMedium),
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -295,7 +347,7 @@ private fun Hero(summary: CycleSummary) {
 }
 
 @Composable
-private fun StatRow(summary: CycleSummary, isRunning: Boolean) {
+private fun StatRow(summary: CycleSummary, isRunning: Boolean, hasFunds: Boolean) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         if (isRunning) {
             StatCard(
@@ -310,6 +362,8 @@ private fun StatRow(summary: CycleSummary, isRunning: Boolean) {
             label = "Unallocated",
             value = formatRupees(summary.unallocated),
             valueColor = if (summary.unallocated < 0) ExpenseRed else MaterialTheme.colorScheme.onSurface,
+            // Unbucketed spend sits next to Unallocated, not in it: Unallocated is a planning figure.
+            supporting = if (hasFunds && summary.unbucketedSpent > 0.0) "+ ${formatRupees(summary.unbucketedSpent)} unbucketed" else null,
             modifier = Modifier.weight(1f)
         )
         StatCard(
@@ -348,6 +402,220 @@ private fun UnbucketedNudge(summary: CycleSummary, isRunning: Boolean, onClick: 
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+/**
+ * Your money = Funds + This cycle + Free, read by TalkBack as one sentence. Tapping it opens the
+ * per-Account split.
+ */
+@Composable
+private fun YourMoneyCard(money: YourMoneySplit, onClick: () -> Unit) {
+    val spoken = money.spokenSummary + if (money.isFreeNegative) ". $SALARY_NOT_IN_YET" else ""
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .clickable(onClick = onClick)
+            .clearAndSetSemantics {
+                contentDescription = spoken
+                role = Role.Button
+                onClick(label = "Show by Account") { onClick(); true }
+            }
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SectionLabel("Your money", modifier = Modifier.weight(1f))
+            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(text = formatRupees(money.total), style = tabularNumbers(MaterialTheme.typography.headlineMedium))
+        Text(
+            text = buildAnnotatedString {
+                append("Funds ${formatRupees(money.funds)} · This cycle ${formatRupees(money.thisCycle)} left · ")
+                if (money.isFreeNegative) {
+                    withStyle(SpanStyle(color = ExpenseRed)) { append("Free ${formatRupees(money.free)}") }
+                } else {
+                    append("Free ${formatRupees(money.free)}")
+                }
+            },
+            style = tabularNumbers(MaterialTheme.typography.bodyMedium),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (money.isFreeNegative) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
+                Icon(Icons.Filled.Warning, contentDescription = null, tint = ExpenseRed, modifier = Modifier.size(16.dp).padding(top = 2.dp))
+                Text(
+                    text = "${money.overPlannedText}. $SALARY_NOT_IN_YET",
+                    style = tabularNumbers(MaterialTheme.typography.bodySmall),
+                    color = ExpenseRed
+                )
+            }
+        }
+    }
+}
+
+private const val SALARY_NOT_IN_YET = "If this cycle started before your salary landed, this clears when it arrives."
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun YourMoneySheet(money: YourMoneySplit, onDismiss: () -> Unit) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(text = "Your money by Account", style = MaterialTheme.typography.titleLarge)
+            money.accounts.forEach { account ->
+                Column(
+                    modifier = Modifier.semantics(mergeDescendants = true) {},
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    SplitLine(label = account.name, amount = account.balance, style = MaterialTheme.typography.titleMedium)
+                    account.funds.forEach { part ->
+                        SplitLine(label = "${part.fundName} Fund", amount = part.amount, muted = true)
+                    }
+                    if (account.funds.isNotEmpty() && account.rest != 0.0) {
+                        SplitLine(label = "Not in a Fund", amount = account.rest, muted = true)
+                    }
+                    if (account.shortBy > 0.0) {
+                        Text(
+                            text = "${formatRupees(account.shortBy)} short: its Funds hold more than it has",
+                            style = tabularNumbers(MaterialTheme.typography.bodySmall),
+                            color = ExpenseRed
+                        )
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+            SplitLine(label = "Funds", amount = money.funds)
+            SplitLine(label = "This cycle, still to spend", amount = money.thisCycle)
+            SplitLine(label = "Free", amount = money.free, color = if (money.isFreeNegative) ExpenseRed else null)
+            if (money.isFreeNegative) {
+                Text(
+                    text = "${money.overPlannedText}. $SALARY_NOT_IN_YET",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ExpenseRed
+                )
+            }
+            if (money.holdingsOutsideTotals > 0) {
+                Text(
+                    text = "${money.holdingsOutsideTotals} Fund ${plural(money.holdingsOutsideTotals, "holding")} " +
+                        "${if (money.holdingsOutsideTotals == 1) "is" else "are"} in an Account not Included in totals: " +
+                        "counted in Funds, but not in Your money.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ExpenseOrange
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SplitLine(
+    label: String,
+    amount: Double,
+    style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium,
+    muted: Boolean = false,
+    color: Color? = null
+) {
+    val tint = color ?: if (muted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = if (muted) 12.dp else 0.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(text = label, style = style, color = tint, modifier = Modifier.weight(1f))
+        Text(text = formatRupees(amount), style = tabularNumbers(style), color = tint, maxLines = 1, softWrap = false)
+    }
+}
+
+/** One Fund's Planned contribution against what this cycle has Set aside into it, in the BucketRow style. */
+@Composable
+private fun FundContributionRow(contribution: FundContribution, onClick: (() -> Unit)?) {
+    val fund = contribution.fund
+    val progress = when {
+        contribution.planned > 0.0 -> (contribution.setAside / contribution.planned).toFloat()
+        contribution.setAside > 0.0 -> 1f
+        else -> 0f
+    }
+    val status = when {
+        contribution.planned <= 0.0 -> "${formatRupees(contribution.setAside)} set aside, none planned"
+        contribution.isMet -> "${formatRupees(contribution.setAside)} of ${formatRupees(contribution.planned)} ✓"
+        else -> "${formatRupees(contribution.stillToTransfer)} still to transfer"
+    }
+    val spoken = "${fund.name} Fund: " + when {
+        contribution.planned <= 0.0 -> "${formatRupees(contribution.setAside)} set aside, none planned"
+        contribution.isMet -> "${formatRupees(contribution.setAside)} set aside of ${formatRupees(contribution.planned)}, done"
+        else -> "${formatRupees(contribution.setAside)} set aside of ${formatRupees(contribution.planned)}, " +
+            "${formatRupees(contribution.stillToTransfer)} still to transfer"
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClickLabel = "Open ${fund.name}", onClick = onClick) else Modifier)
+            .semantics(mergeDescendants = true) { contentDescription = spoken }
+            .padding(vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            BucketColorDot(fund.colorIndex, modifier = Modifier.padding(top = 7.dp))
+            if (fund.emoji.isNotBlank()) {
+                Text(fund.emoji, modifier = Modifier.clearAndSetSemantics { }, style = MaterialTheme.typography.bodyLarge)
+            }
+            Text(text = fund.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            if (contribution.isMet && contribution.planned > 0.0) {
+                Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = IncomeGreen, modifier = Modifier.size(20.dp))
+            } else {
+                Text(
+                    text = "${formatRupees(contribution.setAside)} in",
+                    style = tabularNumbers(MaterialTheme.typography.titleMedium),
+                    textAlign = TextAlign.End,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+        }
+        PaceBar(spentFraction = progress, paceFraction = null, color = bucketColor(fund.colorIndex), isOver = false)
+        Text(
+            text = status,
+            style = tabularNumbers(MaterialTheme.typography.bodySmall),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/** Transfers into a Savings-group Account that no Fund holds. Shown, but not taken off Left to spend. */
+@Composable
+private fun SetAsideNoFundRow(amount: Double) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {}
+            .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(text = "Set aside, no Fund", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = "Moved into Savings Accounts no Fund holds. Give one a Fund to plan for it.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(
+            text = formatRupees(amount),
+            style = tabularNumbers(MaterialTheme.typography.titleMedium),
+            maxLines = 1,
+            softWrap = false
+        )
     }
 }
 

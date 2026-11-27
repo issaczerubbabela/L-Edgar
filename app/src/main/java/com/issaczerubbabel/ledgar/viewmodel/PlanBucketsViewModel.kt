@@ -4,9 +4,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.issaczerubbabel.ledgar.data.bucket.CycleSummary
 import com.issaczerubbabel.ledgar.data.bucket.CycleSummaryBuilder
+import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetBucket
+import com.issaczerubbabel.ledgar.data.local.entity.BudgetCycle
+import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.data.local.entity.Fund
 import com.issaczerubbabel.ledgar.data.repository.BucketBudgetRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
+import com.issaczerubbabel.ledgar.data.repository.FundRepository
+import com.issaczerubbabel.ledgar.fund.FundsSnapshot
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -21,20 +27,49 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
 
+/** One Fund in Plan this cycle's Set aside group, with its Planned contribution (0 when none). */
+data class PlannedContributionRow(val fund: Fund, val planned: Double)
+
 data class PlanBucketsUiState(
     val isLoading: Boolean = true,
     /** The running cycle being planned, or null when none has been started. */
     val summary: CycleSummary? = null,
     /** How many categories are routed into each bucket, including ones with no spend yet. */
-    val categoryCountByBucket: Map<Long, Int> = emptyMap()
+    val categoryCountByBucket: Map<Long, Int> = emptyMap(),
+    /** Every active Fund, in Fund order. Empty without Funds. */
+    val contributions: List<PlannedContributionRow> = emptyList()
 )
 
-/** Planning happens on payday, against the running cycle: split what you have into buckets. */
+/** Plan this cycle for [cycle]: its Buckets, and a Planned contribution row for every active Fund. Pure. */
+fun planBuckets(
+    cycle: BudgetCycle,
+    buckets: List<BudgetBucket>,
+    assignments: List<BucketCategory>,
+    records: List<ExpenseRecord>,
+    funds: FundsSnapshot,
+    today: LocalDate
+): PlanBucketsUiState {
+    val plans = funds.plansFor(cycle.id).associate { it.fundId to it.plannedAmount }
+    return PlanBucketsUiState(
+        isLoading = false,
+        summary = CycleSummaryBuilder.build(cycle, buckets, assignments, records, today, funds),
+        categoryCountByBucket = assignments.groupingBy { it.bucketId }.eachCount(),
+        contributions = funds.activeFunds
+            .sortedWith(compareBy({ it.sortOrder }, { it.id }))
+            .map { PlannedContributionRow(it, plans[it.id] ?: 0.0) }
+    )
+}
+
+/** A stepper tap on a Planned contribution, never below zero. */
+fun steppedContribution(current: Double, delta: Double): Double = (current + delta).coerceAtLeast(0.0)
+
+/** Planning happens on payday, against the running cycle: split what you have into buckets and Funds. */
 @HiltViewModel
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlanBucketsViewModel @Inject constructor(
     private val budgets: BucketBudgetRepository,
-    private val expenses: ExpenseRepository
+    private val expenses: ExpenseRepository,
+    private val funds: FundRepository
 ) : ViewModel() {
 
     val uiState: StateFlow<PlanBucketsUiState> = budgets.observeRunningCycle()
@@ -45,13 +80,10 @@ class PlanBucketsViewModel @Inject constructor(
                 combine(
                     budgets.observeBuckets(cycle.id),
                     budgets.observeCategoryAssignments(cycle.id),
-                    expenses.getAllRecords()
-                ) { buckets, assignments, records ->
-                    PlanBucketsUiState(
-                        isLoading = false,
-                        summary = CycleSummaryBuilder.build(cycle, buckets, assignments, records, LocalDate.now()),
-                        categoryCountByBucket = assignments.groupingBy { it.bucketId }.eachCount()
-                    )
+                    expenses.getAllRecords(),
+                    funds.observeSnapshot()
+                ) { buckets, assignments, records, snapshot ->
+                    planBuckets(cycle, buckets, assignments, records, snapshot, LocalDate.now())
                 }
             }
         }
@@ -66,6 +98,17 @@ class PlanBucketsViewModel @Inject constructor(
     fun setAllocation(bucketId: Long, amount: Double) {
         val bucket = uiState.value.summary?.buckets?.firstOrNull { it.bucket.id == bucketId }?.bucket ?: return
         viewModelScope.launch { budgets.updateBucket(bucket.copy(allocatedAmount = amount.coerceAtLeast(0.0))) }
+    }
+
+    fun adjustContribution(fundId: Long, delta: Double) {
+        val row = uiState.value.contributions.firstOrNull { it.fund.id == fundId } ?: return
+        setContribution(fundId, steppedContribution(row.planned, delta))
+    }
+
+    /** Zero removes the Planned contribution. */
+    fun setContribution(fundId: Long, amount: Double) {
+        val cycle = uiState.value.summary?.cycle ?: return
+        viewModelScope.launch { funds.setPlannedContribution(fundId, cycle.id, amount.coerceAtLeast(0.0)) }
     }
 
     fun setSpendable(amount: Double) {

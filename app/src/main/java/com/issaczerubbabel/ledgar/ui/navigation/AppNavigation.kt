@@ -698,7 +698,8 @@ fun AppNavigation(
             composable(Screen.Stats.route) {
                 InsightsScreen(
                     innerPadding = innerPadding,
-                    onSetUpCycle = { navController.navigate(Screen.StartCycle.route) { launchSingleTop = true } }
+                    onSetUpCycle = { navController.navigate(Screen.StartCycle.route) { launchSingleTop = true } },
+                    onOpenFund = { fundId -> navController.navigate("fund/$fundId") { launchSingleTop = true } }
                 )
             }
             composable(Screen.Budget.route) {
@@ -712,7 +713,8 @@ fun AppNavigation(
                     },
                     onStartCycle = {
                         navController.navigate(Screen.StartCycle.route) { launchSingleTop = true }
-                    }
+                    },
+                    onOpenFund = { fundId -> navController.navigate("fund/$fundId") { launchSingleTop = true } }
                 )
             }
             composable(Screen.StartCycle.route) {

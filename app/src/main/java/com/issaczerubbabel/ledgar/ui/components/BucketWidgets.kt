@@ -147,7 +147,9 @@ fun StatCard(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
-    valueColor: Color = MaterialTheme.colorScheme.onSurface
+    valueColor: Color = MaterialTheme.colorScheme.onSurface,
+    /** A small line under the value, such as what sits next to it but isn't in it. */
+    supporting: String? = null
 ) {
     Card(
         modifier = modifier,
@@ -172,6 +174,15 @@ fun StatCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            if (supporting != null) {
+                Text(
+                    text = supporting,
+                    style = tabularNumbers(MaterialTheme.typography.labelSmall),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
