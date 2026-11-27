@@ -108,6 +108,7 @@ import com.issaczerubbabel.ledgar.ui.theme.rememberChartColors
 import com.issaczerubbabel.ledgar.viewmodel.CategoryDetail
 import com.issaczerubbabel.ledgar.viewmodel.DayCell
 import com.issaczerubbabel.ledgar.viewmodel.DetailRequest
+import com.issaczerubbabel.ledgar.viewmodel.FundSaved
 import com.issaczerubbabel.ledgar.viewmodel.StatsPeriod
 import com.issaczerubbabel.ledgar.viewmodel.StatsReportUi
 import com.issaczerubbabel.ledgar.viewmodel.StatsScope
@@ -141,6 +142,7 @@ private fun animationsOff(): Boolean {
 fun InsightsScreen(
     innerPadding: PaddingValues,
     onSetUpCycle: () -> Unit = {},
+    onOpenFund: (Long) -> Unit = {},
     vm: StatsViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -183,7 +185,7 @@ fun InsightsScreen(
                 return@LazyColumn
             }
 
-            val cards = statsCards(state, colors, vm, onSetUpCycle, openDetail)
+            val cards = statsCards(state, colors, vm, onSetUpCycle, onOpenFund, openDetail)
             cards.forEachIndexed { index, (key, content) ->
                 item(key = key) {
                     Entrance(index, enabled = !firstVisitDone && !reduceMotion) { content() }
@@ -262,6 +264,7 @@ private fun statsCards(
     colors: ChartColors,
     vm: StatsViewModel,
     onSetUpCycle: () -> Unit,
+    onOpenFund: (Long) -> Unit,
     onOpen: (DetailRequest, RowLook) -> Unit
 ): List<Pair<String, @Composable () -> Unit>> {
     val report = state.report
@@ -272,6 +275,7 @@ private fun statsCards(
         cards += "empty" to { EmptyPeriodCard(state, vm::previousPeriod) }
         return cards
     }
+    if (report.savedByFund.isNotEmpty()) cards += "saved-by-fund" to { SavedByFundCard(report.savedByFund, report.totals.saved, colors, rupees, onOpenFund) }
     cards += "pace" to { PaceCard(state, colors, rupees, onSetUpCycle) }
     val cycle = report.cycle
     if (cycle != null) {
@@ -511,12 +515,26 @@ private fun CycleHeadline(s: StatsUiState, cycle: com.issaczerubbabel.ledgar.vie
     val sub = if (cycle.isRunning && summary.daysLeft > 0) {
         "of ${rupees(summary.cycle.spendableAmount)} · ${summary.daysLeft} days left · ${rupees(summary.dailyPace)} a day"
     } else {
-        "of ${rupees(summary.cycle.spendableAmount)} · spent ${rupees(summary.totalSpent)}"
+        // Spent below counts Expenses paid from Funds too; this figure is only what came out of the cycle.
+        val spent = if (summary.drawnFromFunds > 0) "${rupees(summary.totalSpent)} spent from this cycle" else "spent ${rupees(summary.totalSpent)}"
+        "of ${rupees(summary.cycle.spendableAmount)} · $spent"
     }
     Text(sub, style = tabularNumbers(MaterialTheme.typography.bodyMedium), color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (cycle.saved > 0) {
         Text(
             "${rupees(cycle.saved)} of that went to savings. Cycles count it against your budget, as the Budget tab does.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+    if (summary.setAside > 0) {
+        Text(
+            "${rupees(summary.setAside)} set aside into Funds also comes off it, as on the Budget tab.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+    if (summary.drawnFromFunds > 0) {
+        Text(
+            "${rupees(summary.drawnFromFunds)} paid from Funds doesn't count against this cycle.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
@@ -551,6 +569,47 @@ private fun LeftOverHeadline(report: StatsReportUi, period: StatsPeriod, colors:
     }
     if (t.refunds > 0) {
         Text("Spent is after ${rupees(t.refunds)} of refunds.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/**
+ * Saved split by the Funds it went into, with the rest (Saving Categories and Savings groups) as one
+ * row. Tapping a Fund opens its page.
+ */
+@Composable
+private fun SavedByFundCard(
+    rows: List<FundSaved>,
+    saved: Double,
+    colors: ChartColors,
+    rupees: (Double) -> String,
+    onOpenFund: (Long) -> Unit
+) {
+    val other = saved - rows.sumOf { it.amount }
+    val max = maxOf(rows.maxOf { it.amount }, other).coerceAtLeast(1.0)
+    val track = MaterialTheme.colorScheme.surfaceContainerHighest
+    StatsCard {
+        CardTitle("Saved by Fund")
+        rows.forEach { row ->
+            RankedRow(
+                name = listOf(row.fund.emoji.trim(), row.fund.name).filter { it.isNotEmpty() }.joinToString(" "),
+                amount = rupees(row.amount),
+                fraction = (row.amount / max).toFloat(),
+                barColor = colors.saved,
+                track = track,
+                leading = { ColorDot(bucketColor(row.fund.colorIndex)) },
+                onClick = { onOpenFund(row.fund.id) }
+            )
+        }
+        if (abs(other) >= 1) {
+            RankedRow(
+                name = "Other savings",
+                amount = rupees(other),
+                fraction = (other.coerceAtLeast(0.0) / max).toFloat(),
+                barColor = colors.muted,
+                track = track,
+                note = "Saving Categories and Savings accounts"
+            )
+        }
     }
 }
 

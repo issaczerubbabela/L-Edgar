@@ -11,7 +11,7 @@ data class StartCycleRequest(
     val startDate: LocalDate,
     val endDate: LocalDate,
     val spendableAmount: Double,
-    /** Copy the running cycle's buckets and category routing into the new one. */
+    /** Copy the running cycle's buckets, category routing and Planned contributions into the new one. */
     val carryOverBuckets: Boolean
 )
 

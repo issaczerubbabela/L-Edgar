@@ -9,6 +9,7 @@ import com.issaczerubbabel.ledgar.data.bucket.CycleSummaryBuilder
 import com.issaczerubbabel.ledgar.data.repository.BucketBudgetRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
+import com.issaczerubbabel.ledgar.data.repository.FundRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -46,7 +47,8 @@ class BucketDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val budgets: BucketBudgetRepository,
     private val expenses: ExpenseRepository,
-    dropdowns: DropdownOptionRepository
+    dropdowns: DropdownOptionRepository,
+    funds: FundRepository
 ) : ViewModel() {
 
     private val bucketId: Long = checkNotNull(savedStateHandle["bucketId"])
@@ -60,13 +62,13 @@ class BucketDetailViewModel @Inject constructor(
                     budgets.observeCycle(bucket.cycleId),
                     budgets.observeBuckets(bucket.cycleId),
                     budgets.observeCategoryAssignments(bucket.cycleId),
-                    expenses.getAllRecords(),
+                    combine(expenses.getAllRecords(), funds.observeSnapshot(), ::Pair),
                     dropdowns.getOptionsByType(EXPENSE_CATEGORY_TYPE)
-                ) { cycle, buckets, assignments, records, options ->
+                ) { cycle, buckets, assignments, (records, snapshot), options ->
                     if (cycle == null) {
                         BucketDetailUiState(isLoading = false, notFound = true)
                     } else {
-                        val summary = CycleSummaryBuilder.build(cycle, buckets, assignments, records, LocalDate.now())
+                        val summary = CycleSummaryBuilder.build(cycle, buckets, assignments, records, LocalDate.now(), snapshot)
                         val bucketNameById = buckets.associate { it.id to it.name }
                         val bucketIdByCategory = assignments.associate { it.category.trim().lowercase() to it.bucketId }
 

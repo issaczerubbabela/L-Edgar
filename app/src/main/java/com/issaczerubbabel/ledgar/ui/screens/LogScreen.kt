@@ -121,7 +121,22 @@ fun LogScreen(
                 } else {
                     "Transaction saved"
                 }
-                snackbarHostState.showSnackbar(message)
+                val offer = vm.earmarkOffer
+                if (offer != null) {
+                    // A Transfer out of a Fund's whole Account released that money; offer to keep it labelled.
+                    vm.clearEarmarkOffer()
+                    val result = snackbarHostState.showSnackbar(
+                        message = "$message. ${offer.message}",
+                        actionLabel = "Keep earmarked",
+                        withDismissAction = true,
+                        duration = SnackbarDuration.Long
+                    )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        snackbarHostState.showSnackbar(vm.keepEarmarked(offer))
+                    }
+                } else {
+                    snackbarHostState.showSnackbar(message)
+                }
             }
             vm.resetSaveSuccess()
         }

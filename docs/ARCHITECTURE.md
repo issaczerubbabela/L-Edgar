@@ -69,7 +69,7 @@ graph TD
 ### Background Execution
 
 - `SyncTriggers` (started in `SheetSyncApp`) watches Room: any Transaction waiting to sync requests a Sync, and any change to accounts, dropdowns, budgets or transactions requests a Backup. Screens never schedule sync work. All work is queued through `SyncScheduler`. `SyncWorker` sends pending Transaction changes. It's queued with `APPEND_OR_REPLACE`, so a running Sync is never cancelled, and it retries with exponential backoff.
-- `BackupWorker` replaces the Sheet's accounts, dropdowns, budgets and bucket-budget tabs (cycles, buckets and category routing). It runs as a separate, delayed job, so a failing Backup can't hold Transactions back. Before a phone's first Backup, `SheetListsMerger` adds the Sheet's accounts, dropdowns and budgets that the phone lacks (matched by name), and takes in the Sheet's salary cycles if it has none, so a fresh install's defaults can never replace the Sheet's real lists.
+- `BackupWorker` replaces the Sheet's accounts, dropdowns, budgets, bucket-budget tabs (cycles, buckets and category routing) and Fund tabs (Funds, holdings and Planned contributions). It runs as a separate, delayed job, so a failing Backup can't hold Transactions back. Before a phone's first Backup, `SheetListsMerger` adds the Sheet's accounts, dropdowns and budgets that the phone lacks (matched by name), and takes in the Sheet's salary cycles and Funds if it has none, so a fresh install's defaults can never replace the Sheet's real lists.
 - Sync is two-way and safe to repeat (ADR-0003). Every Transaction has a permanent Transaction ID (`syncId`, assigned by a Room trigger) shared with the Sheet's ID column. `TransactionSyncer` Pulls when needed (app open, "Sync now", rows without an ID yet, or after a stale refusal) and merges each ID three ways in `SheetMerge`, then Pushes pending changes as `upsert`/`delete_ids` by ID. Each upsert carries the row revision the phone last agreed on (`syncedRevision`), and the script refuses it as stale if the row changed since, so a Sheet edit is merged rather than overwritten. A Transaction is only settled if its `localVersion` (raised by a SQLite trigger on every change) hasn't moved since Sync read it.
 
 ## 3. Navigation Architecture
@@ -239,6 +239,39 @@ erDiagram
         string category
     }
 
+    FUNDS ||--o{ FUND_HOLDINGS : fundId
+    ACCOUNT_RECORDS ||--o{ FUND_HOLDINGS : accountId
+    FUNDS ||--o{ FUND_PLANS : fundId
+    BUDGET_CYCLES ||--o{ FUND_PLANS : cycleId
+
+    FUNDS {
+        long id PK
+        string name
+        string emoji
+        int colorIndex
+        double targetAmount
+        string dueDate
+        string archivedAt
+        int sortOrder
+        string createdDate
+    }
+
+    FUND_HOLDINGS {
+        long id PK
+        long fundId FK
+        long accountId FK
+        string kind
+        double amount
+        double openingAmount
+        string startDate
+    }
+
+    FUND_PLANS {
+        long fundId PK
+        long cycleId PK
+        double plannedAmount
+    }
+
     DROPDOWN_OPTIONS {
         long id PK
         string optionType
@@ -366,6 +399,24 @@ erDiagram
   Angeles time zones, and fails if they drift. It also runs the pre-change script from
   `scripts/tests/fixtures/` to prove the compatibility above. `BucketBudgetContractTest` and the test
   share golden request/response files, so a field renamed on either side fails a test.
+
+### funds / fund_holdings / fund_plans
+
+- Purpose: Funds, labels on Account money that live outside Salary cycles (terms in `CONTEXT.md`; ADR-0011). Added in database v28.
+- A holding is `WHOLE` (the Account's balance is the holding) or `FIXED` (`amount` of a shared Account). `openingAmount` is
+  history only: a holding's value is never more than its Account balance or fixed amount. A Fund holds an Account once
+  (unique `fundId, accountId`), and `FundRepository.saveHolding` keeps an Account the WHOLE holding of one Fund at most and
+  never both whole and in part. Deleting a Fund, Account or cycle cascades to its holdings and plans.
+- `fund_plans` is a Planned contribution per (Fund, cycle). Carry over on Start cycle copies the active Funds' plans.
+- No Transaction is linked to a Fund. All the maths (holding values, Fund balances, Set aside, draws, Your money, Free,
+  shortfalls) lives in the pure `fund/FundMath`. `CycleSummaryBuilder` takes an optional `FundsSnapshot`: without one every
+  figure is as before; with one, Expenses drawn from a Fund's whole Account leave the cycle, Set aside comes off Left to
+  spend, and Planned contributions come off Unallocated.
+- Backed up wholesale like bucket budgets, to `_funds`, `_fund_holdings` and `_fund_plans` (target `funds`, SCRIPT_VERSION 3),
+  sent nested in `funds` with `records` empty. Holdings are keyed by Account name and plans by cycle start date, because Import
+  rebuilds those ids; `FundsRestorer` restores Funds after Accounts and cycles, and puts the phone's own Funds back when the
+  Sheet has none or the script predates Funds. An outdated script makes `BackupWorker` skip Funds and Settings ask for a
+  redeploy. `scripts/tests/funds.test.js` and `FundContractTest` share golden request/response files.
 
 ### dropdown_options
 

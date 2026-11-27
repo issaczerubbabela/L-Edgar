@@ -10,6 +10,8 @@ import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepositoryImpl
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepositoryImpl
+import com.issaczerubbabel.ledgar.data.repository.FundRepository
+import com.issaczerubbabel.ledgar.data.repository.FundRepositoryImpl
 import com.issaczerubbabel.ledgar.data.repository.RecurringRepository
 import com.issaczerubbabel.ledgar.data.repository.RecurringRepositoryImpl
 import com.issaczerubbabel.ledgar.data.repository.TripRepository
@@ -51,4 +53,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindTripRepository(impl: TripRepositoryImpl): TripRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindFundRepository(impl: FundRepositoryImpl): FundRepository
 }

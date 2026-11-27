@@ -2,6 +2,7 @@ package com.issaczerubbabel.ledgar.data.bucket
 
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetBucket
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetCycle
+import com.issaczerubbabel.ledgar.data.local.entity.Fund
 
 data class CategorySpend(val category: String, val amount: Double)
 
@@ -23,6 +24,16 @@ data class BucketSummary(
         }
 }
 
+/** One Fund's Planned contribution in a cycle against what the cycle has Set aside into it. */
+data class FundContribution(
+    val fund: Fund,
+    val planned: Double,
+    val setAside: Double
+) {
+    val stillToTransfer: Double get() = (planned - setAside).coerceAtLeast(0.0)
+    val isMet: Boolean get() = setAside >= planned
+}
+
 data class CycleSummary(
     val cycle: BudgetCycle,
     val totalDays: Int,
@@ -34,17 +45,29 @@ data class CycleSummary(
     val daysUntilStart: Int,
     /** 0..1, where the pace tick sits. */
     val elapsedFraction: Float,
+    /** Every Expense in the cycle except those drawn from a Fund. */
     val totalSpent: Double,
-    /** Spendable minus everything spent, bucketed or not. Negative when overspent. */
+    /**
+     * Left to spend, or This cycle: spendable minus [totalSpent] (bucketed or not) minus [setAside].
+     * Negative when overspent.
+     */
     val leftToSpend: Double,
     val allocated: Double,
-    /** Spendable minus what buckets have claimed. Negative means over-allocated. */
+    /** Spendable minus what buckets have claimed and [plannedContributions]. Negative means over-allocated. */
     val unallocated: Double,
     /** What can be spent per remaining day to make the money last. Zero once overdue or overspent. */
     val dailyPace: Double,
     val buckets: List<BucketSummary>,
     /** Spend in categories that no bucket claims. The virtual "Unbucketed" bucket. */
-    val unbucketed: List<CategorySpend>
+    val unbucketed: List<CategorySpend>,
+    /** Transfers in the cycle into Funds' whole Accounts (Set aside). Zero without Funds. */
+    val setAside: Double = 0.0,
+    /** Expenses in the cycle paid from Funds' whole Accounts: they come out of the Fund, not [totalSpent]. */
+    val drawnFromFunds: Double = 0.0,
+    /** The cycle's Planned contributions to active Funds, together. */
+    val plannedContributions: Double = 0.0,
+    /** Each active Fund with a Planned contribution or Set aside this cycle, in Fund order. */
+    val fundContributions: List<FundContribution> = emptyList()
 ) {
     val isOverdue: Boolean get() = daysOverdue > 0
     val unbucketedSpent: Double get() = unbucketed.sumOf { it.amount }

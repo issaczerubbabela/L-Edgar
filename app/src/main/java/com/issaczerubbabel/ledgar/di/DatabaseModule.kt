@@ -16,9 +16,11 @@ import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
 import com.issaczerubbabel.ledgar.data.local.migration.AccountMigration
 import com.issaczerubbabel.ledgar.data.local.migration.BucketBudgetMigration
 import com.issaczerubbabel.ledgar.data.local.migration.CaptureMigration
+import com.issaczerubbabel.ledgar.data.local.migration.FundMigration
 import com.issaczerubbabel.ledgar.data.local.migration.TripMigration
 import com.issaczerubbabel.ledgar.data.local.dao.DropdownOptionDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
+import com.issaczerubbabel.ledgar.data.local.dao.FundDao
 import com.issaczerubbabel.ledgar.data.local.dao.MerchantRuleDao
 import com.issaczerubbabel.ledgar.data.local.dao.RecurringRuleDao
 import com.issaczerubbabel.ledgar.data.local.dao.UnparsedAlertDao
@@ -192,6 +194,13 @@ object DatabaseModule {
         }
     }
 
+    /** Adds the Fund tables: `funds`, `fund_holdings` and `fund_plans` (ADR-0011). Additive and idempotent. */
+    internal val MIGRATION_27_28 = object : Migration(27, 28) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            FundMigration.createTables(db)
+        }
+    }
+
     private fun columnsOf(db: SupportSQLiteDatabase, table: String): Set<String> =
         db.query("PRAGMA table_info($table)").use { cursor ->
             val nameColumn = cursor.getColumnIndexOrThrow("name")
@@ -341,6 +350,7 @@ object DatabaseModule {
             .addMigrations(MIGRATION_24_25)
             .addMigrations(MIGRATION_25_26)
             .addMigrations(MIGRATION_26_27)
+            .addMigrations(MIGRATION_27_28)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .addCallback(callback)
             .build()
@@ -378,4 +388,7 @@ object DatabaseModule {
 
     @Provides
     fun provideRecurringRuleDao(db: SheetSyncDatabase): RecurringRuleDao = db.recurringRuleDao()
+
+    @Provides
+    fun provideFundDao(db: SheetSyncDatabase): FundDao = db.fundDao()
 }

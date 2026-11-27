@@ -10,6 +10,7 @@ import com.issaczerubbabel.ledgar.data.bucket.StartCycleResult
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.repository.BucketBudgetRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
+import com.issaczerubbabel.ledgar.data.repository.FundRepository
 import com.issaczerubbabel.ledgar.util.amountToInput
 import com.issaczerubbabel.ledgar.util.parseAmountInput
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -34,6 +35,8 @@ data class StartCycleUiState(
     /** Start date of the cycle this one will close, or null for the very first cycle. */
     val runningCycleStart: LocalDate? = null,
     val carryableBucketCount: Int = 0,
+    /** The running cycle's Planned contributions to active Funds. Carry over copies them too. */
+    val carryablePlanCount: Int = 0,
     /** A salary found near the start date. Offered as a suggestion, never applied silently. */
     val suggestedSalary: Double? = null,
     val error: StartCycleFormError? = null,
@@ -41,12 +44,45 @@ data class StartCycleUiState(
     val isDone: Boolean = false
 ) {
     val cycleDays: Int get() = CycleCalendar.totalDays(startDate, endDate)
+
+    /** Carry over has something to copy: Buckets, Planned contributions, or both. */
+    val canCarryOver: Boolean get() = carryableBucketCount > 0 || carryablePlanCount > 0
+
+    /** What the Carry over switch copies, in words. */
+    val carryOverText: String
+        get() {
+            val buckets = when (carryableBucketCount) {
+                0 -> null
+                1 -> "1 bucket and its categories"
+                else -> "$carryableBucketCount buckets and their categories"
+            }
+            val plans = when (carryablePlanCount) {
+                0 -> null
+                1 -> "1 planned contribution"
+                else -> "$carryablePlanCount planned contributions"
+            }
+            return when {
+                buckets != null && plans != null -> "$buckets, and $plans. Spending starts again from zero."
+                buckets != null -> "$buckets. Spending starts again from zero."
+                plans != null -> "$plans. Set aside starts again from zero."
+                else -> "You have no buckets to carry over yet."
+            }
+        }
+
+    /** The cycle to start with [amount] to spend. Carry over copies the Buckets and the Planned contributions. */
+    fun request(amount: Double) = StartCycleRequest(
+        startDate = startDate,
+        endDate = endDate,
+        spendableAmount = amount,
+        carryOverBuckets = carryOver && canCarryOver
+    )
 }
 
 @HiltViewModel
 class StartCycleViewModel @Inject constructor(
     private val budgets: BucketBudgetRepository,
-    private val expenses: ExpenseRepository
+    private val expenses: ExpenseRepository,
+    private val funds: FundRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(StartCycleUiState())
@@ -62,6 +98,7 @@ class StartCycleViewModel @Inject constructor(
             val running = budgets.getRunningCycle()
             records = expenses.getAllRecords().first()
             val bucketCount = running?.let { budgets.getBuckets(it.id).size } ?: 0
+            val planCount = running?.let { funds.getSnapshot().plansFor(it.id).size } ?: 0
             val today = LocalDate.now()
             _uiState.value = StartCycleUiState(
                 isLoaded = true,
@@ -69,9 +106,10 @@ class StartCycleViewModel @Inject constructor(
                 endDate = CycleCalendar.defaultEnd(today),
                 amountInput = running?.let { amountToInput(it.spendableAmount) }.orEmpty(),
                 amountWasPrefilled = running != null,
-                carryOver = bucketCount > 0,
+                carryOver = bucketCount > 0 || planCount > 0,
                 runningCycleStart = running?.let { LocalDate.parse(it.startDate) },
                 carryableBucketCount = bucketCount,
+                carryablePlanCount = planCount,
                 suggestedSalary = SalaryDetector.detect(records, today)
             )
         }
@@ -114,14 +152,7 @@ class StartCycleViewModel @Inject constructor(
         }
         _uiState.update { it.copy(isSaving = true, error = null) }
         viewModelScope.launch {
-            val result = budgets.startCycle(
-                StartCycleRequest(
-                    startDate = state.startDate,
-                    endDate = state.endDate,
-                    spendableAmount = amount,
-                    carryOverBuckets = state.carryOver && state.carryableBucketCount > 0
-                )
-            )
+            val result = budgets.startCycle(state.request(amount))
             _uiState.update {
                 when (result) {
                     is StartCycleResult.Started -> it.copy(isSaving = false, isDone = true)

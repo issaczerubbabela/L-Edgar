@@ -10,6 +10,7 @@ import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.BucketBudgetRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
+import com.issaczerubbabel.ledgar.data.repository.FundRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.text.NumberFormat
 import java.time.LocalDate
@@ -56,6 +57,7 @@ class StatsViewModel @Inject constructor(
     accountRepository: AccountRepository,
     dropdownOptionRepository: DropdownOptionRepository,
     bucketBudgetRepository: BucketBudgetRepository,
+    fundRepository: FundRepository,
     themePreferenceRepository: ThemePreferenceRepository
 ) : ViewModel() {
 
@@ -101,11 +103,11 @@ class StatsViewModel @Inject constructor(
     private val inputs: Flow<StatsInput> = combine(
         expenseRepository.getAllRecords(),
         accountRepository.getAllAccounts(),
-        roles,
+        combine(roles, fundRepository.observeSnapshot(), ::Pair),
         combine(cycles, periodFlow, ::Pair),
         bucketsForPeriod
-    ) { records, accounts, roles, (cycles, period), (buckets, assignments) ->
-        StatsInput(records, accounts, roles, cycles, period, LocalDate.now(), buckets, assignments)
+    ) { records, accounts, (roles, funds), (cycles, period), (buckets, assignments) ->
+        StatsInput(records, accounts, roles, cycles, period, LocalDate.now(), buckets, assignments, funds)
     }
 
     val uiState: StateFlow<StatsUiState> = combine(inputs, effectiveFilter) { input, f ->

@@ -6,6 +6,40 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `app/src/main/java/com/issaczerubbabel/ledgar/ui/screens/ChangelogData.kt`,
 which is also what the app shows under More > Changelog. Developer notes appear here only.
 
+## [1.8.0] - 2026-11-27
+
+### Added
+
+- Funds: label money for a purpose in More > Funds, holding a whole account or a fixed amount of one
+- Funds: each Fund shows its holdings, this cycle's planned and transferred amounts, and its history
+- Funds: after a Transfer out of a Fund's account, Keep earmarked labels the money where it landed
+- Accounts: an Account's page shows Free next to its balance once you have a Fund
+- Budget: a Your money card splits your money into Funds, This cycle and Free, Account by Account
+- Budget: a Set aside section shows each Fund's planned contribution and what is still to transfer
+- Stats: tap a Fund in Saved by Fund, or in the Budget tab's Set aside, to open its page
+- Budget: Plan this cycle sets each Fund's planned contribution, adds a New fund, and Carry over copies them
+- Database Setup: a hint asks you to redeploy the script when a Backup had to skip your Funds
+
+### Changed
+
+- Stats: money moved into a Fund's Account counts as Saved and money taken out comes off it, with Saved by Fund
+- Budget: Left to spend takes off money Set aside, and spending from a Fund's Account leaves the cycle
+- Budget: Start new cycle asks for your whole salary, since Set aside now comes out of it
+
+### Fixed
+
+- Accounts: renaming one updates its transactions in the Sheet, and Re-send to Sheet repairs older renames
+- Budget: an expense dated after the Salary cycle ends no longer comes off this cycle's Left to spend
+
+### Developer
+
+- Funds: glossary terms (Fund, Holding, Set aside, Free, Unallocated) and ADR-0011, Funds are labels on Account money
+- Funds: Room v28 adds funds, fund_holdings and fund_plans, with FundMath, FundRepository and Fund figures in CycleSummary
+- Funds: backed up to the Sheet's Fund tabs (script version 3) and restored on Import by Account name and cycle start date
+- Funds: StatsReport counts Set aside as Saved via FundMath and passes the Funds snapshot to the cycle view (#153)
+- Funds: budgetHome and planBuckets build the Budget and Plan state, and every Left to spend gets the Funds snapshot (#41)
+- Funds review: Free counts only Included holdings, releases reduce Saved, one TransactionSnapshot mapper, atomic saveFund
+
 ## [1.7.0] - 2026-11-27
 
 ### Added
@@ -337,6 +371,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - Room database, Vico charts and date-parsing tests
 
+[1.8.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.8.0
 [1.7.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.7.0
 [1.6.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.6.0
 [1.5.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.5.0
