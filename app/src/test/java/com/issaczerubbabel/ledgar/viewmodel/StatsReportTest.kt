@@ -5,6 +5,10 @@ import com.issaczerubbabel.ledgar.data.local.entity.BudgetCycle
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownRole
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.data.local.entity.Fund
+import com.issaczerubbabel.ledgar.data.local.entity.FundHolding
+import com.issaczerubbabel.ledgar.data.local.entity.HoldingKind
+import com.issaczerubbabel.ledgar.fund.FundsSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -24,7 +28,9 @@ class StatsReportTest {
         account(3, "Debit Card", "HDFC Debit"),
         account(4, "Accounts", "HDFC Savings"),
         account(5, "Investments", "Mutual funds"),
-        account(6, "Savings", "Fixed deposit")
+        account(6, "Savings", "Fixed deposit"),
+        account(7, "Accounts", "Ministry Fund"),
+        account(8, "Savings", "Emergency RD")
     )
 
     private val roles = StatsRoles.from(
@@ -41,8 +47,9 @@ class StatsReportTest {
         records: List<ExpenseRecord>,
         period: StatsPeriod = september,
         today: LocalDate = afterSeptember,
-        cycles: List<BudgetCycle> = emptyList()
-    ) = StatsReport.build(StatsInput(records, accounts, roles, cycles, period, today))
+        cycles: List<BudgetCycle> = emptyList(),
+        funds: FundsSnapshot = FundsSnapshot.EMPTY
+    ) = StatsReport.build(StatsInput(records, accounts, roles, cycles, period, today, funds = funds))
 
     // ---- comparison ----------------------------------------------------------------------------
 
@@ -469,6 +476,115 @@ class StatsReportTest {
     @Test
     fun noCyclesMeansNoBudgetLine() {
         assertFalse(build(listOf(expense("2026-09-01", 10.0))).hasBudget)
+    }
+
+    // ---- Funds (ADR-0011) ------------------------------------------------------------------------
+
+    private val ministry = Fund(id = 1, name = "Ministry Fund", sortOrder = 0, createdDate = "2026-01-01")
+    private val emergency = Fund(id = 2, name = "Emergency", sortOrder = 1, createdDate = "2026-01-01")
+
+    /** Ministry Fund holds account 7 (Accounts group) whole, Emergency holds account 8 (Savings group) whole. */
+    private fun funds(ministryFrom: String = "2026-01-01") = FundsSnapshot(
+        funds = listOf(ministry, emergency),
+        holdings = listOf(
+            FundHolding(id = 1, fundId = 1, accountId = 7, kind = HoldingKind.WHOLE.name, startDate = ministryFrom),
+            FundHolding(id = 2, fundId = 2, accountId = 8, kind = HoldingKind.WHOLE.name, startDate = "2026-01-01")
+        )
+    )
+
+    @Test
+    fun aTransferIntoAFundsAccountIsSavedEvenInTheAccountsGroup() {
+        val result = build(listOf(transfer("2026-09-05", 2000.0, from = 4, to = 7)), funds = funds()) // HDFC -> Ministry Fund
+
+        assertEquals(2000.0, result.totals.saved, 0.0)
+        assertEquals(0.0, result.totals.spent, 0.0)
+        assertEquals(listOf(ministry to 2000.0), result.savedByFund.map { it.fund to it.amount })
+    }
+
+    @Test
+    fun aTransferFromOneFundToAnotherIsAMoveNotSaved() {
+        val result = build(listOf(transfer("2026-09-05", 3000.0, from = 7, to = 8)), funds = funds())
+
+        assertEquals(0.0, result.totals.saved, 0.0)
+        assertTrue(result.savedByFund.isEmpty())
+    }
+
+    @Test
+    fun takingMoneyOutOfAFundIsNotSavedAndNotTakenBack() {
+        // Budget's Set aside never nets releases, so Stats doesn't either.
+        val result = build(listOf(transfer("2026-09-05", 2000.0, from = 4, to = 8), transfer("2026-09-20", 500.0, from = 8, to = 4)), funds = funds())
+
+        assertEquals(2000.0, result.totals.saved, 0.0)
+        assertEquals(listOf(emergency to 2000.0), result.savedByFund.map { it.fund to it.amount })
+    }
+
+    @Test
+    fun aSavingsGroupAccountWithNoFundStillCountsAlongsideFunds() {
+        val result = build(
+            listOf(
+                transfer("2026-09-05", 5000.0, from = 4, to = 5),  // bank -> mutual funds, no Fund
+                transfer("2026-09-06", 2000.0, from = 4, to = 7),  // bank -> Ministry Fund
+                expense("2026-09-07", 1000.0, "Investments/Savings")
+            ),
+            funds = funds()
+        )
+
+        assertEquals(8000.0, result.totals.saved, 0.0)
+        assertEquals(listOf(ministry to 2000.0), result.savedByFund.map { it.fund to it.amount })
+    }
+
+    @Test
+    fun aFundsAccountOnlyCountsFromItsHoldingsStartDate() {
+        val result = build(
+            listOf(transfer("2026-09-10", 1000.0, from = 4, to = 7), transfer("2026-09-20", 2000.0, from = 4, to = 7)),
+            funds = funds(ministryFrom = "2026-09-15")
+        )
+
+        assertEquals(2000.0, result.totals.saved, 0.0) // before the 15th Ministry Fund is a plain Accounts-group Account
+    }
+
+    @Test
+    fun anExpenseFromAFundsAccountIsStillSpentOnItsDate() {
+        val result = build(listOf(expense("2026-09-05", 500.0, "Giving", account = 7)), funds = funds())
+
+        assertEquals(500.0, result.totals.spent, 0.0)
+        assertEquals(0.0, result.totals.saved, 0.0)
+    }
+
+    @Test
+    fun monthAndCycleViewsAgreeOnSaved() {
+        val cycle = cycle("2026-09-01", "2026-09-30", 43000.0, closedAt = "2026-10-01").copy(id = 7)
+        val records = listOf(
+            transfer("2026-09-05", 2000.0, from = 4, to = 7),
+            transfer("2026-09-06", 500.0, from = 4, to = 5),
+            expense("2026-09-07", 1000.0, "Investments/Savings"),
+            expense("2026-09-08", 4000.0, "Rent")
+        )
+        val month = build(records, cycles = listOf(cycle), funds = funds())
+        val period = StatsPeriod.cycleOn(LocalDate.of(2026, 9, 10), listOf(cycle), afterSeptember)!!
+        val cycleView = build(records, period = period, cycles = listOf(cycle), funds = funds())
+
+        assertEquals(3500.0, month.totals.saved, 0.0)
+        assertEquals(month.totals.saved, cycleView.totals.saved, 0.0)
+        assertEquals(month.savedByFund, cycleView.savedByFund)
+        assertEquals(2000.0, cycleView.cycle!!.summary.setAside, 0.0)
+        assertEquals(43000.0 - 5000.0 - 2000.0, cycleView.cycle!!.summary.leftToSpend, 0.0) // as the Budget tab shows it
+    }
+
+    @Test
+    fun withoutFundsStatsShowsExactlyWhatItDidBefore() {
+        val records = listOf(
+            transfer("2026-09-05", 2000.0, from = 4, to = 7),  // into an Accounts-group Account: not saved
+            transfer("2026-09-06", 3000.0, from = 4, to = 8),  // into a Savings group: saved
+            transfer("2026-09-07", 500.0, from = 8, to = 4),   // out of one: taken back
+            expense("2026-09-08", 400.0, "Giving", account = 7)
+        )
+        val result = build(records)
+
+        assertEquals(2500.0, result.totals.saved, 0.0)
+        assertEquals(400.0, result.totals.spent, 0.0)
+        assertTrue(result.savedByFund.isEmpty())
+        assertEquals(result, build(records, funds = FundsSnapshot.EMPTY))
     }
 
     // ---- periods ---------------------------------------------------------------------------------

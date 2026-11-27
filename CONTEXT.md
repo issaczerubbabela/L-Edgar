@@ -111,7 +111,7 @@ Expenses in a period, not counting Saving Categories, minus Refunds.
 _Avoid_: total expenses (when Saving Categories are included)
 
 **Saved**:
-Money put aside in a period: Expenses in Saving Categories, plus Transfers into a Savings Account group from outside it, minus Transfers out of one. Saved money is never Spent. (Once Funds reach Stats, a Transfer into an Account a Fund holds whole counts too, whatever its group: see ADR-0011.)
+Money put aside in a period: Expenses in Saving Categories, plus every Set aside Transfer (from an Account no Fund holds whole into one a Fund does, whatever its Account group). A Transfer between two Fund Accounts is a move, and a Transfer out of a Fund's Account to one no Fund holds isn't taken back, as on the Budget tab. Transfers that touch no Fund's Account still follow the Account groups: into a Savings group from outside it counts, out of one is taken back. Saved money is never Spent; an Expense paid from a Fund's Account is still Spent on its date. Stats breaks Saved down by Fund.
 _Avoid_: invested, spent (for Saving Categories)
 
 **Refund**:

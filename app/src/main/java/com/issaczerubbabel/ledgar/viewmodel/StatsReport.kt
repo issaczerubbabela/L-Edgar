@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.viewmodel
 
+import com.issaczerubbabel.ledgar.account.TransactionSnapshot
 import com.issaczerubbabel.ledgar.data.bucket.CycleSummary
 import com.issaczerubbabel.ledgar.data.bucket.CycleSummaryBuilder
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
@@ -9,6 +10,10 @@ import com.issaczerubbabel.ledgar.data.local.entity.BudgetCycle
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownRole
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.data.local.entity.Fund
+import com.issaczerubbabel.ledgar.data.local.entity.FundHolding
+import com.issaczerubbabel.ledgar.fund.FundMath
+import com.issaczerubbabel.ledgar.fund.FundsSnapshot
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -16,6 +21,7 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
+import java.util.IdentityHashMap
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -51,7 +57,9 @@ data class StatsInput(
     val today: LocalDate,
     /** The buckets and routing of the cycle on screen. Only read when [period] is a [StatsPeriod.Cycle]. */
     val buckets: List<BudgetBucket> = emptyList(),
-    val assignments: List<BucketCategory> = emptyList()
+    val assignments: List<BucketCategory> = emptyList(),
+    /** Funds change what counts as Saved (ADR-0011). [FundsSnapshot.EMPTY] gives Stats as it was before Funds. */
+    val funds: FundsSnapshot = FundsSnapshot.EMPTY
 )
 
 /** Money in a period, in the terms of CONTEXT.md. */
@@ -106,6 +114,9 @@ data class TrendBar(val label: String, val earned: Double, val spent: Double, va
 
 data class PaidFrom(val card: Double = 0.0, val cashAndAccounts: Double = 0.0, val transfers: Double = 0.0)
 
+/** What a period Set aside into one Fund: its part of Saved. */
+data class FundSaved(val fund: Fund, val amount: Double)
+
 /** Left to spend in a Salary cycle, worked out exactly as the Budget tab does. */
 data class CycleView(val summary: CycleSummary, val isRunning: Boolean, val saved: Double)
 
@@ -126,6 +137,8 @@ data class StatsReportUi(
     /** The period on screen and the ones before it, oldest first. */
     val trend: List<TrendBar> = emptyList(),
     val paidFrom: PaidFrom = PaidFrom(),
+    /** Saved broken down by Fund, largest first: only Funds the period Set aside into. Empty without Funds. */
+    val savedByFund: List<FundSaved> = emptyList(),
     val biggest: List<ExpenseRecord> = emptyList(),
     val hasTransactions: Boolean = false
 ) {
@@ -163,7 +176,7 @@ object StatsReport {
         val period = input.period
         val today = input.today
         val budgetBasis = period is StatsPeriod.Cycle
-        val money = Money(input.roles, groupLookup(input.accounts), budgetBasis)
+        val money = Money(input.roles, groupLookup(input.accounts), budgetBasis, input.funds.activeHoldings)
         val dated = input.records.mapNotNull { r -> parseFlexibleDate(r.date)?.let { it to r } }
         fun within(start: LocalDate, end: LocalDate) = dated.filter { (d, _) -> !d.isBefore(start) && !d.isAfter(end) }.map { it.second }
 
@@ -199,6 +212,7 @@ object StatsReport {
             days = if (period.days <= CALENDAR_MAX_DAYS) dayCells(timeline, today) else emptyList(),
             trend = trend(period, today) { p -> money.totals(within(p.start, p.end)) },
             paidFrom = money.paidFrom(inPeriod),
+            savedByFund = money.savedByFund(inPeriod, input.funds.activeFunds),
             biggest = inPeriod.filter { money.isSpending(it) }.sortedByDescending { it.amount }.take(5),
             hasTransactions = inPeriod.isNotEmpty()
         )
@@ -253,7 +267,7 @@ object StatsReport {
 
     private fun cycleView(period: StatsPeriod.Cycle, input: StatsInput, money: Money, inPeriod: List<ExpenseRecord>): CycleView? {
         val cycle = input.cycles.firstOrNull { it.id == period.span.id } ?: return null
-        val summary = CycleSummaryBuilder.build(cycle, input.buckets, input.assignments, input.records, input.today)
+        val summary = CycleSummaryBuilder.build(cycle, input.buckets, input.assignments, input.records, input.today, input.funds)
         val saved = inPeriod.filter { it.type.trim().equals("Expense", ignoreCase = true) && money.roles.isSaving(it.category) }.sumOf { it.amount }
         return CycleView(summary, period.span.isRunning, saved)
     }
@@ -383,10 +397,59 @@ object StatsReport {
     }
 
     /**
-     * The money rules of ADR-0004. With [budgetBasis] (Cycle view) every Expense is spending and
-     * Refunds are left alone, matching the Budget tab.
+     * The money rules of ADR-0004, with ADR-0011's Transfer rule once there are Funds. With
+     * [budgetBasis] (Cycle view) every Expense is spending and Refunds are left alone, matching the
+     * Budget tab. [holdings] are the active Funds' holdings; empty means Stats as before Funds.
      */
-    private class Money(val roles: StatsRoles, val groupOf: (Long?, String?) -> String?, val budgetBasis: Boolean) {
+    private class Money(
+        val roles: StatsRoles,
+        val groupOf: (Long?, String?) -> String?,
+        val budgetBasis: Boolean,
+        val holdings: List<FundHolding> = emptyList()
+    ) {
+        /** How a Transfer touches Funds: the Fund it's Set aside into, and whether either side is a Fund's whole Account. */
+        private class FundSides(val setAsideInto: Long?, val touchesFund: Boolean)
+
+        private val noFund = FundSides(null, false)
+        private val sides = IdentityHashMap<ExpenseRecord, FundSides>()
+
+        private fun fundSides(r: ExpenseRecord): FundSides {
+            if (holdings.isEmpty()) return noFund
+            return sides.getOrPut(r) {
+                val date = parseFlexibleDate(r.date) ?: return@getOrPut noFund
+                val txn = TransactionSnapshot(r.id, r.type, date, r.amount, r.accountId, r.fromAccountId, r.toAccountId)
+                val into = FundMath.setAsideInto(txn, holdings)
+                val touches = into != null || listOfNotNull(r.fromAccountId, r.toAccountId).any { FundMath.heldWholeOn(it, date, holdings) != null }
+                FundSides(into, touches)
+            }
+        }
+
+        /** What [r], a Transfer, adds to Saved. */
+        private fun transferSaved(r: ExpenseRecord): Double {
+            val funds = fundSides(r)
+            // Set aside counts whatever the Account group; a move between Funds or out of one doesn't count either way.
+            if (funds.touchesFund) return if (funds.setAsideInto != null) r.amount else 0.0
+            val intoSavings = roles.isSavingsGroup(groupOf(r.toAccountId, r.toAccountName))
+            val outOfSavings = roles.isSavingsGroup(groupOf(r.fromAccountId, r.fromAccountName))
+            return when {
+                intoSavings && !outOfSavings -> r.amount
+                outOfSavings && !intoSavings -> -r.amount
+                else -> 0.0
+            }
+        }
+
+        /** Each of [funds] that [records] Set aside into, with how much, largest first. */
+        fun savedByFund(records: List<ExpenseRecord>, funds: List<Fund>): List<FundSaved> {
+            if (holdings.isEmpty()) return emptyList()
+            val totals = LinkedHashMap<Long, Double>()
+            records.forEach { r ->
+                if (r.kind() != Kind.TRANSFER) return@forEach
+                val fundId = fundSides(r).setAsideInto ?: return@forEach
+                totals[fundId] = (totals[fundId] ?: 0.0) + r.amount
+            }
+            return funds.mapNotNull { fund -> totals[fund.id]?.let { FundSaved(fund, it) } }
+                .sortedWith(compareByDescending<FundSaved> { it.amount }.thenBy { it.fund.sortOrder }.thenBy { it.fund.id })
+        }
 
         fun isSpending(r: ExpenseRecord) = r.kind() == Kind.EXPENSE && (budgetBasis || !roles.isSaving(r.category))
 
@@ -403,12 +466,7 @@ object StatsReport {
                         else -> saved += r.amount
                     }
                     Kind.INCOME -> if (roles.isRefund(r.category)) refunds += r.amount else earned += r.amount
-                    Kind.TRANSFER -> {
-                        val intoSavings = roles.isSavingsGroup(groupOf(r.toAccountId, r.toAccountName))
-                        val outOfSavings = roles.isSavingsGroup(groupOf(r.fromAccountId, r.fromAccountName))
-                        if (intoSavings && !outOfSavings) saved += r.amount
-                        if (outOfSavings && !intoSavings) saved -= r.amount
-                    }
+                    Kind.TRANSFER -> saved += transferSaved(r)
                     Kind.OTHER -> Unit
                 }
             }

@@ -8,6 +8,10 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 ## [1.8.0] - 2026-11-27
 
+### Changed
+
+- Stats: money you move into a Fund's Account counts as Saved, with a Saved by Fund breakdown
+
 ### Fixed
 
 - Accounts: renaming one updates its transactions in the Sheet, and Re-send to Sheet repairs older renames
@@ -18,6 +22,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Funds: glossary terms (Fund, Holding, Set aside, Free, Unallocated) and ADR-0011, Funds are labels on Account money
 - Funds: Room v28 adds funds, fund_holdings and fund_plans, with FundMath, FundRepository and Fund figures in CycleSummary
 - Funds: backed up to the Sheet's Fund tabs (script version 3) and restored on Import by Account name and cycle start date
+- Funds: StatsReport counts Set aside as Saved via FundMath and passes the Funds snapshot to the cycle view (#153)
 
 ## [1.7.0] - 2026-11-27
 
