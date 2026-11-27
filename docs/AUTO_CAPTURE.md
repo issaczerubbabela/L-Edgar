@@ -106,7 +106,9 @@ Formats covered by tests built from real (redacted) alerts:
 | Axis | UPI merchant debit, recognised by its `UPI/P2M/<ref>/<merchant>` narration because it never says "Axis"; IMPS credit |
 | Google Pay | `Paid Rs.500 to NAME.` and `Received ... from NAME.` Built from a description of the notifications, **not** a capture from a real phone |
 | Paytm | Same patterns as Google Pay on trust. No sample exists yet |
-| Generic | Any text with an amount and a debit or credit word |
+| Generic | Any text with an amount and a debit or credit word, e.g. ICICI's UPI debit alert (`ICICI Bank Acct XX123 debited for Rs 240.00 on 28-Sep-26; ZOMATO credited. UPI:... Call ... SMS BLOCK 123 to ...`), where the debit word comes before "credited" for the payee |
+
+Direction for `GenericBankParser`, `HdfcParser` and `AxisParser` is decided by `ParsingUtils.directionOf`: whichever debit or credit word occurs first in the text wins, so an alert naming both (debited for your account, credited for the payee, or the reverse order) resolves correctly either way. `CubParser` keeps its own "Your a/c" rule instead, since CUB's narration always says which account the alert is about regardless of word order.
 
 Rules common to all: OTP messages are rejected; the first amount in the text is the transaction (balances
 come later); the dates `26/09/26`, `25-SEP-26`, `14-09-2026` and `19-12-24` are all read, day first.

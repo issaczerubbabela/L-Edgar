@@ -12,10 +12,15 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - Web version (web folder): view and edit transactions, Stats, Budget and Accounts from a PC or iPad browser
 
+### Fixed
+
+- Auto-capture: a bank alert saying "debited ... NAME credited" is filed as an Expense, not Income
+
 ### Developer
 
 - web/: Vite + React client on the Apps Script contract, with ported account, bucket and Stats maths, tests and a mock script
 - Web workflow tests and builds web/ on each change and publishes it to GitHub Pages from main
+- ParsingUtils.directionOf picks whichever debit/credit word comes first, shared by Generic/HDFC/Axis parsers
 
 ## [1.6.0] - 2026-10-13
 
