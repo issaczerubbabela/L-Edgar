@@ -159,8 +159,8 @@ private fun StartCycleForm(
                 supportingText = {
                     Text(
                         when {
-                            state.error == StartCycleFormError.AMOUNT -> "Enter the amount you have to spend, for example 68000."
-                            state.amountWasPrefilled -> "Prefilled from your last cycle. Nothing is saved until you start."
+                            state.error == StartCycleFormError.AMOUNT -> "Enter your whole salary, for example 68000."
+                            state.amountWasPrefilled -> "Prefilled from your last cycle. Enter your whole salary: Set aside comes out of it."
                             else -> "Your whole salary. Set aside for Funds comes out of it too."
                         }
                     )

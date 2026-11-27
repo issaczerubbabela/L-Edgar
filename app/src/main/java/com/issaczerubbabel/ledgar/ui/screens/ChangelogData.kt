@@ -25,7 +25,8 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Accounts: an Account's page shows Free next to its balance once you have a Fund",
             "Budget: a Your money card splits your money into Funds, This cycle and Free, Account by Account",
             "Budget: a Set aside section shows each Fund's planned contribution and what is still to transfer",
-            "Budget: Plan this cycle sets a planned contribution for each Fund, and Carry over copies them"
+            "Stats: tap a Fund in Saved by Fund, or in the Budget tab's Set aside, to open its page",
+            "Budget: Plan this cycle sets each Fund's planned contribution, adds a New fund, and Carry over copies them"
         ),
         changed = listOf(
             "Stats: money you move into a Fund's Account counts as Saved, with a Saved by Fund breakdown",

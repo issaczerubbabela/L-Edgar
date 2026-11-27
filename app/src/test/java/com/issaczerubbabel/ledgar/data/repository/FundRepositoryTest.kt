@@ -9,6 +9,7 @@ import com.issaczerubbabel.ledgar.data.bucket.StartCycleRequest
 import com.issaczerubbabel.ledgar.data.bucket.StartCycleResult
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
+import com.issaczerubbabel.ledgar.data.local.entity.BudgetBucket
 import com.issaczerubbabel.ledgar.data.local.entity.Fund
 import com.issaczerubbabel.ledgar.data.local.entity.FundHolding
 import com.issaczerubbabel.ledgar.data.local.entity.HoldingKind
@@ -209,6 +210,23 @@ class FundRepositoryTest {
         val plans = funds.getSnapshot().plans.filter { it.cycleId == newCycle }
         val names = funds.observeFunds().first().associate { it.id to it.name }
         assertEquals(setOf("Emergency" to 15_000.0, "Ministry" to 5_000.0), plans.map { names.getValue(it.fundId) to it.plannedAmount }.toSet())
+    }
+
+    @Test
+    fun startCycleWithCarryOverCopiesBucketsAndPlannedContributionsTogether() = runBlocking {
+        givenTheUsersFunds()
+        db.bucketBudgetDao().insertBucket(
+            BudgetBucket(cycleId = cycleId("2026-09-25"), name = "Essentials", colorIndex = 0, allocatedAmount = 60_000.0, sortOrder = 0)
+        )
+
+        val result = buckets.startCycle(
+            StartCycleRequest(LocalDate.parse("2026-10-25"), LocalDate.parse("2026-11-24"), 115_842.0, carryOverBuckets = true),
+            today = LocalDate.parse("2026-10-25")
+        )
+
+        val newCycle = (result as StartCycleResult.Started).cycleId
+        assertEquals(listOf("Essentials" to 60_000.0), db.bucketBudgetDao().getBuckets(newCycle).map { it.name to it.allocatedAmount })
+        assertEquals(20_000.0, funds.getSnapshot().plansFor(newCycle).sumOf { it.plannedAmount }, 0.001)
     }
 
     @Test

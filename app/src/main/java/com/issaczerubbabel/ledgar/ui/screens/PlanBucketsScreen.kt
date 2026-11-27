@@ -72,8 +72,6 @@ fun PlanBucketsScreen(
     onBack: () -> Unit,
     onOpenBucket: (Long) -> Unit,
     onStartCycle: () -> Unit,
-    /** Opens the New fund sheet. Null until the Fund screens (#40) are in; "+ New fund" is hidden then. */
-    onNewFund: (() -> Unit)? = null,
     vm: PlanBucketsViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -81,6 +79,7 @@ fun PlanBucketsScreen(
     var editingBucketId by remember { mutableStateOf<Long?>(null) }
     var editingFundId by remember { mutableStateOf<Long?>(null) }
     var addingBucket by remember { mutableStateOf(false) }
+    var creatingFund by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -108,7 +107,7 @@ fun PlanBucketsScreen(
                 onAddBucket = { addingBucket = true },
                 onStepContribution = { id, delta -> vm.adjustContribution(id, delta) },
                 onEditContribution = { editingFundId = it },
-                onNewFund = onNewFund
+                onNewFund = { creatingFund = true }
             )
         }
 
@@ -142,6 +141,14 @@ fun PlanBucketsScreen(
                 )
             }
         }
+        if (creatingFund) {
+            // A new Fund goes straight to its Planned contribution: the dialog opens once its row appears.
+            FundEditorSheet(
+                fundId = null,
+                onDismiss = { creatingFund = false },
+                onSaved = { newFundId -> editingFundId = newFundId }
+            )
+        }
         if (addingBucket) {
             NameDialog(
                 onDismiss = { addingBucket = false },
@@ -162,7 +169,7 @@ private fun PlanContent(
     onAddBucket: () -> Unit,
     onStepContribution: (Long, Double) -> Unit,
     onEditContribution: (Long) -> Unit,
-    onNewFund: (() -> Unit)?
+    onNewFund: () -> Unit
 ) {
     LazyColumn(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -226,16 +233,14 @@ private fun PlanContent(
             }
         }
 
-        if (state.contributions.isNotEmpty() || onNewFund != null) {
-            item { SectionLabel("Set aside", modifier = Modifier.padding(top = 8.dp)) }
-            if (state.contributions.isEmpty()) {
-                item {
-                    Text(
-                        text = "Plan how much of this cycle goes into a Fund, like an emergency fund or an RD.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+        item { SectionLabel("Set aside", modifier = Modifier.padding(top = 8.dp)) }
+        if (state.contributions.isEmpty()) {
+            item {
+                Text(
+                    text = "Plan how much of this cycle goes into a Fund, like an emergency fund or an RD.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
         items(state.contributions, key = { "fund-${it.fund.id}" }) { row ->
@@ -268,12 +273,10 @@ private fun PlanContent(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
-        if (onNewFund != null) {
-            item {
-                OutlinedButton(onClick = onNewFund, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Filled.Add, contentDescription = null)
-                    Text(text = "New fund", modifier = Modifier.padding(start = 8.dp))
-                }
+        item {
+            OutlinedButton(onClick = onNewFund, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Filled.Add, contentDescription = null)
+                Text(text = "New fund", modifier = Modifier.padding(start = 8.dp))
             }
         }
     }

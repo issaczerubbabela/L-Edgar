@@ -142,6 +142,7 @@ private fun animationsOff(): Boolean {
 fun InsightsScreen(
     innerPadding: PaddingValues,
     onSetUpCycle: () -> Unit = {},
+    onOpenFund: (Long) -> Unit = {},
     vm: StatsViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -184,7 +185,7 @@ fun InsightsScreen(
                 return@LazyColumn
             }
 
-            val cards = statsCards(state, colors, vm, onSetUpCycle, openDetail)
+            val cards = statsCards(state, colors, vm, onSetUpCycle, onOpenFund, openDetail)
             cards.forEachIndexed { index, (key, content) ->
                 item(key = key) {
                     Entrance(index, enabled = !firstVisitDone && !reduceMotion) { content() }
@@ -263,6 +264,7 @@ private fun statsCards(
     colors: ChartColors,
     vm: StatsViewModel,
     onSetUpCycle: () -> Unit,
+    onOpenFund: (Long) -> Unit,
     onOpen: (DetailRequest, RowLook) -> Unit
 ): List<Pair<String, @Composable () -> Unit>> {
     val report = state.report
@@ -273,7 +275,7 @@ private fun statsCards(
         cards += "empty" to { EmptyPeriodCard(state, vm::previousPeriod) }
         return cards
     }
-    if (report.savedByFund.isNotEmpty()) cards += "saved-by-fund" to { SavedByFundCard(report.savedByFund, report.totals.saved, colors, rupees) }
+    if (report.savedByFund.isNotEmpty()) cards += "saved-by-fund" to { SavedByFundCard(report.savedByFund, report.totals.saved, colors, rupees, onOpenFund) }
     cards += "pace" to { PaceCard(state, colors, rupees, onSetUpCycle) }
     val cycle = report.cycle
     if (cycle != null) {
@@ -570,10 +572,16 @@ private fun LeftOverHeadline(report: StatsReportUi, period: StatsPeriod, colors:
 
 /**
  * Saved split by the Funds it went into, with the rest (Saving Categories and Savings groups) as one
- * row. Rows aren't tappable yet: RankedRow takes an onClick once Fund detail exists.
+ * row. Tapping a Fund opens its page.
  */
 @Composable
-private fun SavedByFundCard(rows: List<FundSaved>, saved: Double, colors: ChartColors, rupees: (Double) -> String) {
+private fun SavedByFundCard(
+    rows: List<FundSaved>,
+    saved: Double,
+    colors: ChartColors,
+    rupees: (Double) -> String,
+    onOpenFund: (Long) -> Unit
+) {
     val other = saved - rows.sumOf { it.amount }
     val max = maxOf(rows.maxOf { it.amount }, other).coerceAtLeast(1.0)
     val track = MaterialTheme.colorScheme.surfaceContainerHighest
@@ -586,7 +594,8 @@ private fun SavedByFundCard(rows: List<FundSaved>, saved: Double, colors: ChartC
                 fraction = (row.amount / max).toFloat(),
                 barColor = colors.saved,
                 track = track,
-                leading = { ColorDot(bucketColor(row.fund.colorIndex)) }
+                leading = { ColorDot(bucketColor(row.fund.colorIndex)) },
+                onClick = { onOpenFund(row.fund.id) }
             )
         }
         if (abs(other) >= 1) {

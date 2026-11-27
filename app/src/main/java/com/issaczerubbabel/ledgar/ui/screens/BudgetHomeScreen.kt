@@ -87,8 +87,8 @@ fun BudgetHomeScreen(
     onOpenBucket: (Long) -> Unit,
     onPlanBuckets: () -> Unit,
     onStartCycle: () -> Unit,
-    /** Opens a Fund's page. Null until the Fund screens (#40) are in; the Set aside rows aren't tappable then. */
-    onOpenFund: ((Long) -> Unit)? = null,
+    /** Opens a Fund's page from its Set aside row. */
+    onOpenFund: (Long) -> Unit,
     vm: BudgetViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -114,7 +114,7 @@ private fun BudgetHomeContent(
     onOpenBucket: (Long) -> Unit,
     onPlanBuckets: () -> Unit,
     onStartCycle: () -> Unit,
-    onOpenFund: ((Long) -> Unit)?
+    onOpenFund: (Long) -> Unit
 ) {
     val summary = state.summary
     var showingSplit by rememberSaveable { mutableStateOf(false) }
@@ -188,7 +188,7 @@ private fun BudgetHomeContent(
                     Column {
                         FundContributionRow(
                             contribution = contribution,
-                            onClick = onOpenFund?.let { open -> { open(contribution.fund.id) } }
+                            onClick = { onOpenFund(contribution.fund.id) }
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
