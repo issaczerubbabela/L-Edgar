@@ -19,6 +19,10 @@ val changelogReleases: List<ChangelogRelease> = listOf(
         version = "v1.8.0",
         date = "2026-11-27",
         added = listOf(
+            "Funds: label money for a purpose in More > Funds, holding a whole account or a fixed amount of one",
+            "Funds: each Fund shows its holdings, this cycle's planned and transferred amounts, and its history",
+            "Funds: after a Transfer out of a Fund's account, Keep earmarked labels the money where it landed",
+            "Accounts: an Account's page shows Free next to its balance once you have a Fund",
             "Budget: a Your money card splits your money into Funds, This cycle and Free, Account by Account",
             "Budget: a Set aside section shows each Fund's planned contribution and what is still to transfer",
             "Budget: Plan this cycle sets a planned contribution for each Fund, and Carry over copies them"

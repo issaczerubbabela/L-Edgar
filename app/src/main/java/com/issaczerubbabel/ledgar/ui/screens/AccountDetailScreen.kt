@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -53,6 +54,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseOrange
+import com.issaczerubbabel.ledgar.ui.theme.ExpenseRed
+import com.issaczerubbabel.ledgar.viewmodel.AccountFundUi
 import com.issaczerubbabel.ledgar.ui.theme.IncomeBlue
 import com.issaczerubbabel.ledgar.util.TransactionType
 import com.issaczerubbabel.ledgar.viewmodel.AccountDetailViewModel
@@ -133,6 +136,7 @@ fun AccountDetailScreen(
                 BalanceHeader(
                     balance = state.balanceToday,
                     isNegative = state.isBalanceNegative,
+                    fund = state.fund,
                     note = listOf(state.lastChecked, state.initialBalanceNote).filter { it.isNotBlank() }.joinToString("\n")
                 )
             }
@@ -222,7 +226,7 @@ fun AccountDetailScreen(
 }
 
 @Composable
-private fun BalanceHeader(balance: String, isNegative: Boolean, note: String) {
+private fun BalanceHeader(balance: String, isNegative: Boolean, fund: AccountFundUi?, note: String) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -239,11 +243,39 @@ private fun BalanceHeader(balance: String, isNegative: Boolean, note: String) {
             style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.SemiBold),
             color = if (isNegative) ExpenseOrange else MaterialTheme.colorScheme.onBackground
         )
+        fund?.let { FreeLine(it) }
         if (note.isNotBlank()) {
             Text(
                 text = note,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/** Free next to the balance (ADR-0011): the balance less fixed holdings, or the Fund that holds the Account whole. */
+@Composable
+private fun FreeLine(fund: AccountFundUi) {
+    Column(
+        modifier = Modifier.semantics(mergeDescendants = true) {},
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (fund.isShort) {
+                Icon(Icons.Filled.Warning, contentDescription = null, tint = ExpenseRed, modifier = Modifier.size(16.dp))
+            }
+            Text(
+                text = fund.label,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = if (fund.isShort) ExpenseRed else MaterialTheme.colorScheme.onBackground
+            )
+        }
+        if (fund.detail.isNotBlank()) {
+            Text(
+                text = fund.detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (fund.isShort) ExpenseRed else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

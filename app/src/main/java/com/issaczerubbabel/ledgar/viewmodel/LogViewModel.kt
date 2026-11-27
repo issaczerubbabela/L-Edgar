@@ -24,6 +24,11 @@ import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.CaptureRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
+import com.issaczerubbabel.ledgar.data.repository.FundRepository
+import com.issaczerubbabel.ledgar.data.repository.HoldingResult
+import com.issaczerubbabel.ledgar.fund.EarmarkOffer
+import com.issaczerubbabel.ledgar.fund.KeepEarmarked
+import com.issaczerubbabel.ledgar.util.formatRupees
 import com.issaczerubbabel.ledgar.data.repository.RecurringRepository
 import com.issaczerubbabel.ledgar.data.repository.UndoableActions
 import com.issaczerubbabel.ledgar.ledger.Ledger
@@ -51,6 +56,7 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
@@ -71,7 +77,8 @@ class LogViewModel @Inject constructor(
     private val undoableActions: UndoableActions,
     private val captureRepository: CaptureRepository,
     private val captureConfirmer: CaptureConfirmer,
-    private val captureDraftHandoff: CaptureDraftHandoff
+    private val captureDraftHandoff: CaptureDraftHandoff,
+    private val fundRepository: FundRepository
 ) : ViewModel() {
 
     val accounts: StateFlow<List<AccountRecord>> = accountRepository
@@ -110,6 +117,13 @@ class LogViewModel @Inject constructor(
             field = value
             savedStateHandle[KEY_DATE_PINNED] = value
         }
+
+    /**
+     * After a new Transfer out of a Fund's whole Account, the offer to keep that money earmarked
+     * where it landed (ADR-0011). The save snackbar shows it with a "Keep earmarked" action.
+     */
+    var earmarkOffer by mutableStateOf<EarmarkOffer?>(null)
+        private set
 
     /** The date the last successful save landed on, for the "Saved to <date>" snackbar. */
     var lastSavedDate by mutableStateOf<LocalDate?>(null)
@@ -423,6 +437,11 @@ class LogViewModel @Inject constructor(
             }
 
             if (!isEditMode) {
+                earmarkOffer = if (record.type == TransactionType.TRANSFER) {
+                    KeepEarmarked.offerFor(record, fundRepository.getSnapshot(), accountNameById)
+                } else {
+                    null
+                }
                 lastSavedDate = selectedDate
                 resetForm()
             }
@@ -481,6 +500,21 @@ class LogViewModel @Inject constructor(
     }
 
     fun resetSaveSuccess() { saveSuccess = false }
+
+    fun clearEarmarkOffer() { earmarkOffer = null }
+
+    /** Adds or raises the Fund's fixed holding where [offer]'s money landed. Says what it did, for the snackbar. */
+    suspend fun keepEarmarked(offer: EarmarkOffer): String {
+        // In the ViewModel's scope, so the holding is saved even if the screen stops waiting.
+        val result = viewModelScope.async {
+            fundRepository.saveHolding(KeepEarmarked.holdingFor(offer, fundRepository.getSnapshot()))
+        }.await()
+        return if (result is HoldingResult.Saved) {
+            "Kept ${formatRupees(offer.amount)} of ${offer.toAccountName} for ${offer.fundName}"
+        } else {
+            "Couldn't keep it earmarked: ${offer.toAccountName} is held by another Fund"
+        }
+    }
     fun clearError() { errorMessage = null }
 
     fun retrySync() {
