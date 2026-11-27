@@ -109,6 +109,17 @@ interface CaptureDao {
         traceJson: String?
     )
 
+    /** Rewrites a waiting capture's trace, say to keep a Split; a resolved capture is left alone. */
+    @Query("UPDATE captured_transactions SET traceJson = :traceJson WHERE id = :id AND status IN ('PENDING', 'POSSIBLE_DUPLICATE')")
+    suspend fun updateTrace(id: Long, traceJson: String)
+
+    /**
+     * The captures a Transaction came from by a Confirm or a Link, so editing it in the Ledger can
+     * teach their Merchant rules. A Transfer's PAIRED other half is left out: its Confirm never taught it.
+     */
+    @Query("SELECT * FROM captured_transactions WHERE confirmedExpenseId IN (:expenseIds) AND status IN ('CONFIRMED', 'LINKED')")
+    suspend fun getTeachingFor(expenseIds: List<Long>): List<CapturedTransaction>
+
     /** Every waiting capture, for re-guessing. */
     @Query("SELECT * FROM captured_transactions WHERE status IN ('PENDING', 'POSSIBLE_DUPLICATE')")
     suspend fun getPendingSnapshot(): List<CapturedTransaction>

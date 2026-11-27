@@ -39,8 +39,8 @@ sealed interface IngestResult {
     data object Duplicate : IngestResult
 
     /**
-     * [shouldNotify] is true only for a High-confidence capture whose Account is already known and
-     * that doesn't look like a Transaction already in the Ledger.
+     * [shouldNotify] is true only for a High-confidence capture whose Account is already known (and,
+     * for a Transfer rule, its other Account) and that doesn't look like a Transaction already in the Ledger.
      */
     data class Captured(val id: Long, val band: ConfidenceBand, val shouldNotify: Boolean) : IngestResult
 }
@@ -111,9 +111,10 @@ class CaptureIngestor @Inject constructor(
         val alreadyLogged = ledgerMatches.find(row) != null
         val id = captureDao.insert(if (alreadyLogged) row.copy(status = "POSSIBLE_DUPLICATE") else row)
         if (id == -1L) return IngestResult.Duplicate
-        // The notification's Confirm doesn't cover Transfers yet (#143).
-        val shouldNotify = result.band == ConfidenceBand.HIGH && accountId != null &&
-            result.type != TransactionType.TRANSFER && !alreadyLogged
+        // A Transfer rule notifies too, once it names an other Account that isn't this one (#143).
+        val outcomeKnown = result.type != TransactionType.TRANSFER ||
+            (result.transferAccountId != null && result.transferAccountId != accountId)
+        val shouldNotify = result.band == ConfidenceBand.HIGH && accountId != null && outcomeKnown && !alreadyLogged
         return IngestResult.Captured(id, result.band, shouldNotify)
     }
 
@@ -224,19 +225,23 @@ class CaptureIngestor @Inject constructor(
  * A waiting capture with a new pass of guesses. A pass with neither a Category nor a Transfer's
  * other Account keeps the suggestion already there (and what explained it), so re-guessing never
  * takes a suggestion away; the Suggested description and the Account guess always follow the new
- * pass. A type, Category or Account the user picked lives in the inbox, never here.
+ * pass. A type, Category or Account the user picked lives in the inbox, never here; a Split
+ * ([CaptureTrace.splitFromTransfer]) is kept.
  */
-internal fun CapturedTransaction.withGuesses(result: Categorization, trace: CaptureTrace): CapturedTransaction =
-    if (result.category != null || result.transferAccountId != null || (suggestedCategory == null && suggestedToAccountId == null)) {
+internal fun CapturedTransaction.withGuesses(result: Categorization, trace: CaptureTrace): CapturedTransaction {
+    val kept = CaptureTrace.parse(traceJson)
+    // A Split is the user's decision, not a guess, so a new pass never brings the suggestion back.
+    val next = trace.copy(splitFromTransfer = kept.splitFromTransfer)
+    return if (result.category != null || result.transferAccountId != null || (suggestedCategory == null && suggestedToAccountId == null)) {
         copy(
             suggestedType = result.type,
             suggestedCategory = result.category,
             suggestedToAccountId = result.transferAccountId,
             confidence = result.confidence,
             decidedBy = result.decidedBy,
-            traceJson = trace.toJson()
+            traceJson = next.toJson()
         )
     } else {
-        val kept = CaptureTrace.parse(traceJson)
-        copy(traceJson = trace.copy(rule = kept.rule, why = kept.why, unmappedCanonical = kept.unmappedCanonical).toJson())
+        copy(traceJson = next.copy(rule = kept.rule, why = kept.why, unmappedCanonical = kept.unmappedCanonical).toJson())
     }
+}

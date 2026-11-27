@@ -1,6 +1,8 @@
 package com.issaczerubbabel.ledgar.viewmodel
 
 import com.issaczerubbabel.ledgar.capture.CaptureConfirmation
+import com.issaczerubbabel.ledgar.capture.CaptureTrace
+import com.issaczerubbabel.ledgar.capture.pair.TransferSuggestions
 import com.issaczerubbabel.ledgar.capture.categorize.ConfidenceBand
 import com.issaczerubbabel.ledgar.util.formatRupeesExact
 import java.time.Instant
@@ -36,6 +38,25 @@ data class CaptureDay(
 /** The To review list as days, its filters, the bulk sheet and what TalkBack reads. All pure. */
 object CaptureInbox {
 
+    /**
+     * Folds each Suggested Transfer ([TransferSuggestions]) into one row: the debit's, carrying the
+     * credit as its [CaptureRowUi.transferPartner], with the credit's own row left out. A capture
+     * that may already be in the Ledger, or that the user split from a suggestion, stays on its own.
+     * The own-account signal is the capture's Account, which only its digits' Account alias sets.
+     */
+    fun withTransferSuggestions(rows: List<CaptureRowUi>): List<CaptureRowUi> {
+        val candidates = rows.filter { it.match == null }
+        val split = candidates.filter { CaptureTrace.parse(it.capture.traceJson).splitFromTransfer }.map { it.capture.id }.toSet()
+        val suggestions = TransferSuggestions.find(candidates.map { it.capture }, split) { it.accountId }
+        if (suggestions.isEmpty()) return rows
+        val byId = rows.associateBy { it.capture.id }
+        val partnerOf = suggestions.associate { it.debit.id to byId.getValue(it.credit.id) }
+        val folded = suggestions.map { it.credit.id }.toSet()
+        return rows.filterNot { it.capture.id in folded }.map { row ->
+            partnerOf[row.capture.id]?.let { row.copy(transferPartner = it) } ?: row
+        }
+    }
+
     /** The day a capture's Transaction falls on, in the phone's zone: the date Confirm writes. */
     fun dayOf(row: CaptureRowUi, zone: ZoneId): LocalDate =
         Instant.ofEpochMilli(row.capture.txnTime).atZone(zone).toLocalDate()
@@ -58,8 +79,9 @@ object CaptureInbox {
                 CaptureDay(
                     date = date,
                     rows = shown,
-                    spent = shown.filter { it.isDebit }.sumOf { it.capture.amount },
-                    received = shown.filterNot { it.isDebit }.sumOf { it.capture.amount },
+                    // A Suggested Transfer only moves money between the user's own Accounts.
+                    spent = shown.filter { it.isDebit && !it.isTransferSuggestion }.sumOf { it.capture.amount },
+                    received = shown.filterNot { it.isDebit || it.isTransferSuggestion }.sumOf { it.capture.amount },
                     bulk = bulkSheet(all.sortedByDescending { it.capture.txnTime })
                 )
             }
@@ -72,6 +94,7 @@ object CaptureInbox {
     fun bulkSheet(rows: List<CaptureRowUi>): List<BulkItem> = rows.mapNotNull { row ->
         when {
             row.isBulkCandidate -> BulkItem(row, tickedAtStart = true)
+            row.isTransferSuggestion -> null
             row.isReady && row.band == ConfidenceBand.CHECK -> BulkItem(row, tickedAtStart = false)
             else -> null
         }
@@ -117,6 +140,26 @@ object CaptureInbox {
         day.spent.takeIf { it > 0 }?.let { formatRupeesExact(it) + " out" },
         day.received.takeIf { it > 0 }?.let { formatRupeesExact(it) + " in" }
     ).joinToString(", ")
+
+    /**
+     * A Suggested Transfer as one sentence: "Suggested transfer, ₹5,000 from HDFC Savings to CUB
+     * Savings, 12 November". A side still to pick is said so, and a guessed one as suggested.
+     */
+    fun spokenTransferSuggestion(row: CaptureRowUi, fromName: String?, toName: String?, zone: ZoneId): String {
+        val credit = row.transferPartner ?: return spokenLabel(row, fromName, null, zone)
+        fun side(name: String?, guess: Boolean, missing: String) = when {
+            name == null -> missing
+            guess -> "suggested $name"
+            else -> name
+        }
+        return listOf(
+            "Suggested transfer",
+            formatRupeesExact(row.capture.amount) +
+                " from " + side(fromName, row.accountIsGuess, "an account still to pick") +
+                " to " + side(toName, credit.accountIsGuess, "an account still to pick"),
+            dayOf(row, zone).format(SPOKEN_DAY)
+        ).joinToString(", ")
+    }
 
     /**
      * A compact row as one sentence: "Lunch, ₹80, Food, HDFC, check, 12 November". Says what's

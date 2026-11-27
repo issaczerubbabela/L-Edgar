@@ -60,9 +60,11 @@ class ReviewInboxViewModel @Inject constructor(
         combine(accounts, captureRepository.observeLedgerCandidates(), ::Pair)
     ) { pending, renames, edited, hidden, (accountList, ledger) ->
         val knownAccountIds = accountList.map { it.id }.toSet()
-        pending.filterNot { it.id in hidden }.map { capture ->
+        val cards = pending.filterNot { it.id in hidden }.map { capture ->
             CaptureRows.build(capture, edited[capture.id], renames, knownAccountIds, match = ledger.bestMatch(capture))
         }
+        // A waiting debit and credit that look like one Transfer between own Accounts show as one row.
+        CaptureInbox.withTransferSuggestions(cards)
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _filter = MutableStateFlow(CaptureFilter.ALL)
@@ -146,7 +148,14 @@ class ReviewInboxViewModel @Inject constructor(
         )
     }
 
+    /** Confirm, or on a Suggested Transfer Confirm Transfer: one Transfer that resolves both captures. */
     fun confirm(row: CaptureRowUi) = confirmRows(listOf(row))
+
+    /** Splits a Suggested Transfer back into its two captures, which then wait on their own. */
+    fun split(row: CaptureRowUi) {
+        val credit = row.transferPartner ?: return
+        viewModelScope.launch { captureRepository.splitTransferSuggestion(row.capture.id, credit.capture.id) }
+    }
 
     /** The bulk sheet (Confirm day or Review all): one decision, so one Undo puts every card back. */
     fun confirmAll(rows: List<CaptureRowUi>) = confirmRows(rows)
@@ -183,9 +192,13 @@ class ReviewInboxViewModel @Inject constructor(
         val chosen = CaptureInbox.confirmations(rows)
         if (chosen.isEmpty()) return
         val accountNames = accounts.value.associate { it.id to it.accountName }
+        // A Suggested Transfer's credit is resolved with its debit, so its picks go with it.
+        val partners = rows.mapNotNull { row -> row.transferPartner?.let { row.capture.id to it.capture.id } }.toMap()
         viewModelScope.launch {
             // Runs once the Undo window is over, on the app's scope: this screen may be gone by then.
-            confirmer.confirm(chosen, accountNames) { captureId -> edits.update { it - captureId } }
+            confirmer.confirm(chosen, accountNames) { captureId ->
+                edits.update { it - captureId - listOfNotNull(partners[captureId]).toSet() }
+            }
         }
     }
 

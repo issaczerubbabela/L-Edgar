@@ -25,7 +25,9 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "To review: up to 2 other guessed titles show as chips under a card, and tapping one uses it",
             "Auto-capture: an alert from your bank's app with an unknown account number suggests your Account",
             "To review: each Confirm sharpens the guesses on waiting captures, never changing what you picked",
-            "Auto-capture: a capture you already logged by hand says so, and Same one links it instead of adding it twice"
+            "Auto-capture: a capture you already logged by hand says so, and Same one links it instead of adding it twice",
+            "Auto-capture: spots transfers between your own accounts and lets you confirm them from the notification",
+            "Ledger: changing a captured transaction's Category or type teaches Auto-capture, as a Confirm would"
         ),
         changed = listOf(
             "To review: captures grouped by day with Confirm day, compact rows and Ready / Needs a pick filters",
@@ -44,7 +46,10 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "ADR-0010 \"Only a saved rule reaches High\"; guesses live in traceJson via CaptureTrace, adding no migration",
             "CaptureIngestor.reguessPending runs after each Confirm (CaptureReguessTest); a picked Category or other Account pins the type",
             "Pure LedgerMatcher finds the logged Transaction a capture repeats; a link is status LINKED, no migration",
-            "Pure CaptureInbox groups To review by day and builds its filters, bulk sheet and TalkBack sentence, unit tested"
+            "Pure CaptureInbox groups To review by day and builds its filters, bulk sheet and TalkBack sentence, unit tested",
+            "Pure TransferSuggestions reuses TransferPairMatcher's rules; a Split is kept in traceJson, so no migration",
+            "LedgerEditLearner in ExpenseRepository teaches rules from Category/type edits via MerchantRuleTeacher, as Confirm does",
+            "CaptureIngestor notifies High Transfer rules; CaptureActionHandler confirms them with the inbox's pairing"
         )
     ),
     ChangelogRelease(

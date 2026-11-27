@@ -43,8 +43,16 @@ data class CaptureRowUi(
      * The Transaction already in the Ledger this capture probably repeats (#125): the card asks
      * "Already in your Ledger?" and offers Same one and Add anyway instead of Confirm.
      */
-    val match: ExpenseRecord? = null
+    val match: ExpenseRecord? = null,
+    /**
+     * A Suggested Transfer (#143): this row is the debit, and [transferPartner] the waiting credit
+     * that looks like its other half. One row stands for both: Confirm Transfer saves one Transfer
+     * from this row's Account to the partner's and resolves both, and Split shows them apart again.
+     */
+    val transferPartner: CaptureRowUi? = null
 ) {
+    val isTransferSuggestion: Boolean get() = transferPartner != null
+
     /** The merchant's name for "Always use": its rename or the bank's text, never a guessed Description. */
     val merchantTitle: String get() = if (titleIsGuess) bankTitle else title
 
@@ -55,7 +63,11 @@ data class CaptureRowUi(
     val isDebit: Boolean get() = capture.direction != "CREDIT"
 
     val canConfirm: Boolean
-        get() = accountId != null && if (isTransfer) otherAccountId != null && otherAccountId != accountId else !category.isNullOrBlank()
+        get() = when {
+            transferPartner != null -> accountId != null && transferPartner.accountId != null && transferPartner.accountId != accountId
+            isTransfer -> accountId != null && otherAccountId != null && otherAccountId != accountId
+            else -> accountId != null && !category.isNullOrBlank()
+        }
 
     /** Only a capture with a merchant can have a rule saved for it. */
     val canOfferAlwaysUse: Boolean
@@ -66,17 +78,27 @@ data class CaptureRowUi(
      * outcome and Account are both known, the Account not merely guessed, and that isn't possibly a
      * Transaction already logged, which only the user can decide.
      */
-    val isBulkCandidate: Boolean get() = band == ConfidenceBand.HIGH && isReady
+    val isBulkCandidate: Boolean get() = band == ConfidenceBand.HIGH && isReady && !isTransferSuggestion
 
     /**
      * To review's Ready filter: a Category (or a Transfer's other Account) and a real Account, not a
      * guessed one, and no Transaction in the Ledger it may repeat. Everything else Needs a pick.
      */
-    val isReady: Boolean get() = canConfirm && !accountIsGuess && match == null
+    val isReady: Boolean get() = canConfirm && !accountIsGuess && match == null && transferPartner?.accountIsGuess != true
 
     /** What Confirm saves; null while something is still missing. */
     fun toEdits(): CaptureEdits? {
         if (!canConfirm) return null
+        transferPartner?.let { credit ->
+            return CaptureEdits(
+                type = TransactionType.TRANSFER,
+                category = TransactionType.TRANSFER,
+                accountId = accountId ?: return null,
+                description = title,
+                otherAccountId = credit.accountId,
+                pairCaptureId = credit.capture.id
+            )
+        }
         return CaptureEdits(
             type = type,
             category = if (isTransfer) TransactionType.TRANSFER else category.orEmpty(),

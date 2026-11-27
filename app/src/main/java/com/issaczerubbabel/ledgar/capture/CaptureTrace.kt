@@ -9,8 +9,8 @@ import com.issaczerubbabel.ledgar.capture.categorize.DescriptionGuess
 /**
  * What the predictor decided for a Captured transaction, kept in its `traceJson`: the step that
  * chose the Category and why, the Suggested description with its alternatives, and an Account
- * guessed from the source app. Only guesses live here; what the user changes on a card stays in
- * the inbox until Confirm, so re-guessing this never overwrites a user's choice.
+ * guessed from the source app. Only guesses live here, plus [splitFromTransfer]; what the user
+ * changes on a card stays in the inbox until Confirm, so re-guessing this never overwrites a user's choice.
  *
  * Built and read with Gson's tree API rather than reflection, so R8 can't break it.
  */
@@ -22,7 +22,13 @@ data class CaptureTrace(
     val descriptionAlternatives: List<String> = emptyList(),
     val guessedAccountId: Long? = null,
     /** See [DescriptionGuess.perPayment]. */
-    val descriptionPerPayment: Boolean = false
+    val descriptionPerPayment: Boolean = false,
+    /**
+     * The user split this capture out of a Suggested Transfer, so it is never suggested as one
+     * again. The one decision kept here rather than in the inbox, so it survives a restart without a
+     * migration; re-guessing carries it over (see [withGuesses]).
+     */
+    val splitFromTransfer: Boolean = false
 ) {
     /** Every guessed Description, the title first. */
     val descriptionGuesses: List<String> get() = listOfNotNull(descriptionGuess) + descriptionAlternatives
@@ -51,6 +57,7 @@ data class CaptureTrace(
         }
         guessedAccountId?.let { addProperty("guessedAccountId", it) }
         if (descriptionPerPayment) addProperty("perPayment", true)
+        if (splitFromTransfer) addProperty("split", true)
     }.toString()
 
     companion object {
@@ -78,7 +85,8 @@ data class CaptureTrace(
                     ?.mapNotNull { it.takeIf { e -> e.isJsonPrimitive }?.asString }
                     .orEmpty(),
                 guessedAccountId = runCatching { obj.get("guessedAccountId")?.takeIf { it.isJsonPrimitive }?.asLong }.getOrNull(),
-                descriptionPerPayment = runCatching { obj.get("perPayment")?.takeIf { it.isJsonPrimitive }?.asBoolean }.getOrNull() == true
+                descriptionPerPayment = runCatching { obj.get("perPayment")?.takeIf { it.isJsonPrimitive }?.asBoolean }.getOrNull() == true,
+                splitFromTransfer = runCatching { obj.get("split")?.takeIf { it.isJsonPrimitive }?.asBoolean }.getOrNull() == true
             )
         }
     }

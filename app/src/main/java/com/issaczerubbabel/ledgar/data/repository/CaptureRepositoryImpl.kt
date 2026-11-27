@@ -3,8 +3,7 @@ package com.issaczerubbabel.ledgar.data.repository
 import androidx.room.withTransaction
 import com.issaczerubbabel.ledgar.capture.CaptureReguesser
 import com.issaczerubbabel.ledgar.capture.CaptureTrace
-import com.issaczerubbabel.ledgar.capture.categorize.MerchantRuleLearner
-import com.issaczerubbabel.ledgar.capture.categorize.RuleChange
+import com.issaczerubbabel.ledgar.capture.categorize.MerchantRuleTeacher
 import com.issaczerubbabel.ledgar.capture.notify.displayTitle
 import com.issaczerubbabel.ledgar.capture.pair.LedgerCandidates
 import com.issaczerubbabel.ledgar.capture.pair.LedgerMatchFinder
@@ -42,6 +41,7 @@ class CaptureRepositoryImpl @Inject constructor(
 ) : CaptureRepository {
 
     private val ledgerMatches = LedgerMatchFinder(expenseDao, captureDao)
+    private val ruleTeacher = MerchantRuleTeacher(merchantRuleDao)
 
     override fun observePending(): Flow<List<CapturedTransaction>> = captureDao.observePending()
 
@@ -120,8 +120,12 @@ class CaptureRepositoryImpl @Inject constructor(
 
         // ADR-0006: the other half of the Transfer is resolved with it, only when it's unambiguous.
         if (otherAccountId != null) {
-            val pairing = pairingFor(capture, amount, otherAccountId)
-            if (pairing is TransferPairing.One) captureDao.markPaired(pairing.capture.id, expenseId)
+            val pairing = pairingFor(capture, amount, otherAccountId, edits.pairCaptureId)
+            if (pairing is TransferPairing.One) {
+                captureDao.markPaired(pairing.capture.id, expenseId)
+                // A Suggested Transfer's other half may have had unknown digits: they are the other Account's now.
+                teachAlias(pairing.capture.accountHint, otherAccountId)
+            }
         }
 
         learn(
@@ -197,31 +201,15 @@ class CaptureRepositoryImpl @Inject constructor(
         description: (existing: MerchantRule?) -> String?,
         toAccountId: Long?
     ) {
-        // Picking an account for an alert we couldn't place teaches the alias for next time.
-        val hint = capture.accountHint
+        teachAlias(capture.accountHint, accountId)
+        ruleTeacher.teach(capture, type, category, alwaysUse, description, toAccountId)
+    }
+
+    /** Picking an account for an alert we couldn't place teaches the alias for next time. */
+    private suspend fun teachAlias(hint: String?, accountId: Long?) {
         if (hint != null && accountId != null && aliasDao.getByAlias(hint) == null) {
             aliasDao.upsert(AccountAlias(hint, accountId))
             captureDao.assignAccountToPending(hint, accountId)
-        }
-
-        capture.merchantNorm?.let { merchant ->
-            val existing = merchantRuleDao.get(merchant, capture.direction)
-            val change = MerchantRuleLearner.onConfirmed(
-                existing = existing,
-                merchantNorm = merchant,
-                direction = capture.direction,
-                type = type,
-                finalCategory = category,
-                alwaysUse = alwaysUse,
-                now = System.currentTimeMillis(),
-                description = description(existing),
-                toAccountId = toAccountId
-            )
-            when (change) {
-                is RuleChange.Upsert -> merchantRuleDao.upsert(change.rule)
-                is RuleChange.Delete -> merchantRuleDao.delete(change.merchantNorm, change.direction)
-                RuleChange.None -> Unit
-            }
         }
     }
 
@@ -231,10 +219,22 @@ class CaptureRepositoryImpl @Inject constructor(
         if (edits.type != TransactionType.TRANSFER) return TransferPairing.None
         val otherAccountId = edits.otherAccountId ?: return TransferPairing.None
         val capture = captureDao.getById(captureId) ?: return TransferPairing.None
-        return pairingFor(capture, edits.amount ?: capture.amount, otherAccountId)
+        return pairingFor(capture, edits.amount ?: capture.amount, otherAccountId, edits.pairCaptureId)
     }
 
-    private suspend fun pairingFor(capture: CapturedTransaction, amount: Double, otherAccountId: Long): TransferPairing {
+    /**
+     * The capture's other half: [pairCaptureId], a Suggested Transfer's other side, while it still
+     * could be one; otherwise the one waiting capture whose digits are the other Account's alias.
+     */
+    private suspend fun pairingFor(
+        capture: CapturedTransaction,
+        amount: Double,
+        otherAccountId: Long,
+        pairCaptureId: Long? = null
+    ): TransferPairing {
+        pairCaptureId?.let { captureDao.getById(it) }
+            ?.takeIf { TransferPairMatcher.couldBeOtherHalf(capture, amount, it) }
+            ?.let { return TransferPairing.One(it) }
         val waiting = captureDao.getWaiting(
             direction = TransferPairMatcher.opposite(capture.direction),
             from = capture.txnTime - TransferPairMatcher.WINDOW_MS,
@@ -244,6 +244,13 @@ class CaptureRepositoryImpl @Inject constructor(
             .mapNotNull { hint -> aliasDao.getByAlias(hint)?.let { hint to it.accountId } }
             .toMap()
         return TransferPairMatcher.match(capture, amount, otherAccountId, waiting) { aliases[it] }
+    }
+
+    override suspend fun splitTransferSuggestion(debitId: Long, creditId: Long) = database.withTransaction {
+        listOf(debitId, creditId).forEach { id ->
+            val capture = captureDao.getById(id)?.takeIf { it.isWaiting() } ?: return@forEach
+            captureDao.updateTrace(id, CaptureTrace.parse(capture.traceJson).copy(splitFromTransfer = true).toJson())
+        }
     }
 
     override suspend fun dismiss(captureId: Long) = captureDao.markDismissed(captureId)

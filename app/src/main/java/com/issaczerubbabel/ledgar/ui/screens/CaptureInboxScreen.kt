@@ -287,6 +287,21 @@ fun CaptureInboxScreen(
                         )
                     }
                     items(day.rows, key = { it.capture.id }) { row ->
+                        val credit = row.transferPartner
+                        if (credit != null) {
+                            TransferSuggestionCard(
+                                row = row,
+                                fromName = row.accountId?.let { accountNames[it] },
+                                toName = credit.accountId?.let { accountNames[it] },
+                                zone = zone,
+                                onPickFrom = { picker = Picker.ForAccount(row) },
+                                onPickTo = { picker = Picker.ForAccount(credit) },
+                                onConfirm = { vm.confirm(row) },
+                                onSplit = { vm.split(row) },
+                                modifier = Modifier.animateItem()
+                            )
+                            return@items
+                        }
                         val categories = if (row.isIncome) incomeCategories else expenseCategories
                         SwipeableCaptureCard(
                             row = row,
@@ -953,6 +968,96 @@ private fun CaptureCard(
                 } else {
                     Button(onClick = onConfirm, enabled = row.canConfirm) { Text("Confirm") }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * A Suggested Transfer (#143): one row for a waiting debit and credit that look like money moving
+ * between the user's own Accounts, From → To, with a side still unknown to pick. Confirm Transfer
+ * saves one Transfer and resolves both captures, with one Undo; Split shows them as two again.
+ * TalkBack reads the row as one sentence and offers the same choices as custom actions.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TransferSuggestionCard(
+    row: CaptureRowUi,
+    fromName: String?,
+    toName: String?,
+    zone: ZoneId,
+    onPickFrom: () -> Unit,
+    onPickTo: () -> Unit,
+    onConfirm: () -> Unit,
+    onSplit: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val credit = row.transferPartner ?: return
+    val spoken = CaptureInbox.spokenTransferSuggestion(row, fromName, toName, zone)
+    val actions = buildList {
+        if (row.canConfirm) add(CustomAccessibilityAction("Confirm transfer") { onConfirm(); true })
+        add(CustomAccessibilityAction("Split into two") { onSplit(); true })
+        add(CustomAccessibilityAction(if (fromName == null) "Pick the From account" else "Change the From account") { onPickFrom(); true })
+        add(CustomAccessibilityAction(if (toName == null) "Pick the To account" else "Change the To account") { onPickTo(); true })
+    }
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .padding(end = 8.dp)
+                    .clearAndSetSemantics {
+                        contentDescription = spoken
+                        customActions = actions
+                    }
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Transfer between your accounts?",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        formatRupeesExact(row.capture.amount),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(Modifier.clickable(onClick = onPickFrom)) {
+                        RowPill(fromName?.let { if (row.accountIsGuess) "$it?" else it } ?: "From account", missing = fromName == null, guess = row.accountIsGuess)
+                    }
+                    Text("→", style = MaterialTheme.typography.bodyMedium)
+                    Box(Modifier.clickable(onClick = onPickTo)) {
+                        RowPill(toName?.let { if (credit.accountIsGuess) "$it?" else it } ?: "To account", missing = toName == null, guess = credit.accountIsGuess)
+                    }
+                }
+                Text(
+                    "${row.bankTitle} · ${credit.bankTitle} · ${dateFormat.format(Instant.ofEpochMilli(row.capture.txnTime).atZone(zone))}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                TextButton(onClick = onSplit) { Text("Split") }
+                Button(onClick = onConfirm, enabled = row.canConfirm) { Text("Confirm Transfer") }
             }
         }
     }

@@ -141,7 +141,7 @@ Resolving a Captured transaction as the bank's alert for a Transaction the user 
 _Avoid_: merge, match (as the user's action)
 
 **Merchant rule**:
-A saved mapping from a normalized merchant name and the bank's direction (debit or credit) to an outcome, and to the description the user last renamed it to, used for future Captured transactions from the same merchant. The outcome is an Expense or Income with a Category, or a Transfer with the other Account (the To-account of a debit, the From-account of a credit). It is either set by the user or learned from repeated identical confirmations.
+A saved mapping from a normalized merchant name and the bank's direction (debit or credit) to an outcome, and to the description the user last renamed it to, used for future Captured transactions from the same merchant. The outcome is an Expense or Income with a Category, or a Transfer with the other Account (the To-account of a debit, the From-account of a credit). It is either set by the user or learned from repeated identical confirmations. Changing the type or Category of a captured Transaction in the Ledger counts like a Confirm with that outcome.
 _Avoid_: category rule
 
 **Account alias**:
@@ -163,6 +163,10 @@ _Avoid_: complete, confirmable
 **Suggested description**:
 The Description auto-capture guesses for a Captured transaction from the user's own Transactions, by merchant, amount, time of day and weekday (₹80 at 1pm is "Lunch", ₹30 at 4:30pm is "Tea"). It fills the capture's title, marked as a guess, with up to two alternatives as chips. A saved rename on the Merchant rule wins over it until the merchant has had different Descriptions. It never changes the Confidence band, and keeping it doesn't rename the merchant.
 _Avoid_: auto-description, predicted title
+
+**Suggested Transfer**:
+A waiting debit and credit that To review shows as one row because they look like one Transfer between the user's own Accounts: the same amount to the paisa, within 2 days, each the other's only match, and at least one side's digits an Account alias (ADR-0006). The user confirms it as one Transfer, which resolves both, or splits it back into two Captured transactions.
+_Avoid_: merged capture, auto-transfer
 
 ## Google Sheets
 

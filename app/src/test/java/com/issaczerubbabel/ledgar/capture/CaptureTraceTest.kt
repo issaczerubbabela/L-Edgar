@@ -66,4 +66,17 @@ class CaptureTraceTest {
         assertEquals("You picked Food for this 4 of 5 times", kept.why)
         assertEquals("Tea", kept.descriptionGuess)
     }
+
+    @Test
+    fun aSplitFromASuggestedTransferRoundTripsAndOutlivesEveryNewPass() {
+        val split = capture.copy(traceJson = CaptureTrace.parse(capture.traceJson).copy(splitFromTransfer = true).toJson())
+        val description = com.issaczerubbabel.ledgar.capture.categorize.DescriptionGuess("Tea")
+
+        val withCategory = Categorization("CANTEEN", "Expense", "Snacks", 0.89, "R2", "You picked Snacks for this 3 of 3 times")
+        val without = Categorization("CANTEEN", "Expense", null, 0.0, "R11", "Nothing recognised")
+
+        assertEquals(true, CaptureTrace.parse(split.withGuesses(withCategory, CaptureTrace.of(withCategory, description, null)).traceJson).splitFromTransfer)
+        assertEquals(true, CaptureTrace.parse(split.withGuesses(without, CaptureTrace.of(without, description, null)).traceJson).splitFromTransfer)
+        assertEquals(false, CaptureTrace.parse(capture.traceJson).splitFromTransfer)
+    }
 }

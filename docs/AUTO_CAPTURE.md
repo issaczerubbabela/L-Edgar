@@ -55,6 +55,19 @@ alert) are defined in [CONTEXT.md](../CONTEXT.md).
    becomes `PAIRED` with the same `confirmedExpenseId`, so the money is counted once. The snackbar says "Transfer
    saved, and the matching CUB Savings credit too", and Undo brings both cards back. Two or more matches pair
    none: they stay waiting, and the snackbar says so.
+   **Suggested Transfers** (#143, `TransferSuggestions`, all pure): a waiting debit and credit that could be each
+   other's other half by the same rules (`TransferPairMatcher.couldBeOtherHalf`: the same amount to the paisa,
+   within 2 days), each the other's only match, show as **one row** when at least one side's digits are an
+   Account alias (the capture's Account, which only an alias sets). Amount and date alone never pair them, and
+   both sides on the same Account are no Transfer. The row reads "Transfer between your accounts?", From → To,
+   with a side whose digits are unknown to pick ("HDFC Savings → To account"), and TalkBack reads it as one
+   sentence ("Suggested transfer, ₹5,000 from HDFC Savings to an account still to pick, 14 November").
+   **Confirm Transfer** confirms the debit as a Transfer with the credit as its explicit other half
+   (`CaptureEdits.pairCaptureId`): one Transaction, the debit `CONFIRMED`, the credit `PAIRED`, and the credit's
+   digits saved as the To-account's alias. It goes through `CaptureConfirmer`, so one Undo brings both back.
+   **Split** shows them as two captures again and marks both (`CaptureTrace.splitFromTransfer`, kept across
+   re-guesses) so they are never suggested together again. A capture that may already be in the Ledger is never
+   part of a suggestion, and a suggestion is left out of the bulk sheet and of its day's money out and in.
    **Linking to a logged Transaction** (#125): a capture that looks like a Transaction already in the
    Ledger (typed in on Add Transaction or Quick Add, or added by a Repeat rule) shows **"Already in your
    Ledger?"** with that Transaction drawn as the shared Transaction row. **Same one** (and a right swipe,
@@ -71,7 +84,8 @@ alert) are defined in [CONTEXT.md](../CONTEXT.md).
    until then (`UndoableActions`, the same holder Delete uses), so Undo leaves no Transaction, nothing to
    Sync and no rule or alias change. Leaving the screen or the app makes a waiting decision final.
 5. **Confirm from a notification.** A capture that is High confidence and has a known Account also posts a
-   notification with **Confirm** and **Not mine**, unless it already matches a Transaction in the Ledger.
+   notification with **Confirm** and **Not mine**, unless it already matches a Transaction in the Ledger. A
+   saved Transfer rule counts too, once it names an other Account that isn't the capture's own.
    Everything else waits quietly in the inbox.
 6. **Unreadable alerts.** If a bank changes its wording and an alert can't be read, it appears under
    More > Auto-capture > Alerts we couldn't read, with Copy and Delete.
@@ -287,14 +301,18 @@ user confirms.
 ## 8. The notification
 
 `CaptureNotifier` posts for a capture that is High confidence **and** has a known Account, and that doesn't
-match a Transaction already in the Ledger, nothing else.
+match a Transaction already in the Ledger, nothing else. A Transfer rule (R1 with Transfer and an other Account)
+also needs that other Account to exist and differ from the capture's own.
 
 - The lock screen shows "A captured transaction is waiting"; the amount and merchant appear only once unlocked.
+  Unlocked, a Transfer reads "Transfer ₹5,000 to HDFC Credit Card" ("from" for a credit), then the capture's
+  title and its own Account.
 - **Confirm** is marked as needing authentication (`setAuthenticationRequired`), so Android asks for an unlock
   first. It saves only what the capture
   already suggests, with the capture's title (its rename or Suggested description) as the Description, and
-  never with a guessed Account. With no Category or Account, or once the capture matches a Transaction in the
-  Ledger, it does nothing and the capture stays in the inbox.
+  never with a guessed Account. A Transfer is saved from its Account to the rule's (for a debit) and pairs its
+  other half exactly as the inbox's Confirm does. With no Category (or other Account) or Account, or once the
+  capture matches a Transaction in the Ledger, it does nothing and the capture stays in the inbox.
 - **Not mine** dismisses the capture.
 - Tapping the notification opens the app normally, so the app lock still applies before anything is shown.
 - It is cancelled when the capture is resolved in the inbox.
@@ -354,9 +372,18 @@ Deliberate omissions and gaps, so nobody assumes otherwise:
   cloud model. The Naive Bayes counts are rebuilt in memory on each ingest and re-guess rather than stored,
   which is fine for a few thousand Transactions (the snapshot is capped at the latest 5,000); a much larger
   ledger may want a cached model.
-- **Transfers.** The other half is paired only when the user confirms a Transfer
-  ([ADR-0006](adr/0006-transfer-suggestions-require-an-own-account-signal.md)). Two waiting captures are
-  never suggested as a Transfer on their own, and the notification's Confirm doesn't cover Transfers yet.
+- **Transfers.** A Suggested Transfer needs an Account alias on at least one side
+  ([ADR-0006](adr/0006-transfer-suggestions-require-an-own-account-signal.md)), so a Transfer between two
+  Accounts whose digits aren't aliased yet shows as two captures. Split has no Undo, and only To review
+  suggests: the notification offers a Transfer only when a saved rule says so. A Transfer confirmed from the
+  notification pairs only a capture whose digits are already the other Account's alias.
+- **Ledger edits teach** (`LedgerEditLearner`, wrapped around `ExpenseRepository.update` and the Ledger's batch
+  Change category). Changing the type or Category of a Transaction that came from a capture (a Confirm or a
+  Link, by `confirmedExpenseId`; a Transfer's PAIRED half doesn't count) records an override, or a confirmation,
+  on that merchant's rule, exactly as a Confirm with that outcome would; for a Transfer a new other Account is a
+  new outcome. Amount, date, Account and Description edits teach nothing, and a Ledger edit never renames the
+  merchant. A Sheet pull that changes a Category doesn't teach. Learning is best effort: it never fails the
+  edit, and changing a Transaction back counts as one more decision, not an undo.
 - **Linking.** Only Transactions dated in the last 35 days are offered, and only the best match: there is
   no picker for "2 other matches", no Unlink, and a link never corrects the Transaction's date or amount to
   the bank's. Two captures of one payment from different apps (the bank's SMS and Google Pay) are still two

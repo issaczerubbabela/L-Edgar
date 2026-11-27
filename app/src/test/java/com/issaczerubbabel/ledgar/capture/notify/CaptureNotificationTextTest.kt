@@ -38,6 +38,27 @@ class CaptureNotificationTextTest {
     }
 
     @Test
+    fun aTransferRuleReadsTransferToItsOtherAccountAndTheLockScreenStaysGeneric() {
+        val content = CaptureNotificationText.build(
+            capture("CRED", 5000.0, "Transfer"), "CRED", "Transfer", "HDFC Savings", otherAccountName = "HDFC Credit Card"
+        )
+
+        assertEquals("Transfer ₹5,000 to HDFC Credit Card", content.title)
+        assertTrue(content.text.startsWith("CRED · from HDFC Savings"))
+        assertEquals("A captured transaction is waiting", content.publicTitle)
+    }
+
+    @Test
+    fun aCreditTransferReadsFromItsOtherAccount() {
+        val credit = capture("ISSAC", 2000.0, "Transfer").copy(direction = "CREDIT")
+
+        val content = CaptureNotificationText.build(credit, "ISSAC", "Transfer", "CUB Savings", otherAccountName = "HDFC Savings")
+
+        assertEquals("Transfer ₹2,000 from HDFC Savings", content.title)
+        assertTrue(content.text.startsWith("ISSAC · to CUB Savings"))
+    }
+
+    @Test
     fun aMissingMerchantFallsBackToAPlainWord() {
         assertEquals("Payment", capture(null, 10.0).displayTitle())
         assertEquals("Money received", capture("  ", 10.0, "Income").displayTitle())

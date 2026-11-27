@@ -40,15 +40,8 @@ object TransferPairMatcher {
         waiting: List<CapturedTransaction>,
         aliasAccountId: (String) -> Long?
     ): TransferPairing {
-        val direction = opposite(transfer.direction)
-        val paise = paise(amount)
         val matches = waiting.filter { candidate ->
-            candidate.id != transfer.id &&
-                candidate.status in WAITING &&
-                candidate.direction == direction &&
-                paise(candidate.amount) == paise &&
-                abs(candidate.txnTime - transfer.txnTime) <= WINDOW_MS &&
-                candidate.accountHint?.let(aliasAccountId) == otherAccountId
+            couldBeOtherHalf(transfer, amount, candidate) && candidate.accountHint?.let(aliasAccountId) == otherAccountId
         }
         return when (matches.size) {
             0 -> TransferPairing.None
@@ -56,6 +49,18 @@ object TransferPairMatcher {
             else -> TransferPairing.Ambiguous(matches.size)
         }
     }
+
+    /**
+     * Everything but the own-account signal: [candidate] is a different capture, still waiting, in
+     * the opposite direction to [transfer], for [amount] to the paisa, within [WINDOW_MS] of it.
+     * [TransferSuggestions] shares it, so a suggestion and a Confirm's pairing never disagree.
+     */
+    fun couldBeOtherHalf(transfer: CapturedTransaction, amount: Double, candidate: CapturedTransaction): Boolean =
+        candidate.id != transfer.id &&
+            candidate.status in WAITING &&
+            candidate.direction == opposite(transfer.direction) &&
+            paise(candidate.amount) == paise(amount) &&
+            abs(candidate.txnTime - transfer.txnTime) <= WINDOW_MS
 
     private fun paise(amount: Double): Long = (amount * 100).roundToLong()
 

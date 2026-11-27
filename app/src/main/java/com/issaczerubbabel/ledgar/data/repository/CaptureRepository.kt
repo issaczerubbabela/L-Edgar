@@ -26,7 +26,13 @@ data class CaptureEdits(
     val amount: Double? = null,
     /** Set from Edit: replaces the date in the alert. */
     val date: LocalDate? = null,
-    val remarks: String = ""
+    val remarks: String = "",
+    /**
+     * A Suggested Transfer's other side: the waiting capture resolved with this Transfer as its
+     * PAIRED half, whose digits become the other Account's alias. Without it, a Transfer pairs only
+     * with a capture whose digits are already that Account's alias.
+     */
+    val pairCaptureId: Long? = null
 )
 
 interface CaptureRepository {
@@ -48,8 +54,9 @@ interface CaptureRepository {
      * is remembered on the merchant's rule; the bank's text clears it, and a Suggested description
      * leaves it as it was. Afterwards the captures still waiting are guessed again.
      *
-     * A Transfer also resolves its other half in the same Room transaction when exactly one waiting
-     * capture matches (see [findTransferPair]): that capture becomes PAIRED with the same Transaction id.
+     * A Transfer also resolves its other half in the same Room transaction (see [findTransferPair]):
+     * [CaptureEdits.pairCaptureId] when set, else the one waiting capture that matches. That capture
+     * becomes PAIRED with the same Transaction id.
      */
     suspend fun confirm(captureId: Long, edits: CaptureEdits): Long?
 
@@ -76,6 +83,12 @@ interface CaptureRepository {
      * resolved by another capture meanwhile).
      */
     suspend fun link(captureId: Long, expenseId: Long): Boolean
+
+    /**
+     * Splits a Suggested Transfer back into two captures: both stay waiting, each on its own, and
+     * the pair is never suggested again.
+     */
+    suspend fun splitTransferSuggestion(debitId: Long, creditId: Long)
 
     suspend fun dismiss(captureId: Long)
 
