@@ -706,7 +706,9 @@ fun AppNavigation(
                     },
                     onStartCycle = {
                         navController.navigate(Screen.StartCycle.route) { launchSingleTop = true }
-                    }
+                    },
+                    // TODO(#40): open the Fund detail page here once it exists; null keeps the Set aside rows untappable.
+                    onOpenFund = null
                 )
             }
             composable(Screen.StartCycle.route) {
@@ -725,7 +727,9 @@ fun AppNavigation(
                     },
                     onStartCycle = {
                         navController.navigate(Screen.StartCycle.route) { launchSingleTop = true }
-                    }
+                    },
+                    // TODO(#40): open the New fund sheet here once it exists; null hides "+ New fund".
+                    onNewFund = null
                 )
             }
             composable(

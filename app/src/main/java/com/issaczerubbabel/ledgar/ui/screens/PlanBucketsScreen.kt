@@ -72,11 +72,14 @@ fun PlanBucketsScreen(
     onBack: () -> Unit,
     onOpenBucket: (Long) -> Unit,
     onStartCycle: () -> Unit,
+    /** Opens the New fund sheet. Null until the Fund screens (#40) are in; "+ New fund" is hidden then. */
+    onNewFund: (() -> Unit)? = null,
     vm: PlanBucketsViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
     var editingSpendable by remember { mutableStateOf(false) }
     var editingBucketId by remember { mutableStateOf<Long?>(null) }
+    var editingFundId by remember { mutableStateOf<Long?>(null) }
     var addingBucket by remember { mutableStateOf(false) }
 
     Column(
@@ -86,7 +89,7 @@ fun PlanBucketsScreen(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
-            Text(text = "Plan your buckets", style = MaterialTheme.typography.titleLarge)
+            Text(text = "Plan this cycle", style = MaterialTheme.typography.titleLarge)
         }
 
         val summary = state.summary
@@ -102,7 +105,10 @@ fun PlanBucketsScreen(
                 onEditAmount = { editingBucketId = it },
                 onEditSpendable = { editingSpendable = true },
                 onOpenBucket = onOpenBucket,
-                onAddBucket = { addingBucket = true }
+                onAddBucket = { addingBucket = true },
+                onStepContribution = { id, delta -> vm.adjustContribution(id, delta) },
+                onEditContribution = { editingFundId = it },
+                onNewFund = onNewFund
             )
         }
 
@@ -125,6 +131,17 @@ fun PlanBucketsScreen(
                 )
             }
         }
+        editingFundId?.let { id ->
+            val row = state.contributions.firstOrNull { it.fund.id == id }
+            if (row != null) {
+                AmountDialog(
+                    title = row.fund.name,
+                    initial = row.planned,
+                    onDismiss = { editingFundId = null },
+                    onConfirm = { vm.setContribution(id, it); editingFundId = null }
+                )
+            }
+        }
         if (addingBucket) {
             NameDialog(
                 onDismiss = { addingBucket = false },
@@ -142,7 +159,10 @@ private fun PlanContent(
     onEditAmount: (Long) -> Unit,
     onEditSpendable: () -> Unit,
     onOpenBucket: (Long) -> Unit,
-    onAddBucket: () -> Unit
+    onAddBucket: () -> Unit,
+    onStepContribution: (Long, Double) -> Unit,
+    onEditContribution: (Long) -> Unit,
+    onNewFund: (() -> Unit)?
 ) {
     LazyColumn(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -205,6 +225,57 @@ private fun PlanContent(
                 Text(text = "New bucket", modifier = Modifier.padding(start = 8.dp))
             }
         }
+
+        if (state.contributions.isNotEmpty() || onNewFund != null) {
+            item { SectionLabel("Set aside", modifier = Modifier.padding(top = 8.dp)) }
+            if (state.contributions.isEmpty()) {
+                item {
+                    Text(
+                        text = "Plan how much of this cycle goes into a Fund, like an emergency fund or an RD.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+        items(state.contributions, key = { "fund-${it.fund.id}" }) { row ->
+            val fund = row.fund
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f).padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        BucketColorDot(fund.colorIndex, modifier = Modifier.padding(top = 7.dp))
+                        if (fund.emoji.isNotBlank()) {
+                            Text(fund.emoji, modifier = Modifier.clearAndSetSemantics { })
+                        }
+                        Text(text = fund.name, style = MaterialTheme.typography.bodyLarge)
+                    }
+                    AllocationStepper(
+                        name = fund.name,
+                        amount = row.planned,
+                        onDecrease = { onStepContribution(fund.id, -ALLOCATION_STEP) },
+                        onIncrease = { onStepContribution(fund.id, ALLOCATION_STEP) },
+                        onEditAmount = { onEditContribution(fund.id) }
+                    )
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+        }
+        if (onNewFund != null) {
+            item {
+                OutlinedButton(onClick = onNewFund, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.Add, contentDescription = null)
+                    Text(text = "New fund", modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+        }
     }
 }
 
@@ -257,7 +328,11 @@ private fun AllocationSummary(summary: CycleSummary, onEditSpendable: () -> Unit
             }
         }
         Text(
-            text = if (unallocated < 0) {
+            text = (if (summary.plannedContributions > 0.0) {
+                "${formatRupees(summary.allocated)} in buckets and ${formatRupees(summary.plannedContributions)} to set aside. "
+            } else {
+                ""
+            }) + if (unallocated < 0) {
                 "You have given out ${formatRupees(-unallocated)} more than you have. You can still save."
             } else {
                 "Leave some spare or give it a job. Nothing here is blocked."
