@@ -49,6 +49,10 @@ private const val BUCKET_SCRIPT_OUTDATED_MESSAGE =
     "Your Apps Script is out of date, so your buckets were not backed up. " +
         "Copy the latest script from Database Setup and redeploy it."
 
+private const val FUND_SCRIPT_OUTDATED_MESSAGE =
+    "Your Apps Script is out of date, so your Funds were not backed up. " +
+        "Copy the latest script from Database Setup and redeploy it."
+
 sealed class SettingsUiEvent {
     data class ShowMessage(val message: String) : SettingsUiEvent()
     data object ShowSyncCompletedToast : SettingsUiEvent()
@@ -457,10 +461,14 @@ class SettingsViewModel @Inject constructor(
                         val budgetCount = latest.outputData.getInt(BackupWorker.KEY_BUDGET_BACKUP_COUNT, 0)
                         val accountCount = latest.outputData.getInt(BackupWorker.KEY_ACCOUNTS_BACKUP_COUNT, 0)
                         val bucketCount = latest.outputData.getInt(BackupWorker.KEY_BUCKET_BACKUP_COUNT, 0)
-                        val total = (dropdownCount + budgetCount + accountCount + bucketCount.coerceAtLeast(0)).coerceAtLeast(0)
+                        val fundCount = latest.outputData.getInt(BackupWorker.KEY_FUND_BACKUP_COUNT, 0)
+                        val total = (dropdownCount + budgetCount + accountCount + bucketCount.coerceAtLeast(0) +
+                            fundCount.coerceAtLeast(0)).coerceAtLeast(0)
                         _backupState.value = ImportState.Success(imported = total, skipped = 0)
-                        if (bucketCount == BackupWorker.SCRIPT_OUTDATED) {
-                            _uiEvents.emit(SettingsUiEvent.ShowMessage(BUCKET_SCRIPT_OUTDATED_MESSAGE))
+                        // A script too old for buckets is too old for Funds as well: one hint is enough.
+                        when (BackupWorker.SCRIPT_OUTDATED) {
+                            bucketCount -> _uiEvents.emit(SettingsUiEvent.ShowMessage(BUCKET_SCRIPT_OUTDATED_MESSAGE))
+                            fundCount -> _uiEvents.emit(SettingsUiEvent.ShowMessage(FUND_SCRIPT_OUTDATED_MESSAGE))
                         }
                         backupRequestedFromSettings = false
                     }

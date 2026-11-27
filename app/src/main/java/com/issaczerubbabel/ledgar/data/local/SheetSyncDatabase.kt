@@ -9,6 +9,7 @@ import com.issaczerubbabel.ledgar.data.local.dao.BudgetDao
 import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
 import com.issaczerubbabel.ledgar.data.local.dao.DropdownOptionDao
 import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
+import com.issaczerubbabel.ledgar.data.local.dao.FundDao
 import com.issaczerubbabel.ledgar.data.local.dao.MerchantRuleDao
 import com.issaczerubbabel.ledgar.data.local.dao.RecurringRuleDao
 import com.issaczerubbabel.ledgar.data.local.dao.TripDao
@@ -22,6 +23,9 @@ import com.issaczerubbabel.ledgar.data.local.entity.BudgetCycle
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.data.local.entity.Fund
+import com.issaczerubbabel.ledgar.data.local.entity.FundHolding
+import com.issaczerubbabel.ledgar.data.local.entity.FundPlan
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRule
 import com.issaczerubbabel.ledgar.data.local.entity.RecurringRule
 import com.issaczerubbabel.ledgar.data.local.entity.TripExpenseRecord
@@ -49,9 +53,12 @@ import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
         TripExpenseRecord::class,
         TripExpenseShareRecord::class,
         TripSettlementRecord::class,
-        RecurringRule::class
+        RecurringRule::class,
+        Fund::class,
+        FundHolding::class,
+        FundPlan::class
     ],
-    version = 27,
+    version = 28,
     exportSchema = false
 )
 abstract class SheetSyncDatabase : RoomDatabase() {
@@ -66,4 +73,5 @@ abstract class SheetSyncDatabase : RoomDatabase() {
     abstract fun unparsedAlertDao(): UnparsedAlertDao
     abstract fun tripDao(): TripDao
     abstract fun recurringRuleDao(): RecurringRuleDao
+    abstract fun fundDao(): FundDao
 }

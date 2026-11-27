@@ -1,15 +1,22 @@
 package com.issaczerubbabel.ledgar.data.bucket
 
+import com.issaczerubbabel.ledgar.account.TransactionSnapshot
 import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetBucket
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetCycle
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
+import com.issaczerubbabel.ledgar.fund.FundMath
+import com.issaczerubbabel.ledgar.fund.FundsSnapshot
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
 import java.time.LocalDate
 
 /**
  * Works out what a cycle looks like right now. Spend is never stored: it is derived here from
  * the expense ledger, so backdating a cycle or moving a category re-homes spend automatically.
+ *
+ * With [FundsSnapshot.EMPTY] (the default) every figure is what it was before Funds existed. With
+ * Funds, an Expense drawn from a Fund's whole Account leaves the cycle, Set aside comes off Left to
+ * spend, and Planned contributions come off Unallocated (ADR-0011).
  */
 object CycleSummaryBuilder {
 
@@ -18,13 +25,34 @@ object CycleSummaryBuilder {
         buckets: List<BudgetBucket>,
         assignments: List<BucketCategory>,
         records: List<ExpenseRecord>,
-        today: LocalDate
+        today: LocalDate,
+        funds: FundsSnapshot = FundsSnapshot.EMPTY
     ): CycleSummary {
         val start = LocalDate.parse(cycle.startDate)
         val end = LocalDate.parse(cycle.endDate)
         val isClosed = cycle.closedAt != null
 
-        val spendByCategory = spendByCategory(records, start, CycleCalendar.countsUntil(end, today, isClosed))
+        val holdings = funds.activeHoldings
+        val snapshots = if (funds.isEmpty) emptyList() else records.map { it to snapshotOf(it) }
+        val transactions = snapshots.mapNotNull { it.second }
+        val counted = if (funds.isEmpty) records else snapshots.filter { (_, txn) ->
+            txn == null || FundMath.drawnFrom(txn, holdings) == null
+        }.map { it.first }
+        val spendByCategory = spendByCategory(
+            counted,
+            start,
+            CycleCalendar.countsUntil(end, today, isClosed)
+        )
+        val setAside = FundMath.setAside(cycle, transactions, holdings, today)
+        val drawn = FundMath.drawn(cycle, transactions, holdings, today)
+        val plans = funds.plansFor(cycle.id).associateBy { it.fundId }
+        val fundContributions = funds.activeFunds
+            .sortedWith(compareBy({ it.sortOrder }, { it.id }))
+            .filter { it.id in plans || it.id in setAside.byFund }
+            .map { fund ->
+                FundContribution(fund, planned = plans[fund.id]?.plannedAmount ?: 0.0, setAside = setAside.byFund[fund.id] ?: 0.0)
+            }
+        val plannedContributions = plans.values.sumOf { it.plannedAmount }
 
         val bucketIdByCategory = assignments.associate { categoryKey(it.category) to it.bucketId }
         val knownBucketIds = buckets.map { it.id }.toSet()
@@ -43,7 +71,7 @@ object CycleSummaryBuilder {
 
         val totalSpent = spendByCategory.values.sumOf { it.amount }
         val allocated = buckets.sumOf { it.allocatedAmount }
-        val leftToSpend = cycle.spendableAmount - totalSpent
+        val leftToSpend = cycle.spendableAmount - totalSpent - setAside.total
         val daysLeft = CycleCalendar.daysLeft(end, today)
         val daysOverdue = CycleCalendar.daysOverdue(end, today, isClosed)
 
@@ -58,10 +86,33 @@ object CycleSummaryBuilder {
             totalSpent = totalSpent,
             leftToSpend = leftToSpend,
             allocated = allocated,
-            unallocated = cycle.spendableAmount - allocated,
+            unallocated = cycle.spendableAmount - allocated - plannedContributions,
             dailyPace = if (daysOverdue > 0 || leftToSpend <= 0.0) 0.0 else leftToSpend / daysLeft.coerceAtLeast(1),
             buckets = bucketSummaries,
-            unbucketed = unbucketed
+            unbucketed = unbucketed,
+            setAside = setAside.total,
+            drawnFromFunds = drawn.total,
+            plannedContributions = plannedContributions,
+            fundContributions = fundContributions
+        )
+    }
+
+    /**
+     * What [FundMath] needs of a record, dated the way [spendByCategory] dates it. Null for a record
+     * without a readable date, which no cycle counts.
+     */
+    private fun snapshotOf(record: ExpenseRecord): TransactionSnapshot? {
+        val date = parseFlexibleDate(record.date)
+            ?: record.remoteTimestamp?.let(::parseFlexibleDate)
+            ?: return null
+        return TransactionSnapshot(
+            id = record.id,
+            type = record.type,
+            date = date,
+            amount = record.amount,
+            accountId = record.accountId,
+            fromAccountId = record.fromAccountId,
+            toAccountId = record.toAccountId
         )
     }
 

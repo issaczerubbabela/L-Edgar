@@ -66,6 +66,17 @@ class BucketBudgetRepositoryImpl @Inject constructor(
                 )
             }
 
+            // Carry over copies Planned contributions too, like a Bucket's allocation. Archived Funds plan nothing.
+            if (request.carryOverBuckets && running != null) {
+                val fundDao = db.fundDao()
+                val active = fundDao.getAllFunds().filterNot { it.isArchived }.mapTo(HashSet()) { it.id }
+                fundDao.upsertPlans(
+                    fundDao.getPlans(running.id)
+                        .filter { it.fundId in active }
+                        .map { it.copy(cycleId = newCycleId) }
+                )
+            }
+
             StartCycleResult.Started(newCycleId)
         }
 

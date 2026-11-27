@@ -15,6 +15,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.MerchantRuleOrigin
 import com.issaczerubbabel.ledgar.data.preferences.SyncStateRepository
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
 import com.issaczerubbabel.ledgar.data.remote.ApiService
+import com.issaczerubbabel.ledgar.sync.FundsRestorer
 import com.issaczerubbabel.ledgar.sync.RoomTransactionSyncStore
 import com.issaczerubbabel.ledgar.sync.SheetTransactionMapper
 import com.issaczerubbabel.ledgar.sync.TransactionSyncer
@@ -66,7 +67,8 @@ class LedgerEditLearningTest {
         val store = RoomTransactionSyncStore(db, SheetTransactionMapper(db.accountDao()))
         ledger = ExpenseRepositoryImpl(
             db.expenseDao(), db.accountDao(), api, DropdownOptionRepositoryImpl(db.dropdownOptionDao()), db.budgetDao(),
-            BucketBudgetRepositoryImpl(db, db.bucketBudgetDao()), ThemePreferenceRepository(context),
+            BucketBudgetRepositoryImpl(db, db.bucketBudgetDao()),
+            FundsRestorer(api, FundRepositoryImpl(db, db.fundDao()), db), ThemePreferenceRepository(context),
             TransactionSyncer(store, api), store, SyncStateRepository(context),
             LedgerEditLearner(db, db.captureDao(), db.expenseDao(), MerchantRuleTeacher(db.merchantRuleDao())) {
                 if (failReguess) error("re-guess failed")

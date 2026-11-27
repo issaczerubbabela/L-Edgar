@@ -550,4 +550,5 @@ private class FakeAppsScript : ApiService {
     override suspend fun importBudgets(url: String, target: String): Response<BudgetImportResponse> = error("unused")
     override suspend fun importAccounts(url: String, target: String): Response<AccountImportResponse> = error("unused")
     override suspend fun importBucketBudgets(url: String, target: String): Response<BucketBudgetImportResponse> = error("unused")
+    override suspend fun importFunds(url: String, target: String): Response<com.issaczerubbabel.ledgar.data.remote.FundsImportResponse> = error("unused")
 }

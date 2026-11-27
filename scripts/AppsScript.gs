@@ -16,6 +16,10 @@
  *   since, so the app can merge instead of overwriting the edit.
  * - Every reply carries `scriptVersion`, which the app checks before syncing.
  * - Every request runs under a script lock, so requests never interleave.
+ *
+ * Funds (SCRIPT_VERSION 3): target "funds" backs up and restores Funds with their holdings
+ * (keyed by Account name) and Planned contributions (keyed by cycle start date) in the
+ * _funds, _fund_holdings and _fund_plans tabs. They travel in `funds`, never in `records`.
  */
 
 var TRANSACTIONS_SHEET = "_responses";
@@ -23,7 +27,7 @@ var DROPDOWNS_SHEET = "_dropdowns";
 var BUDGETS_SHEET = "_budgets";
 var ACCOUNTS_SHEET = "_accounts";
 
-var SCRIPT_VERSION = 2;
+var SCRIPT_VERSION = 3;
 var ID_HEADER = "ID";
 var LOCK_TIMEOUT_MS = 30000;
 // Text columns are kept as plain text so Sheets never turns "1/2" into a date or "=x" into a formula.
@@ -31,6 +35,9 @@ var TRANSACTION_TEXT_COLUMNS = [4, 5, 6, 8, 9, 10, 11];
 var CYCLES_SHEET = "_cycles";
 var BUCKETS_SHEET = "_buckets";
 var BUCKET_CATEGORIES_SHEET = "_bucket_categories";
+var FUNDS_SHEET = "_funds";
+var FUND_HOLDINGS_SHEET = "_fund_holdings";
+var FUND_PLANS_SHEET = "_fund_plans";
 
 // Column indices (0-based) for TRANSACTION_HEADERS_V2
 var COL_TIMESTAMP       = 0;
@@ -841,6 +848,134 @@ function readBucketBudgets(spreadsheet) {
   return cycles;
 }
 
+// =============================================================
+// FUNDS (labels on Account money, with holdings and Planned contributions)
+// Sent and returned as nested funds -> holdings + plans, and stored as three flat sheets.
+// Holdings name their Account and plans their cycle's start date, because a restore
+// rebuilds Account and cycle ids.
+// =============================================================
+
+function optionalNumber(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  var n = Number(value);
+  return isNaN(n) ? null : n;
+}
+
+function optionalDate(value) {
+  return value ? isoDateValue(value) : null;
+}
+
+function backupFunds(spreadsheet, funds, timeZone) {
+  var backupAt = Utilities.formatDate(
+    new Date(),
+    timeZone,
+    "M/d/yyyy HH:mm:ss",
+  );
+  var fundRows = [];
+  var holdingRows = [];
+  var planRows = [];
+
+  funds.forEach(function (f) {
+    var target = optionalNumber(f.targetAmount);
+    fundRows.push([
+      f.id,
+      f.name || "",
+      f.emoji || "",
+      Number(f.colorIndex) || 0,
+      target === null ? "" : target,
+      f.dueDate || "",
+      f.archivedAt || "",
+      Number(f.sortOrder) || 0,
+      f.createdDate || "",
+      backupAt,
+    ]);
+    (f.holdings || []).forEach(function (h) {
+      holdingRows.push([
+        f.id,
+        h.accountName || "",
+        h.kind || "",
+        Number(h.amount) || 0,
+        Number(h.openingAmount) || 0,
+        h.startDate || "",
+      ]);
+    });
+    (f.plans || []).forEach(function (p) {
+      planRows.push([f.id, p.cycleStartDate || "", Number(p.plannedAmount) || 0]);
+    });
+  });
+
+  writeTable(
+    spreadsheet,
+    FUNDS_SHEET,
+    ["Fund ID", "Name", "Emoji", "Color Index", "Target Amount", "Due Date", "Archived At", "Sort Order", "Created Date", "Last Backed Up"],
+    fundRows,
+    [2, 3, 6, 7, 9, 10],
+  );
+  writeTable(
+    spreadsheet,
+    FUND_HOLDINGS_SHEET,
+    ["Fund ID", "Account Name", "Kind", "Amount", "Opening Amount", "Start Date"],
+    holdingRows,
+    [2, 3, 6],
+  );
+  writeTable(
+    spreadsheet,
+    FUND_PLANS_SHEET,
+    ["Fund ID", "Cycle Start Date", "Planned Amount"],
+    planRows,
+    [2],
+  );
+  return funds.length;
+}
+
+function readFunds(spreadsheet) {
+  var holdingsByFund = {};
+  readTableRows(spreadsheet, FUND_HOLDINGS_SHEET).forEach(function (r) {
+    var accountName = String(r[1] || "");
+    if (!accountName) return;
+    var fundId = Number(r[0]) || 0;
+    (holdingsByFund[fundId] = holdingsByFund[fundId] || []).push({
+      accountName: accountName,
+      kind: String(r[2] || ""),
+      amount: Number(r[3]) || 0,
+      openingAmount: Number(r[4]) || 0,
+      startDate: optionalDate(r[5]) || "",
+    });
+  });
+
+  var plansByFund = {};
+  readTableRows(spreadsheet, FUND_PLANS_SHEET).forEach(function (r) {
+    var cycleStartDate = optionalDate(r[1]);
+    if (!cycleStartDate) return;
+    var fundId = Number(r[0]) || 0;
+    (plansByFund[fundId] = plansByFund[fundId] || []).push({
+      cycleStartDate: cycleStartDate,
+      plannedAmount: Number(r[2]) || 0,
+    });
+  });
+
+  var funds = [];
+  readTableRows(spreadsheet, FUNDS_SHEET).forEach(function (r) {
+    var name = String(r[1] || "");
+    if (!name) return;
+    var fundId = Number(r[0]) || 0;
+    funds.push({
+      id: fundId,
+      name: name,
+      emoji: String(r[2] || ""),
+      colorIndex: Number(r[3]) || 0,
+      targetAmount: optionalNumber(r[4]),
+      dueDate: optionalDate(r[5]),
+      archivedAt: optionalDate(r[6]),
+      sortOrder: Number(r[7]) || 0,
+      createdDate: optionalDate(r[8]) || "",
+      holdings: holdingsByFund[fundId] || [],
+      plans: plansByFund[fundId] || [],
+    });
+  });
+  return funds;
+}
+
 function doPost(e) {
   try {
     return withScriptLock(function () {
@@ -936,6 +1071,29 @@ function handlePost(e) {
         target: target,
         count: 0,
         message: "Skipped empty backup to prevent accidental sheet erase",
+      });
+    }
+
+    if (target === "funds" && action === "backup") {
+      // Like bucket budgets, Funds travel in payload.funds with records empty, so a script deployed
+      // before this target existed has nothing to file as transactions.
+      var funds = payload.funds || [];
+      // An empty backup clears the Fund tabs only when allowed, and never creates them: a phone
+      // with no Funds backing up to a Sheet that never had any leaves the Sheet as it is.
+      if (funds.length === 0 && (!allowEmptyBackup || !spreadsheet.getSheetByName(FUNDS_SHEET))) {
+        return jsonOut({
+          status: "ok",
+          action: "backup_skipped",
+          type: "funds_backed_up",
+          target: target,
+          count: 0,
+          message: allowEmptyBackup ? "No Funds to back up" : "Skipped empty backup to prevent accidental sheet erase",
+        });
+      }
+      return jsonOut({
+        status: "ok",
+        type: "funds_backed_up",
+        count: backupFunds(spreadsheet, funds, timeZone),
       });
     }
 
@@ -1272,6 +1430,15 @@ function handleGet(e) {
         status: "ok",
         type: "bucket_budgets",
         data: readBucketBudgets(spreadsheet),
+      });
+    }
+
+    if (target === "funds") {
+      // "type" marks a script that understands the target, as for bucket budgets.
+      return jsonOut({
+        status: "ok",
+        type: "funds",
+        data: readFunds(spreadsheet),
       });
     }
 

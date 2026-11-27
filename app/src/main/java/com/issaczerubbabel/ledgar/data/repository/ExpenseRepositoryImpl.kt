@@ -16,6 +16,7 @@ import com.issaczerubbabel.ledgar.data.preferences.SyncStateRepository
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
 import com.issaczerubbabel.ledgar.data.remote.ApiService
 import com.issaczerubbabel.ledgar.data.remote.ImportRecordDto
+import com.issaczerubbabel.ledgar.sync.FundsRestorer
 import com.issaczerubbabel.ledgar.sync.MergeStep
 import com.issaczerubbabel.ledgar.sync.PulledRow
 import com.issaczerubbabel.ledgar.sync.SyncUrlNotConfiguredException
@@ -40,6 +41,7 @@ class ExpenseRepositoryImpl @Inject constructor(
     private val dropdownOptionRepository: DropdownOptionRepository,
     private val budgetDao: BudgetDao,
     private val bucketBudgetRepository: BucketBudgetRepository,
+    private val fundsRestorer: FundsRestorer,
     private val preferenceRepository: ThemePreferenceRepository,
     private val transactionSyncer: TransactionSyncer,
     private val syncStore: TransactionSyncStore,
@@ -136,6 +138,10 @@ class ExpenseRepositoryImpl @Inject constructor(
             mapped.size
         }
 
+        // Replacing Accounts and cycles deletes the Funds' holdings and plans with them, so the
+        // phone's Funds are kept by name first, to be put back if the Sheet has none.
+        val localFunds = fundsRestorer.keepLocal()
+
         val accountsResponse = apiService.importAccounts(
             url = scriptUrl,
             target = "accounts"
@@ -207,6 +213,7 @@ class ExpenseRepositoryImpl @Inject constructor(
         }
 
         val restoredCycles = restoreBucketBudgets(scriptUrl)
+        val restoredFunds = fundsRestorer.restore(scriptUrl, localFunds)
 
         // The phone's lists now match the Sheet's, so Backups can safely write them back.
         syncState.setMergedListsFromSheet()
@@ -228,6 +235,7 @@ class ExpenseRepositoryImpl @Inject constructor(
             restoredBudgets = restoredBudgets,
             restoredCycles = restoredCycles,
             restoredAccounts = restoredAccounts,
+            restoredFunds = restoredFunds,
             conflicts = dao.observeConflicts().first().map(::toConflict)
         )
     }

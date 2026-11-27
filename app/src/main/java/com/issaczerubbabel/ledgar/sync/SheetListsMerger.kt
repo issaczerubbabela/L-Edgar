@@ -13,7 +13,7 @@ import retrofit2.Response
 import javax.inject.Inject
 
 /**
- * A Backup replaces the Sheet's Accounts, Dropdown options, Budgets and salary-cycle tabs with the phone's lists.
+ * A Backup replaces the Sheet's Accounts, Dropdown options, Budgets, salary-cycle and Fund tabs with the phone's lists.
  * On a fresh install those are empty or defaults, so the first Backup would wipe the Sheet's real
  * lists. Before this phone's first Backup, this adds whatever the Sheet has that the phone doesn't
  * (matched by name), so every Backup after it writes back at least what the Sheet had.
@@ -22,6 +22,7 @@ class SheetListsMerger @Inject constructor(
     private val api: ApiService,
     private val database: SheetSyncDatabase,
     private val bucketBudgets: BucketBudgetRepository,
+    private val fundsRestorer: FundsRestorer,
     private val syncState: SyncStateRepository
 ) {
     suspend fun mergeOnce(scriptUrl: String) {
@@ -38,6 +39,9 @@ class SheetListsMerger @Inject constructor(
             // A script from before bucket budgets answers without the marker: nothing to take in.
             if (body?.isUnderstoodByScript == true) BucketBackupMapper.fromImportDtos(body.data.orEmpty()) else emptyList()
         }
+
+        // Null from a script that predates Funds: nothing to take in.
+        val sheetFunds = fundsRestorer.readSheet(scriptUrl)
 
         database.withTransaction {
             val accountDao = database.accountDao()
@@ -88,6 +92,8 @@ class SheetListsMerger @Inject constructor(
         if (sheetCycles.isNotEmpty() && bucketBudgets.getBackupSnapshot().cycles.isEmpty()) {
             bucketBudgets.replaceAllFromBackup(sheetCycles)
         }
+        // Funds come in after Accounts and cycles, which their holdings and plans name, and only when the phone has none.
+        sheetFunds?.let { fundsRestorer.mergeIfNone(it) }
         syncState.setMergedListsFromSheet()
     }
 

@@ -12,18 +12,20 @@ import com.issaczerubbabel.ledgar.data.remote.AccountSyncDto
 import com.issaczerubbabel.ledgar.data.remote.ApiService
 import com.issaczerubbabel.ledgar.data.remote.BudgetSyncDto
 import com.issaczerubbabel.ledgar.data.remote.DropdownSyncDto
+import com.issaczerubbabel.ledgar.data.remote.FundsImportResponse
 import com.issaczerubbabel.ledgar.data.remote.SyncRequest
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.BucketBudgetRepository
 import com.issaczerubbabel.ledgar.data.repository.BudgetRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
+import com.issaczerubbabel.ledgar.data.repository.FundRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
 /**
- * Replaces the Sheet's Accounts, Dropdown options and Budgets tabs with the phone's current lists.
+ * Replaces the Sheet's Accounts, Dropdown options, Budgets, salary-cycle and Fund tabs with the phone's current lists.
  * Runs apart from Transaction Sync so a failing Backup can never hold Transactions back.
  */
 @HiltWorker
@@ -34,6 +36,7 @@ class BackupWorker @AssistedInject constructor(
     private val dropdownOptionRepository: DropdownOptionRepository,
     private val budgetRepository: BudgetRepository,
     private val bucketBudgetRepository: BucketBudgetRepository,
+    private val fundRepository: FundRepository,
     private val apiService: ApiService,
     private val preferenceRepository: ThemePreferenceRepository,
     private val listsMerger: SheetListsMerger
@@ -51,16 +54,18 @@ class BackupWorker @AssistedInject constructor(
             val dropdownCount = accountCount?.let { backupDropdownOptions(scriptUrl) }
             val budgetCount = dropdownCount?.let { backupBudgets(scriptUrl) }
             val bucketCount = budgetCount?.let { backupBucketBudgets(scriptUrl) }
-            if (accountCount == null || dropdownCount == null || budgetCount == null || bucketCount == null) {
+            val fundCount = bucketCount?.let { backupFunds(scriptUrl) }
+            if (accountCount == null || dropdownCount == null || budgetCount == null || bucketCount == null || fundCount == null) {
                 retryOrFail(lastSyncError ?: "Backup failed")
             } else {
-                Log.i(TAG, "Backup successful. accounts=$accountCount dropdowns=$dropdownCount budgets=$budgetCount buckets=$bucketCount")
+                Log.i(TAG, "Backup successful. accounts=$accountCount dropdowns=$dropdownCount budgets=$budgetCount buckets=$bucketCount funds=$fundCount")
                 Result.success(
                     workDataOf(
                         KEY_ACCOUNTS_BACKUP_COUNT to accountCount,
                         KEY_DROPDOWN_BACKUP_COUNT to dropdownCount,
                         KEY_BUDGET_BACKUP_COUNT to budgetCount,
-                        KEY_BUCKET_BACKUP_COUNT to bucketCount
+                        KEY_BUCKET_BACKUP_COUNT to bucketCount,
+                        KEY_FUND_BACKUP_COUNT to fundCount
                     )
                 )
             }
@@ -220,6 +225,44 @@ class BackupWorker @AssistedInject constructor(
         return null
     }
 
+    /**
+     * Backs up Funds with their holdings and Planned contributions. Returns the number of Funds sent,
+     * [SCRIPT_OUTDATED] when the deployed script predates Funds (so the rest of the Backup still
+     * succeeds and Settings asks for a redeploy), or null when the request failed.
+     *
+     * Funds go in `funds` with `records` empty, so an older script has nothing to file as
+     * transactions. An empty list is sent too, so deleting the last Fund clears the Sheet's tabs;
+     * the script never creates the tabs for a phone that has no Funds.
+     */
+    private suspend fun backupFunds(scriptUrl: String): Int? {
+        val payload = fundRepository.getBackup()
+        val response = apiService.syncRecords(
+            scriptUrl,
+            SyncRequest(
+                action = "backup",
+                target = "funds",
+                records = emptyList(),
+                allowEmptyBackup = payload.isEmpty(),
+                funds = payload
+            )
+        )
+        val body = response.body()
+        if (response.isSuccessful && body?.status.equals("ok", ignoreCase = true)) {
+            if (body?.type == FundsImportResponse.BACKED_UP_TYPE) {
+                Log.i(TAG, "Fund backup successful. funds=${payload.size}")
+                return payload.size
+            }
+            // Nothing is lost when there were no Funds to send, so there is nothing to ask for.
+            if (payload.isEmpty()) return 0
+            Log.w(TAG, "Fund backup skipped: the deployed Apps Script predates Funds and needs redeploying")
+            return SCRIPT_OUTDATED
+        }
+
+        lastSyncError = "Fund backup failed (HTTP ${response.code()}): ${body?.message ?: "unknown error"}"
+        Log.w(TAG, "Fund backup failed: HTTP ${response.code()}, status=${body?.status}, message=${body?.message}")
+        return null
+    }
+
     companion object {
         const val TAG = "BackupWorker"
         const val WORK_NAME = "BackupWorker"
@@ -227,8 +270,9 @@ class BackupWorker @AssistedInject constructor(
         const val KEY_BUDGET_BACKUP_COUNT = "budgetBackupCount"
         const val KEY_ACCOUNTS_BACKUP_COUNT = "accountsBackupCount"
         const val KEY_BUCKET_BACKUP_COUNT = "bucketBackupCount"
+        const val KEY_FUND_BACKUP_COUNT = "fundBackupCount"
 
-        /** Reported instead of a count when the deployed script does not understand bucket budgets. */
+        /** Reported instead of a count when the deployed script does not understand bucket budgets or Funds. */
         const val SCRIPT_OUTDATED = -1
         private const val BUCKET_BACKUP_TYPE = "bucket_budgets_backed_up"
         const val KEY_ERROR_MESSAGE = "errorMessage"
