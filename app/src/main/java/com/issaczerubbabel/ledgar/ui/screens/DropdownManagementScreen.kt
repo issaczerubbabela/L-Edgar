@@ -35,7 +35,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,6 +54,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownRole
+import com.issaczerubbabel.ledgar.ui.components.UndoSnackbar
 import com.issaczerubbabel.ledgar.viewmodel.DropdownManagementViewModel
 import com.issaczerubbabel.ledgar.viewmodel.DropdownOptionType
 import com.issaczerubbabel.ledgar.viewmodel.RoleChoice
@@ -65,8 +67,12 @@ fun DropdownManagementScreen(
     vm: DropdownManagementViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
+    val pendingDelete by vm.pendingDelete.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    UndoSnackbar(pendingDelete, snackbarHostState, onUndo = vm::undoDelete, onCommit = vm::commitPendingDelete)
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState, Modifier.padding(bottom = innerPadding.calculateBottomPadding())) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("Manage Dropdowns", color = MaterialTheme.colorScheme.onBackground) },
@@ -151,7 +157,7 @@ fun DropdownManagementScreen(
                         canMoveDown = state.options.lastOrNull()?.id != option.id,
                         onMoveUp = { vm.moveUp(option) },
                         onMoveDown = { vm.moveDown(option) },
-                        onDelete = { vm.deleteOption(option) }
+                        onDelete = { vm.requestDelete(option) }
                     )
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
@@ -182,6 +188,24 @@ fun DropdownManagementScreen(
             },
             dismissButton = {
                 TextButton(onClick = vm::hideAddDialog) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    state.deleteConfirm?.let { confirm ->
+        AlertDialog(
+            onDismissRequest = vm::cancelDelete,
+            title = { Text(confirm.title) },
+            text = { Text(confirm.message) },
+            confirmButton = {
+                TextButton(onClick = vm::confirmDelete) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = vm::cancelDelete) {
                     Text("Cancel")
                 }
             }

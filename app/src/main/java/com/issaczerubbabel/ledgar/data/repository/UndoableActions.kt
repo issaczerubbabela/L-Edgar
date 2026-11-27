@@ -17,14 +17,15 @@ import javax.inject.Singleton
 
 /**
  * A decision still offering Undo: the rows it hides straight away, and the [write] that makes it
- * final. Deleting a Transaction, confirming or dismissing a Captured transaction, and Review all
- * are each one action.
+ * final. Deleting a Transaction, confirming or dismissing a Captured transaction, Review all and
+ * deleting a Dropdown option are each one action.
  */
 class UndoableAction(
     /** "Deleted “Uber to office” · ₹212", "Confirmed Instamart · ₹349 as Groceries". */
     val message: String,
     val hiddenTransactionIds: Set<Long> = emptySet(),
     val hiddenCaptureIds: Set<Long> = emptySet(),
+    val hiddenDropdownOptionIds: Set<Long> = emptySet(),
     val write: suspend () -> Unit
 )
 
@@ -55,6 +56,10 @@ class UndoableActions @Inject constructor(
     private val _hiddenCaptureIds = MutableStateFlow<Set<Long>>(emptySet())
     /** Captured transactions to leave out of To review: offering Undo, or being written. */
     val hiddenCaptureIds: StateFlow<Set<Long>> = _hiddenCaptureIds.asStateFlow()
+
+    private val _hiddenDropdownOptionIds = MutableStateFlow<Set<Long>>(emptySet())
+    /** Dropdown options to leave out of Categories & dropdowns: offering Undo, or being written. */
+    val hiddenDropdownOptionIds: StateFlow<Set<Long>> = _hiddenDropdownOptionIds.asStateFlow()
 
     /** Hides [action]'s rows at once and offers Undo. Another action finalises this one first. */
     @Synchronized
@@ -116,11 +121,13 @@ class UndoableActions @Inject constructor(
     private fun hide(action: UndoableAction) {
         _hiddenTransactionIds.update { it + action.hiddenTransactionIds }
         _hiddenCaptureIds.update { it + action.hiddenCaptureIds }
+        _hiddenDropdownOptionIds.update { it + action.hiddenDropdownOptionIds }
     }
 
     private fun show(action: UndoableAction) {
         _hiddenTransactionIds.update { it - action.hiddenTransactionIds }
         _hiddenCaptureIds.update { it - action.hiddenCaptureIds }
+        _hiddenDropdownOptionIds.update { it - action.hiddenDropdownOptionIds }
     }
 
     companion object {

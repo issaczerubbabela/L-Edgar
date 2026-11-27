@@ -16,6 +16,16 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
+        version = "v1.8.1",
+        date = "2026-11-28",
+        fixed = listOf(
+            "Categories: asks before deleting one that's in use, and Undo brings it back"
+        ),
+        developer = listOf(
+            "DropdownOptionRepository.usage counts what uses an option; UndoableActions hides Dropdown options too (#160)"
+        )
+    ),
+    ChangelogRelease(
         version = "v1.8.0",
         date = "2026-11-27",
         added = listOf(
