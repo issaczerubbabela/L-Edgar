@@ -29,7 +29,17 @@ interface AccountRepository {
     fun getBalanceForAccount(accountId: Long): Flow<Double>
     suspend fun getAllAccountsSnapshot(): List<AccountRecord>
     suspend fun getAccountById(accountId: Long): AccountRecord?
+    /**
+     * Adds or updates an Account. Renaming one also marks every Transaction on it (any side) as an
+     * unsynced update in the same Room transaction, so Sync rewrites them in the Sheet under the new
+     * name and a later Import keeps them on this Account (#152).
+     */
     suspend fun save(record: AccountRecord): Long
+    /**
+     * Marks every Transaction on the Account (any side) to be sent to the Sheet again under its current
+     * name: the repair for Accounts renamed before renames did this. Returns how many were marked.
+     */
+    suspend fun resendTransactions(accountId: Long): Int
     suspend fun toggleHidden(accountId: Long)
     /** Puts the Accounts in [accountIds]' order, first to last, in one Room transaction. */
     suspend fun setDisplayOrder(accountIds: List<Long>)

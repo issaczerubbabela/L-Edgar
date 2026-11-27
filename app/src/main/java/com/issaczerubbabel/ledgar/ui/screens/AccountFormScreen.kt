@@ -196,6 +196,15 @@ fun AccountFormScreen(
                 )
             }
 
+            if (state.isEditMode && state.transactionCount > 0) {
+                DangerButton(
+                    title = "Re-send to Sheet",
+                    detail = "Writes its transactions to the Sheet again under this account's saved name",
+                    isDestructive = false,
+                    onClick = vm::resendToSheet
+                )
+            }
+
             if (state.isEditMode) {
                 DangerZone(
                     transactionCount = state.transactionCount,

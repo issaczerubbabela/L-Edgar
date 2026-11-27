@@ -203,6 +203,25 @@ class AddEditAccountViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Sends the Account's Transactions to the Sheet again under its saved name: the repair for an
+     * Account renamed before renames did this (#152). Sync picks them up on its own.
+     */
+    fun resendToSheet() {
+        val id = editingId ?: return
+        viewModelScope.launch {
+            val account = accountRepository.getAccountById(id) ?: return@launch
+            val marked = accountRepository.resendTransactions(id)
+            _messages.emit(
+                when (marked) {
+                    0 -> "No transactions to re-send"
+                    1 -> "1 transaction will sync under ${account.accountName}"
+                    else -> "$marked transactions will sync under ${account.accountName}"
+                }
+            )
+        }
+    }
+
     /** Hidden and left out of totals; its Transactions stay. */
     fun archive() {
         val id = editingId ?: return

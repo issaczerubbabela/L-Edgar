@@ -8,6 +8,10 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 ## [1.8.0] - 2026-11-27
 
+### Fixed
+
+- Accounts: renaming one updates its transactions in the Sheet, and Re-send to Sheet repairs older renames
+
 ### Developer
 
 - Funds: glossary terms (Fund, Holding, Set aside, Free, Unallocated) and ADR-0011, Funds are labels on Account money
