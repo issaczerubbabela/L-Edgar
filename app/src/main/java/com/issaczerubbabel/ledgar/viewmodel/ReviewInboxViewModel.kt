@@ -2,7 +2,6 @@ package com.issaczerubbabel.ledgar.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.issaczerubbabel.ledgar.capture.CaptureConfirmation
 import com.issaczerubbabel.ledgar.capture.CaptureConfirmer
 import com.issaczerubbabel.ledgar.capture.CaptureDraftHandoff
 import com.issaczerubbabel.ledgar.capture.notify.CaptureNotifier
@@ -23,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.ZoneId
 import javax.inject.Inject
 
 @HiltViewModel
@@ -63,6 +64,31 @@ class ReviewInboxViewModel @Inject constructor(
             CaptureRows.build(capture, edited[capture.id], renames, knownAccountIds, match = ledger.bestMatch(capture))
         }
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _filter = MutableStateFlow(CaptureFilter.ALL)
+    /** All, Needs a pick or Ready. */
+    val filter: StateFlow<CaptureFilter> = _filter.asStateFlow()
+
+    private val _expandedId = MutableStateFlow<Long?>(null)
+    /** The one row shown in full; every other row is compact. */
+    val expandedId: StateFlow<Long?> = _expandedId.asStateFlow()
+
+    /** The rows under [filter], by day in the phone's zone, newest first. */
+    val days: StateFlow<List<CaptureDay>> = combine(rows, _filter) { all, filter ->
+        CaptureInbox.days(all, filter, ZoneId.systemDefault())
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun setFilter(filter: CaptureFilter) {
+        _filter.value = filter
+    }
+
+    /** Expands [captureId] and collapses any other row; on the open row, collapses it. */
+    fun toggleExpanded(captureId: Long) = _expandedId.update { CaptureInbox.toggleExpanded(it, captureId) }
+
+    /** Opens [captureId] in full, say to show what a swipe found missing. */
+    fun expand(captureId: Long) {
+        _expandedId.value = captureId
+    }
 
     /** The Confirm or Dismiss the Undo snackbar is offering, if any. */
     val pending: StateFlow<UndoableAction?> = undoableActions.pending
@@ -122,7 +148,7 @@ class ReviewInboxViewModel @Inject constructor(
 
     fun confirm(row: CaptureRowUi) = confirmRows(listOf(row))
 
-    /** Review all: one decision, so one Undo puts every card back. */
+    /** The bulk sheet (Confirm day or Review all): one decision, so one Undo puts every card back. */
     fun confirmAll(rows: List<CaptureRowUi>) = confirmRows(rows)
 
     /** Same one: the capture is the bank's alert for [CaptureRowUi.match], so nothing new is added. */
@@ -154,7 +180,7 @@ class ReviewInboxViewModel @Inject constructor(
     }
 
     private fun confirmRows(rows: List<CaptureRowUi>) {
-        val chosen = rows.mapNotNull { row -> row.toEdits()?.let { CaptureConfirmation(row.capture, it, row.title) } }
+        val chosen = CaptureInbox.confirmations(rows)
         if (chosen.isEmpty()) return
         val accountNames = accounts.value.associate { it.id to it.accountName }
         viewModelScope.launch {

@@ -156,6 +156,10 @@ _Avoid_: failed alert
 High, Check or Low: how sure auto-capture is about a Captured transaction's suggested Category. Only a saved Merchant rule reaches High (ADR-0010); a guess from history or the on-phone guesser is at most Check. Only High, with its Account already resolved, notifies the user; everything else waits in the inbox.
 _Avoid_: confidence score
 
+**Ready**:
+A waiting Captured transaction that could be confirmed as it stands: it has a Category (or a Transfer's other Account), an Account that isn't merely guessed, and no Transaction in the Ledger it may repeat. To review filters by it, and the bulk sheet lists a Ready Check capture unticked. Anything not Ready needs a pick.
+_Avoid_: complete, confirmable
+
 **Suggested description**:
 The Description auto-capture guesses for a Captured transaction from the user's own Transactions, by merchant, amount, time of day and weekday (₹80 at 1pm is "Lunch", ₹30 at 4:30pm is "Tea"). It fills the capture's title, marked as a guess, with up to two alternatives as chips. A saved rename on the Merchant rule wins over it until the merchant has had different Descriptions. It never changes the Confidence band, and keeping it doesn't rename the merchant.
 _Avoid_: auto-description, predicted title

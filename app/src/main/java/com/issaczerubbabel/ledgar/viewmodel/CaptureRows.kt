@@ -66,7 +66,13 @@ data class CaptureRowUi(
      * outcome and Account are both known, the Account not merely guessed, and that isn't possibly a
      * Transaction already logged, which only the user can decide.
      */
-    val isBulkCandidate: Boolean get() = band == ConfidenceBand.HIGH && canConfirm && !accountIsGuess && match == null
+    val isBulkCandidate: Boolean get() = band == ConfidenceBand.HIGH && isReady
+
+    /**
+     * To review's Ready filter: a Category (or a Transfer's other Account) and a real Account, not a
+     * guessed one, and no Transaction in the Ledger it may repeat. Everything else Needs a pick.
+     */
+    val isReady: Boolean get() = canConfirm && !accountIsGuess && match == null
 
     /** What Confirm saves; null while something is still missing. */
     fun toEdits(): CaptureEdits? {

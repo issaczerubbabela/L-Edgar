@@ -18,6 +18,11 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - To review: each Confirm sharpens the guesses on waiting captures, never changing what you picked
 - Auto-capture: a capture you already logged by hand says so, and Same one links it instead of adding it twice
 
+### Changed
+
+- To review: captures grouped by day with Confirm day, compact rows and Ready / Needs a pick filters
+- To review: the bulk sheet lists Check captures that are Ready unticked, so you can tick them in too
+
 ### Fixed
 
 - Auto-capture: a bank alert saying "debited ... NAME credited" is filed as an Expense, not Income
@@ -33,6 +38,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - ADR-0010 "Only a saved rule reaches High"; guesses live in traceJson via CaptureTrace, adding no migration
 - CaptureIngestor.reguessPending runs after each Confirm (CaptureReguessTest); a picked Category or other Account pins the type
 - Pure LedgerMatcher finds the logged Transaction a capture repeats; a link is status LINKED, no migration
+- Pure CaptureInbox groups To review by day and builds its filters, bulk sheet and TalkBack sentence, unit tested
 
 ## [1.6.0] - 2026-10-13
 

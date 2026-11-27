@@ -19,9 +19,25 @@ alert) are defined in [CONTEXT.md](../CONTEXT.md).
    kind left unmapped shows "Needs a category".
 3. **Alerts arrive.** Each one from a watched app becomes a pending capture. A banner on the Trans screen
    ("3 captured transactions to review") and a badge on the Trans tab count them.
-4. **Review.** The inbox shows, per capture: merchant, exact amount, account number, the date (if the alert
+4. **Review.** To review (`CaptureInbox`, all pure) groups waiting captures **by day**, newest first, by the
+   date Confirm will write (the alert's own time, in the phone's zone). Each day's header shows the date
+   (Today, Yesterday, "Wed 11 Nov"), how many captures wait and the money out and in, and is a TalkBack
+   heading. Each capture is a **compact row**: a band dot (High, Check, Low), the title (italic while it's
+   the Suggested description), the Category (or a Transfer's other Account) and Account as pills, a guessed
+   Account as "HDFC Savings?", and the amount. TalkBack reads the row as one sentence ("Lunch, ₹80, Food,
+   HDFC, check, 12 November") and offers Confirm (or Same one and Add anyway), Dismiss, Edit description and
+   Edit in full as custom actions. Tapping a row **expands it in place**, and only one row is expanded at a
+   time. A row swiped right while something is missing springs back and expands with the gap highlighted.
+   **Filters**: All, **Needs a pick** and **Ready**. Ready means a Category (or a Transfer's other Account),
+   a real Account (not a guessed one) and no possible Ledger match; everything else Needs a pick. A day with
+   nothing under the filter is hidden, and its header counts only what it shows.
+   **Confirm day** in a day's header and **Review all** above the list open the **bulk sheet**: High rows
+   start ticked, Check rows that are Ready are listed **unticked** with their guesses, and Low rows, guessed
+   Accounts and Ledger matches are left out. Only ticked rows are confirmed, as one decision with one Undo,
+   so every row it confirms is still the user's tick (ADR-0005).
+   The expanded row shows, per capture: merchant, exact amount, account number, the date (if the alert
    states one), the guessed Category and Account, and why it was guessed. The user picks a Category and
-   Account where missing, then **Confirm** or **Dismiss**, with the buttons or by swiping the card right or
+   Account where missing, then **Confirm** or **Dismiss**, with the buttons or by swiping the row right or
    left. "Original text" shows the alert as received. "Always use X for Y" saves a rule after one
    confirmation. Tapping the title renames it before confirming, with Descriptions used before as
    suggestions; the merchant's rule remembers the new name for its next captures.
@@ -97,7 +113,7 @@ aliases and unparsed alerts are local only and are not sent to the Sheet.
 | `capture/notify` | `CaptureNotifier`, `CaptureActionReceiver`, `CaptureActionHandler`, `CaptureNotificationText` |
 | `data/local` | entities `CapturedTransaction`, `MerchantRule`, `AccountAlias`, `UnparsedAlert`; matching DAOs; `CaptureMigration` (v18 to v19, v19 to v20, v26 to v27) |
 | `data` | `CaptureRepository(Impl)`, `CapturePreferencesRepository` (on/off flag and category mapping, in DataStore) |
-| `viewmodel`, `ui/screens` | `ReviewInboxViewModel` + `CaptureInboxScreen` (cards built by `CaptureRows`), `LogViewModel` + `LogScreen` for Edit (`CaptureForm`), `CaptureSettingsViewModel` + `CaptureSettingsScreen`, `UnparsedAlertsViewModel` + `UnparsedAlertsScreen`, `CaptureBadgeViewModel` |
+| `viewmodel`, `ui/screens` | `ReviewInboxViewModel` + `CaptureInboxScreen` (cards built by `CaptureRows`, days, filters and the bulk sheet by `CaptureInbox`), `LogViewModel` + `LogScreen` for Edit (`CaptureForm`), `CaptureSettingsViewModel` + `CaptureSettingsScreen`, `UnparsedAlertsViewModel` + `UnparsedAlertsScreen`, `CaptureBadgeViewModel` |
 | `di` | `CaptureModule` (keyword list from `assets/merchant_keywords.json`, the pipeline, bindings) |
 
 ## 3. Reading the alerts
@@ -208,7 +224,7 @@ Transfer comes from a rule alone, and past Transfers only feed the Suggested des
 - **Credits** are Income and get a Category from a rule, R2 or Naive Bayes, never from a keyword.
 - **Bands.** High is 0.90 or more, Check is 0.60 to 0.89, Low is less or no Category. Only a rule reaches
   High ([ADR-0010](adr/0010-only-a-saved-rule-reaches-high.md)), so a history, Naive Bayes or keyword guess is
-  always Check: it never notifies and is never ticked in bulk.
+  always Check: it never notifies and never starts ticked in the bulk sheet (a Ready one is listed unticked).
 
 **Suggested description** (`DescriptionGuesser`). Each capture also gets a guessed Description from every
 Transaction of its type, by merchant, amount, time of day and weekday. A merchant seen before outweighs
