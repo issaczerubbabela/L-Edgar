@@ -22,6 +22,27 @@ object RepeatSchedule {
             remainingCount = rule.remainingCount
         )
 
+    /**
+     * Every occurrence of [rule] not yet added, from its next date through [last], oldest first, ignoring
+     * pause. Unlike [dueDates] it isn't capped at a catch-up's worth, so a rule that fell far behind still
+     * reaches [last].
+     */
+    fun datesThrough(rule: RecurringRule, last: LocalDate): List<LocalDate> =
+        RecurrenceCalculator.dueOccurrences(
+            nextDate = LocalDate.parse(rule.nextDate),
+            frequency = rule.frequency,
+            interval = rule.interval,
+            anchorDay = rule.anchorDay,
+            today = last,
+            endDate = rule.endDate?.let(LocalDate::parse),
+            remainingCount = rule.remainingCount,
+            maxOccurrences = MAX_STEPS
+        )
+
+    /** A rule's name on screen: its description, else its Category ("Transfer" for a Transfer). */
+    fun titleOf(rule: RecurringRule): String =
+        rule.description.ifBlank { if (rule.type == TransactionType.TRANSFER) "Transfer" else rule.category }
+
     /** True once an end date or a count has used the rule up: it will never add anything again. */
     fun isFinished(rule: RecurringRule): Boolean {
         if (rule.remainingCount != null && rule.remainingCount <= 0) return true

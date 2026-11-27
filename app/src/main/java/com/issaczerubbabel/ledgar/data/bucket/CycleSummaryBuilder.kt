@@ -17,6 +17,8 @@ import java.time.LocalDate
  * With [FundsSnapshot.EMPTY] (the default) every figure is what it was before Funds existed. With
  * Funds, an Expense drawn from a Fund's whole Account leaves the cycle, Set aside comes off Left to
  * spend, and Planned contributions come off Unallocated (ADR-0011).
+ *
+ * The Daily pace isn't here: it leaves room for the Repeats still due, so it's [CyclePace.of].
  */
 object CycleSummaryBuilder {
 
@@ -87,7 +89,6 @@ object CycleSummaryBuilder {
             leftToSpend = leftToSpend,
             allocated = allocated,
             unallocated = cycle.spendableAmount - allocated - plannedContributions,
-            dailyPace = if (daysOverdue > 0 || leftToSpend <= 0.0) 0.0 else leftToSpend / daysLeft.coerceAtLeast(1),
             buckets = bucketSummaries,
             unbucketed = unbucketed,
             setAside = setAside.total,

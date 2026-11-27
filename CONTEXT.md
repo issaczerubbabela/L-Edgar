@@ -133,6 +133,14 @@ _Avoid_: Trans., history
 A Salary cycle's spendable amount minus every Expense in it, Saving Categories included and Refunds not taken off, minus its Set aside: the same figure the Budget tab shows, because a Bucket can hold savings. An Expense paid from an Account a Fund holds whole comes out of that Fund, not the cycle. Once the cycle is over, the Stats tab calls it "Left unspent". The Budget tab also calls it **This cycle** when splitting Your money.
 _Avoid_: left over (which is based on Earned, not the spendable amount)
 
+**Still due**:
+The Expenses that Repeat rules will still add to a running Salary cycle before its end date: every occurrence not added yet, Ask me first ones waiting included, but not paused rules or Expenses paid from an Account a Fund holds whole. It's never taken off Left to spend; once added, it's an ordinary Transaction and counts as spent.
+_Avoid_: upcoming bills, scheduled
+
+**Daily pace**:
+What a running Salary cycle can spend per day from today to its end date: Left to spend minus Still due, over the days left (the last day counts as one), never below zero. It's the only pace: every screen that shows one uses this. An overdue cycle has none.
+_Avoid_: per day, burn rate
+
 **Usual**:
 What a Category normally costs in Stats: its average over the three periods of the same kind before this one (months for a month, cycles for a cycle).
 _Avoid_: average (without saying over what)

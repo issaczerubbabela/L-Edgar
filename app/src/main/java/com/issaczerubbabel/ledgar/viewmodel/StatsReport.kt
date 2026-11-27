@@ -1,6 +1,7 @@
 package com.issaczerubbabel.ledgar.viewmodel
 
 import com.issaczerubbabel.ledgar.account.toTransactionSnapshot
+import com.issaczerubbabel.ledgar.data.bucket.CyclePace
 import com.issaczerubbabel.ledgar.data.bucket.CycleSummary
 import com.issaczerubbabel.ledgar.data.bucket.CycleSummaryBuilder
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
@@ -12,6 +13,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.DropdownRole
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.Fund
 import com.issaczerubbabel.ledgar.data.local.entity.FundHolding
+import com.issaczerubbabel.ledgar.data.local.entity.RecurringRule
 import com.issaczerubbabel.ledgar.fund.FundMath
 import com.issaczerubbabel.ledgar.fund.FundsSnapshot
 import com.issaczerubbabel.ledgar.util.parseFlexibleDate
@@ -59,7 +61,9 @@ data class StatsInput(
     val buckets: List<BudgetBucket> = emptyList(),
     val assignments: List<BucketCategory> = emptyList(),
     /** Funds change what counts as Saved (ADR-0011). [FundsSnapshot.EMPTY] gives Stats as it was before Funds. */
-    val funds: FundsSnapshot = FundsSnapshot.EMPTY
+    val funds: FundsSnapshot = FundsSnapshot.EMPTY,
+    /** Repeat rules, for the running cycle's Daily pace ([CyclePace]). Local-only, so the web client has none. */
+    val repeats: List<RecurringRule> = emptyList()
 )
 
 /** Money in a period, in the terms of CONTEXT.md. */
@@ -117,8 +121,8 @@ data class PaidFrom(val card: Double = 0.0, val cashAndAccounts: Double = 0.0, v
 /** What a period Set aside into one Fund: its part of Saved. */
 data class FundSaved(val fund: Fund, val amount: Double)
 
-/** Left to spend in a Salary cycle, worked out exactly as the Budget tab does. */
-data class CycleView(val summary: CycleSummary, val isRunning: Boolean, val saved: Double)
+/** Left to spend in a Salary cycle and its Daily pace, worked out exactly as the Budget tab does. */
+data class CycleView(val summary: CycleSummary, val isRunning: Boolean, val saved: Double, val pace: CyclePace)
 
 data class StatsReportUi(
     val totals: MoneyTotals = MoneyTotals(),
@@ -269,7 +273,7 @@ object StatsReport {
         val cycle = input.cycles.firstOrNull { it.id == period.span.id } ?: return null
         val summary = CycleSummaryBuilder.build(cycle, input.buckets, input.assignments, input.records, input.today, input.funds)
         val saved = inPeriod.filter { it.type.trim().equals("Expense", ignoreCase = true) && money.roles.isSaving(it.category) }.sumOf { it.amount }
-        return CycleView(summary, period.span.isRunning, saved)
+        return CycleView(summary, period.span.isRunning, saved, CyclePace.of(summary, input.repeats, input.today, input.funds))
     }
 
     private fun pace(timeline: List<TimelinePoint>, previous: List<TimelinePoint>, today: LocalDate, period: StatsPeriod): Pace {

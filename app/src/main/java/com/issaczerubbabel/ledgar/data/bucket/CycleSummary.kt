@@ -55,8 +55,6 @@ data class CycleSummary(
     val allocated: Double,
     /** Spendable minus what buckets have claimed and [plannedContributions]. Negative means over-allocated. */
     val unallocated: Double,
-    /** What can be spent per remaining day to make the money last. Zero once overdue or overspent. */
-    val dailyPace: Double,
     val buckets: List<BucketSummary>,
     /** Spend in categories that no bucket claims. The virtual "Unbucketed" bucket. */
     val unbucketed: List<CategorySpend>,

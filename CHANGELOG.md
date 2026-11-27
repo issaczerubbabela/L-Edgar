@@ -6,6 +6,17 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `app/src/main/java/com/issaczerubbabel/ledgar/ui/screens/ChangelogData.kt`,
 which is also what the app shows under More > Changelog. Developer notes appear here only.
 
+## [1.8.1] - 2026-11-28
+
+### Added
+
+- Budget: see the Repeats still due before payday, and a Daily pace that leaves room for them, on Stats too
+
+### Developer
+
+- CyclePace: the one Daily pace, (Left to spend − Repeats still due) ÷ days left, replaces CycleSummary.dailyPace (web has no Repeats)
+- Glossary: Still due and Daily pace, the one pace every screen, notification or widget shows (#135)
+
 ## [1.8.0] - 2026-11-27
 
 ### Added
@@ -371,6 +382,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - Room database, Vico charts and date-parsing tests
 
+[1.8.1]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.8.1
 [1.8.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.8.0
 [1.7.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.7.0
 [1.6.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.6.0

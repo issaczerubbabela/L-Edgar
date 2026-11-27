@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,6 +36,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,7 +63,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.issaczerubbabel.ledgar.data.bucket.CyclePace
 import com.issaczerubbabel.ledgar.data.bucket.CycleSummary
+import com.issaczerubbabel.ledgar.data.bucket.DueRepeat
 import com.issaczerubbabel.ledgar.data.bucket.FundContribution
 import com.issaczerubbabel.ledgar.ui.components.BucketColorDot
 import com.issaczerubbabel.ledgar.ui.components.BucketRow
@@ -72,6 +77,7 @@ import com.issaczerubbabel.ledgar.ui.theme.ExpenseOrange
 import com.issaczerubbabel.ledgar.ui.theme.ExpenseRed
 import com.issaczerubbabel.ledgar.ui.theme.IncomeGreen
 import com.issaczerubbabel.ledgar.ui.theme.bucketColor
+import com.issaczerubbabel.ledgar.util.RepeatSchedule
 import com.issaczerubbabel.ledgar.util.formatRupees
 import com.issaczerubbabel.ledgar.viewmodel.BudgetUiState
 import com.issaczerubbabel.ledgar.viewmodel.BudgetViewModel
@@ -89,12 +95,17 @@ fun BudgetHomeScreen(
     onStartCycle: () -> Unit,
     /** Opens a Fund's page from its Set aside row. */
     onOpenFund: (Long) -> Unit,
+    /** "Manage repeats" on the Still due sheet: More > Repeating. */
+    onManageRepeats: () -> Unit,
     vm: BudgetViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
 
     BudgetHomeContent(
         state = state,
+        onAddRepeat = vm::addRepeat,
+        onSkipRepeat = vm::skipRepeat,
+        onManageRepeats = onManageRepeats,
         innerPadding = innerPadding,
         onOlder = vm::showOlderCycle,
         onNewer = vm::showNewerCycle,
@@ -108,6 +119,9 @@ fun BudgetHomeScreen(
 @Composable
 private fun BudgetHomeContent(
     state: BudgetUiState,
+    onAddRepeat: (Long) -> Unit,
+    onSkipRepeat: (Long) -> Unit,
+    onManageRepeats: () -> Unit,
     innerPadding: PaddingValues,
     onOlder: () -> Unit,
     onNewer: () -> Unit,
@@ -119,6 +133,19 @@ private fun BudgetHomeContent(
     val summary = state.summary
     var showingSplit by rememberSaveable { mutableStateOf(false) }
     val yourMoney = state.yourMoney
+    val pace = state.pace?.takeIf { state.isRunning }
+    var showingStillDue by rememberSaveable { mutableStateOf(false) }
+    // Stays open once the last one is added, saying so, rather than vanishing under the user's finger.
+    if (showingStillDue && pace != null && summary != null) {
+        StillDueSheet(
+            pace = pace,
+            endDate = LocalDate.parse(summary.cycle.endDate),
+            onAdd = onAddRepeat,
+            onSkip = onSkipRepeat,
+            onManage = { showingStillDue = false; onManageRepeats() },
+            onDismiss = { showingStillDue = false }
+        )
+    }
     if (showingSplit && yourMoney != null) {
         YourMoneySheet(money = yourMoney, onDismiss = { showingSplit = false })
     }
@@ -160,7 +187,16 @@ private fun BudgetHomeContent(
                 item { OverdueBanner(summary = summary, onStartCycle = onStartCycle) }
             }
             item { Hero(summary = summary, hasFunds = state.hasFunds) }
-            item { StatRow(summary = summary, isRunning = state.isRunning, hasFunds = state.hasFunds) }
+            if (pace != null && pace.isAfterRepeats) {
+                item {
+                    StillDueLine(
+                        pace = pace,
+                        endDate = LocalDate.parse(summary.cycle.endDate),
+                        onClick = { showingStillDue = true }
+                    )
+                }
+            }
+            item { StatRow(summary = summary, pace = pace, isRunning = state.isRunning, hasFunds = state.hasFunds) }
 
             item { SectionLabel(if (state.hasFunds) "Spending" else "Buckets") }
             if (summary.buckets.isEmpty()) {
@@ -347,12 +383,14 @@ private fun Hero(summary: CycleSummary, hasFunds: Boolean) {
 }
 
 @Composable
-private fun StatRow(summary: CycleSummary, isRunning: Boolean, hasFunds: Boolean) {
+private fun StatRow(summary: CycleSummary, pace: CyclePace?, isRunning: Boolean, hasFunds: Boolean) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         if (isRunning) {
+            val daily = pace?.dailyPace ?: 0.0
             StatCard(
                 label = "Daily pace",
-                value = if (summary.dailyPace > 0.0) formatRupees(summary.dailyPace) else "—",
+                value = if (daily > 0.0) formatRupees(daily) else "—",
+                supporting = if (pace?.isAfterRepeats == true) "after repeats" else null,
                 modifier = Modifier.weight(1f)
             )
         } else {
@@ -374,6 +412,170 @@ private fun StatRow(summary: CycleSummary, isRunning: Boolean, hasFunds: Boolean
         )
     }
 }
+
+/**
+ * "₹15,000 still due in 1 repeat": what the Daily pace leaves room for (#135). Orange when the Repeats
+ * alone need more than Left to spend. Tapping it lists them.
+ */
+@Composable
+private fun StillDueLine(pace: CyclePace, endDate: LocalDate, onClick: () -> Unit) {
+    val over = pace.stillDueExceedsLeft
+    val tint = if (over) ExpenseOrange else MaterialTheme.colorScheme.primary
+    val headline = "${formatRupees(pace.stillDueTotal)} still due in ${stillDueCount(pace)}"
+    val spoken = "$headline before ${endDate.format(SPOKEN_DATE)}" +
+        (if (over) ", more than Left to spend" else "") + ", show list"
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (over) ExpenseOrange.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .clickable(onClick = onClick)
+            .clearAndSetSemantics {
+                contentDescription = spoken
+                role = Role.Button
+                onClick(label = "Show list") { onClick(); true }
+            }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Filled.Repeat, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = headline,
+                style = tabularNumbers(MaterialTheme.typography.titleSmall),
+                color = if (over) ExpenseOrange else MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = (if (over) "More than Left to spend" else "Before ${dateLabel(endDate)}") + " · tap to see",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (over) ExpenseOrange else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** Every Repeat still due before [endDate], with Add and Skip on the ones waiting. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StillDueSheet(
+    pace: CyclePace,
+    endDate: LocalDate,
+    onAdd: (Long) -> Unit,
+    onSkip: (Long) -> Unit,
+    onManage: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item(key = "title") {
+                Text(text = "Still due before ${dateLabel(endDate)}", style = MaterialTheme.typography.titleLarge)
+            }
+            if (pace.stillDue.isEmpty()) {
+                item(key = "none") {
+                    Text(
+                        text = "Nothing else is due before ${dateLabel(endDate)}.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                items(pace.stillDue, key = { it.key }) { due ->
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        StillDueRow(due)
+                        if (due.isWaiting && due.isNextForRule) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TextButton(onClick = { onSkip(due.rule.id) }) { Text("Skip") }
+                                Spacer(Modifier.width(4.dp))
+                                Button(onClick = { onAdd(due.rule.id) }) { Text("Add") }
+                            }
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
+                item(key = "total") {
+                    Column(
+                        modifier = Modifier.semantics(mergeDescendants = true) {},
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        SplitLine(label = "Total", amount = pace.stillDueTotal, style = MaterialTheme.typography.titleMedium)
+                        if (pace.stillDueExceedsLeft) {
+                            Text(
+                                text = "${formatRupees(pace.stillDueTotal - pace.leftToSpend)} more than Left to spend",
+                                style = tabularNumbers(MaterialTheme.typography.bodySmall),
+                                color = ExpenseOrange
+                            )
+                        }
+                    }
+                }
+            }
+            item(key = "manage") {
+                TextButton(onClick = onManage) { Text("Manage repeats") }
+            }
+        }
+    }
+}
+
+/** Date, title, Category and amount, read by TalkBack as one row. */
+@Composable
+private fun StillDueRow(due: DueRepeat) {
+    val tag = when {
+        due.isWaiting -> "Waiting"
+        !due.rule.autoAdd -> "Ask me first"
+        else -> null
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {},
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = RepeatSchedule.titleOf(due.rule),
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = buildAnnotatedString {
+                    append(dateLabel(due.date))
+                    if (due.rule.category.isNotBlank()) append(" · ${due.rule.category}")
+                    if (tag != null) {
+                        append(" · ")
+                        withStyle(SpanStyle(color = if (due.isWaiting) ExpenseOrange else MaterialTheme.colorScheme.primary)) { append(tag) }
+                    }
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(
+            text = formatRupees(due.amount),
+            style = tabularNumbers(MaterialTheme.typography.titleMedium),
+            maxLines = 1,
+            softWrap = false
+        )
+    }
+}
+
+/** "1 repeat", "3 repeats": one per occurrence, so a weekly Repeat due three more times is three. */
+private fun stillDueCount(pace: CyclePace): String = "${pace.stillDue.size} ${plural(pace.stillDue.size, "repeat")}"
+
+private val SPOKEN_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMMM", Locale.ENGLISH)
 
 @Composable
 private fun UnbucketedNudge(summary: CycleSummary, isRunning: Boolean, onClick: () -> Unit) {

@@ -16,6 +16,17 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
+        version = "v1.8.1",
+        date = "2026-11-28",
+        added = listOf(
+            "Budget: see the Repeats still due before payday, and a Daily pace that leaves room for them, on Stats too"
+        ),
+        developer = listOf(
+            "CyclePace: the one Daily pace, (Left to spend − Repeats still due) ÷ days left, replaces CycleSummary.dailyPace (web has no Repeats)",
+            "Glossary: Still due and Daily pace, the one pace every screen, notification or widget shows (#135)"
+        )
+    ),
+    ChangelogRelease(
         version = "v1.8.0",
         date = "2026-11-27",
         added = listOf(

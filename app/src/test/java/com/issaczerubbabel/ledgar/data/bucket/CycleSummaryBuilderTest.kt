@@ -38,6 +38,9 @@ class CycleSummaryBuilderTest {
         today: LocalDate = this.today
     ) = CycleSummaryBuilder.build(cycle, buckets, assignments, records, today)
 
+    /** The Daily pace with no Repeat rules: Left to spend over the days left ([CyclePace]). */
+    private fun paceOf(summary: CycleSummary) = CyclePace.of(summary, emptyList(), today).dailyPace
+
     @Test
     fun routesSpendIntoBucketsAndCollectsTheRestAsUnbucketed() {
         val summary = build(
@@ -149,7 +152,7 @@ class CycleSummaryBuilderTest {
         assertEquals(100.0, summary.totalSpent, 0.0)
         assertEquals(100.0, summary.buckets.single().spent, 0.0)
         assertEquals(70000.0 - 100.0, summary.leftToSpend, 0.0)
-        assertEquals((70000.0 - 100.0) / 12, summary.dailyPace, 0.0001)
+        assertEquals((70000.0 - 100.0) / 12, paceOf(summary), 0.0001)
     }
 
     @Test
@@ -232,7 +235,7 @@ class CycleSummaryBuilderTest {
         // 70000 - 45620 = 24380 left, 12 days remain after the 13th.
         assertEquals(24380.0, summary.leftToSpend, 0.0)
         assertEquals(12, summary.daysLeft)
-        assertEquals(24380.0 / 12, summary.dailyPace, 0.0001)
+        assertEquals(24380.0 / 12, paceOf(summary), 0.0001)
     }
 
     @Test
@@ -246,8 +249,8 @@ class CycleSummaryBuilderTest {
             records = listOf(expense("2026-09-01", "Food", 80000.0))
         )
 
-        assertEquals(0.0, overdue.dailyPace, 0.0)
-        assertEquals(0.0, overspent.dailyPace, 0.0)
+        assertEquals(0.0, paceOf(overdue), 0.0)
+        assertEquals(0.0, paceOf(overspent), 0.0)
     }
 
     @Test
@@ -259,7 +262,7 @@ class CycleSummaryBuilderTest {
         )
 
         assertEquals(0, summary.daysLeft)
-        assertEquals(10000.0, summary.dailyPace, 0.0)
+        assertEquals(10000.0, paceOf(summary), 0.0)
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.issaczerubbabel.ledgar.viewmodel
 
 import com.issaczerubbabel.ledgar.account.AccountMath
 import com.issaczerubbabel.ledgar.data.bucket.CycleCalendar
+import com.issaczerubbabel.ledgar.data.bucket.CyclePace
 import com.issaczerubbabel.ledgar.data.bucket.CycleSummary
 import com.issaczerubbabel.ledgar.data.bucket.CycleSummaryBuilder
 import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
@@ -9,6 +10,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.BudgetBucket
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetCycle
 import com.issaczerubbabel.ledgar.data.local.entity.FundHolding
 import com.issaczerubbabel.ledgar.data.local.entity.HoldingKind
+import com.issaczerubbabel.ledgar.data.local.entity.RecurringRule
 import com.issaczerubbabel.ledgar.data.repository.AccountBook
 import com.issaczerubbabel.ledgar.fund.FundMath
 import com.issaczerubbabel.ledgar.fund.FundsSnapshot
@@ -18,6 +20,8 @@ import java.time.LocalDate
 data class BudgetUiState(
     val isLoading: Boolean = true,
     val summary: CycleSummary? = null,
+    /** The Daily pace and the Repeats still due behind it; set by [withRepeats]. */
+    val pace: CyclePace? = null,
     /** 0 is the newest cycle; higher numbers step back through history. */
     val cycleIndex: Int = 0,
     val cycleCount: Int = 0,
@@ -171,3 +175,10 @@ internal fun setAsideNoFund(
     }
     return AccountMath.rupees(total)
 }
+
+/**
+ * [this] with its Daily pace after the Repeats still due ([CyclePace]). [funds] is the snapshot the
+ * summary was built with. A closed or overdue cycle gets no Still due, and its pace stays as it was.
+ */
+fun BudgetUiState.withRepeats(rules: List<RecurringRule>, funds: FundsSnapshot, today: LocalDate): BudgetUiState =
+    copy(pace = summary?.let { CyclePace.of(it, rules, today, funds) })

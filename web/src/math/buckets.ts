@@ -32,7 +32,11 @@ export interface CycleSummary {
   leftToSpend: number;
   allocated: number;
   unallocated: number;
-  /** What can be spent per remaining day to make the money last. */
+  /**
+   * What can be spent per remaining day to make the money last. The app's Daily pace (`CyclePace`) also
+   * takes off the Repeats still due before the cycle ends; Repeat rules are local to the phone and never
+   * reach the Sheet, so here that is always nothing and the pace is Left to spend over the days left.
+   */
   dailyPace: number;
   buckets: BucketSummary[];
   /** Spend in Categories no Bucket claims. */
