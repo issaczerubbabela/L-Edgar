@@ -6,10 +6,11 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `app/src/main/java/com/issaczerubbabel/ledgar/ui/screens/ChangelogData.kt`,
 which is also what the app shows under More > Changelog. Developer notes appear here only.
 
-## [1.7.0] - 2026-11-26
+## [1.7.0] - 2026-11-27
 
 ### Added
 
+- Web version (web folder): view and edit transactions, Stats, Budget and Accounts from a PC or iPad browser
 - Auto-capture: switch a capture to a Transfer, or open it in full with Edit
 - Auto-capture: a merchant you keep confirming as a Transfer to one Account is suggested that way next time
 - Auto-capture: guesses Category and Description from what you logged before, like Lunch or Tea
@@ -32,6 +33,8 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 ### Developer
 
+- web/: Vite + React client on the Apps Script contract, with ported account, bucket and Stats maths, tests and a mock script
+- Web workflow tests and builds web/ on each change and publishes it to GitHub Pages from main
 - ParsingUtils.directionOf picks whichever debit/credit word comes first, shared by Generic/HDFC/Axis parsers
 - ParsingUtils.vpaOf reads the "to VPA/UPI ID handle@psp" payee for Generic/HDFC/Axis debits, tested on synthetic alerts
 - Merchant rules are keyed by merchant and direction and can mean a Transfer (Room 26 → 27, migration tested)

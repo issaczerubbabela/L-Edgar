@@ -1,0 +1,11 @@
+{
+  "name": "L.Edgar",
+  "short_name": "L.Edgar",
+  "description": "View and edit your L.Edgar transactions, buckets and accounts from a browser.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f7f5",
+  "theme_color": "#0f6e56",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
