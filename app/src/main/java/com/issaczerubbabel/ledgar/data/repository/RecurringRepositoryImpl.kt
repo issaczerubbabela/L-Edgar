@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.data.repository
 
+import android.util.Log
 import androidx.room.withTransaction
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.dao.AccountDao
@@ -7,10 +8,17 @@ import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
 import com.issaczerubbabel.ledgar.data.local.dao.RecurringRuleDao
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.RecurringRule
+import com.issaczerubbabel.ledgar.data.preferences.DismissedRepeatSuggestions
 import com.issaczerubbabel.ledgar.util.RecurrenceCalculator
+import com.issaczerubbabel.ledgar.util.RepeatFinder
 import com.issaczerubbabel.ledgar.util.RepeatSchedule
+import com.issaczerubbabel.ledgar.util.RepeatSuggestion
 import com.issaczerubbabel.ledgar.util.TransactionType
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -18,7 +26,8 @@ class RecurringRepositoryImpl @Inject constructor(
     private val db: SheetSyncDatabase,
     private val dao: RecurringRuleDao,
     private val expenseDao: ExpenseDao,
-    private val accountDao: AccountDao
+    private val accountDao: AccountDao,
+    private val dismissals: DismissedRepeatSuggestions
 ) : RecurringRepository {
 
     override suspend fun createRule(rule: RecurringRule): Long = dao.insert(rule)
@@ -28,6 +37,30 @@ class RecurringRepositoryImpl @Inject constructor(
     override suspend fun deleteRule(rule: RecurringRule) = dao.delete(rule)
 
     override fun observeRules(): Flow<List<RecurringRule>> = dao.observeAll()
+
+    override fun observeSuggestions(today: LocalDate): Flow<List<RepeatSuggestion>> = combine(
+        expenseDao.getRecordsByDateRange(today.minusMonths(RepeatFinder.LOOKBACK_MONTHS).toString(), today.toString()),
+        dao.observeAll(),
+        dismissals.keys
+    ) { records, rules, dismissed -> RepeatFinder.suggestions(records, rules, dismissed, today) }
+        .flowOn(Dispatchers.Default)
+        .catch { error ->
+            Log.w(TAG, "Couldn't look for repeats in the Ledger", error)
+            emit(emptyList())
+        }
+
+    /** A second tap before the card goes away finds the rule the first one made instead of adding another. */
+    override suspend fun acceptSuggestion(suggestion: RepeatSuggestion, askFirst: Boolean, today: LocalDate): Long =
+        db.withTransaction {
+            val existing = dao.getAll().firstOrNull { rule ->
+                RepeatFinder.keyOf(rule.type, rule.accountId, rule.fromAccountId, rule.toAccountId, rule.description) == suggestion.key
+            }
+            existing?.id ?: dao.insert(RepeatFinder.toRule(suggestion, autoAdd = !askFirst, today = today))
+        }
+
+    override suspend fun dismissSuggestion(key: String) = dismissals.dismiss(key)
+
+    override suspend fun undismissSuggestion(key: String) = dismissals.undismiss(key)
 
     override suspend fun updateRule(rule: RecurringRule) = dao.update(rule)
 
@@ -126,6 +159,8 @@ class RecurringRepositoryImpl @Inject constructor(
     }
 
     private companion object {
+        const val TAG = "RecurringRepository"
+
         /** Caps catch-up per rule per call, so a corrupted or long-untouched `nextDate` can't loop forever. */
         const val MAX_OCCURRENCES_PER_RUN = 24
     }

@@ -16,6 +16,16 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
+        version = "v1.8.1",
+        date = "2026-11-28",
+        added = listOf(
+            "Repeating: suggests the bills, subscriptions and transfers you already pay, to make them repeat in one tap"
+        ),
+        developer = listOf(
+            "RepeatFinder: a pure, tested scan of the Ledger for weekly, monthly and 3-monthly repeats; Not a repeat lives in repeat_prefs"
+        )
+    ),
+    ChangelogRelease(
         version = "v1.8.0",
         date = "2026-11-27",
         added = listOf(

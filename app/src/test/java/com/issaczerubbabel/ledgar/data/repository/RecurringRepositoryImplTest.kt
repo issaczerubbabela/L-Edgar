@@ -7,6 +7,11 @@ import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.RecurringRule
+import com.issaczerubbabel.ledgar.data.preferences.DismissedRepeatSuggestions
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -27,13 +32,21 @@ class RecurringRepositoryImplTest {
     private lateinit var db: SheetSyncDatabase
     private lateinit var repository: RecurringRepositoryImpl
     private var accountId = 0L
+    private val dismissals = FakeDismissals()
+
+    private class FakeDismissals : DismissedRepeatSuggestions {
+        val state = MutableStateFlow<Set<String>>(emptySet())
+        override val keys: Flow<Set<String>> = state
+        override suspend fun dismiss(key: String) = state.update { it + key }
+        override suspend fun undismiss(key: String) = state.update { it - key }
+    }
 
     @Before
     fun setUp() = runBlocking {
         db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), SheetSyncDatabase::class.java)
             .allowMainThreadQueries()
             .build()
-        repository = RecurringRepositoryImpl(db, db.recurringRuleDao(), db.expenseDao(), db.accountDao())
+        repository = RecurringRepositoryImpl(db, db.recurringRuleDao(), db.expenseDao(), db.accountDao(), dismissals)
         accountId = db.accountDao().insert(AccountRecord(groupName = "Cash", accountName = "Wallet", initialBalance = 0.0))
     }
 
@@ -192,5 +205,52 @@ class RecurringRepositoryImplTest {
 
         assertEquals(rule, repository.getById(ruleId))
         assertTrue(db.expenseDao().getAllRecordsSnapshot().all { it.recurringRuleId == ruleId })
+    }
+
+    private suspend fun logNetflix(vararg dates: String) {
+        for (date in dates) {
+            db.expenseDao().insert(
+                ExpenseRecord(date = date, type = "Expense", category = "Subscriptions", description = "NETFLIX.COM",
+                    amount = 649.0, accountId = accountId, remarks = "")
+            )
+        }
+    }
+
+    @Test
+    fun `accepting a suggestion creates exactly one Ask me first rule and the suggestion goes away`() = runBlocking {
+        val today = LocalDate.of(2026, 11, 20)
+        logNetflix("2026-09-05", "2026-10-05", "2026-11-05")
+        val suggestion = repository.observeSuggestions(today).first().single()
+
+        val ruleId = repository.acceptSuggestion(suggestion, today = today)
+        // A second tap before the card goes away doesn't make a second rule.
+        assertEquals(ruleId, repository.acceptSuggestion(suggestion, today = today))
+
+        val rules = db.recurringRuleDao().observeAll().first()
+        assertEquals(listOf(ruleId), rules.map { it.id })
+        val rule = rules.single()
+        assertEquals(false, rule.autoAdd)
+        assertEquals("2026-12-05", rule.nextDate)
+        assertEquals(accountId, rule.accountId)
+        assertTrue(repository.observeSuggestions(today).first().isEmpty())
+        // Nothing in the Ledger changed: history stays unlinked and synced as it was.
+        assertTrue(db.expenseDao().getAllRecordsSnapshot().all { it.recurringRuleId == null })
+
+        // Undo deletes the rule, and the suggestion comes back.
+        repository.deleteRule(rule)
+        assertEquals(1, repository.observeSuggestions(today).first().size)
+    }
+
+    @Test
+    fun `Not a repeat hides the suggestion and Undo brings it back`() = runBlocking {
+        val today = LocalDate.of(2026, 11, 20)
+        logNetflix("2026-09-05", "2026-10-05", "2026-11-05")
+        val key = repository.observeSuggestions(today).first().single().key
+
+        repository.dismissSuggestion(key)
+        assertTrue(repository.observeSuggestions(today).first().isEmpty())
+
+        repository.undismissSuggestion(key)
+        assertEquals(key, repository.observeSuggestions(today).first().single().key)
     }
 }
