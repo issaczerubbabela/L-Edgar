@@ -34,6 +34,7 @@ import com.issaczerubbabel.ledgar.data.repository.UndoableActions
 import com.issaczerubbabel.ledgar.ledger.Ledger
 import com.issaczerubbabel.ledgar.sync.SyncScheduler
 import com.issaczerubbabel.ledgar.sync.SyncStatus
+import com.issaczerubbabel.ledgar.util.CurrentDate
 import com.issaczerubbabel.ledgar.util.DescriptionSuggestion
 import com.issaczerubbabel.ledgar.util.DescriptionSuggestions
 import com.issaczerubbabel.ledgar.util.KeypadAction
@@ -78,7 +79,8 @@ class LogViewModel @Inject constructor(
     private val captureRepository: CaptureRepository,
     private val captureConfirmer: CaptureConfirmer,
     private val captureDraftHandoff: CaptureDraftHandoff,
-    private val fundRepository: FundRepository
+    private val fundRepository: FundRepository,
+    private val currentDate: CurrentDate
 ) : ViewModel() {
 
     val accounts: StateFlow<List<AccountRecord>> = accountRepository
@@ -98,25 +100,32 @@ class LogViewModel @Inject constructor(
     val bucketContext: StateFlow<BucketPreviewContext?> = bucketPreviewSource.context
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    private val selectedDateState = mutableStateOf(
-        savedStateHandle.get<String>(KEY_SELECTED_DATE)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-            ?: LocalDate.now()
+    /** Today's date, moving on at midnight while the screen is open. */
+    var today by mutableStateOf(currentDate.now())
+        private set
+
+    private var dateState by mutableStateOf(
+        LogDateState.restore(
+            savedDate = savedStateHandle.get<String>(KEY_SELECTED_DATE),
+            pinned = savedStateHandle.get<Boolean>(KEY_DATE_PINNED) ?: false,
+            settled = savedStateHandle.get<Boolean>(KEY_DATE_SETTLED) ?: false
+        )
     )
 
-    /** The date shown on the date pill. Set through [pickDate], not assigned directly, so a picked date can be pinned. */
-    var selectedDate: LocalDate
-        get() = selectedDateState.value
-        private set(value) {
-            selectedDateState.value = value
-            savedStateHandle[KEY_SELECTED_DATE] = value.toString()
-        }
+    /**
+     * The date shown on the date pill: today, unless the user picked another date with [pickDate]
+     * or the screen was opened on one (editing, copying, a Repeat rule, a capture, the Calendar).
+     */
+    val selectedDate: LocalDate get() = dateState.dateOn(today)
 
-    /** True once the user has explicitly picked a date other than today on this screen; kept across a save. */
-    private var datePinned: Boolean = savedStateHandle.get<Boolean>(KEY_DATE_PINNED) ?: false
-        set(value) {
-            field = value
-            savedStateHandle[KEY_DATE_PINNED] = value
-        }
+    /** Keeps only a pinned date in SavedStateHandle, so a restored screen never brings back an old today. */
+    private fun updateDateState(next: LogDateState) {
+        dateState = next
+        if (next.pinned) savedStateHandle[KEY_SELECTED_DATE] = next.fixedDate.toString()
+        else savedStateHandle.remove<String>(KEY_SELECTED_DATE)
+        savedStateHandle[KEY_DATE_PINNED] = next.pinned
+        savedStateHandle[KEY_DATE_SETTLED] = next.settled
+    }
 
     /**
      * After a new Transfer out of a Fund's whole Account, the offer to keep that money earmarked
@@ -193,6 +202,8 @@ class LogViewModel @Inject constructor(
         val copyTransactionId = savedStateHandle.get<Long>("copyTransactionId")?.takeIf { it > 0L }
         val copyDateMode = savedStateHandle.get<String>("copyDateMode") ?: "original"
 
+        viewModelScope.launch { currentDate.today.collect { today = it } }
+
         if (captureId != null) {
             viewModelScope.launch { loadCapture(captureId) }
         } else if (repeatEditMode != RepeatEditMode.None) {
@@ -205,7 +216,7 @@ class LogViewModel @Inject constructor(
                     return@launch
                 }
                 editingOriginal = record
-                selectedDate = runCatching { LocalDate.parse(record.date) }.getOrDefault(LocalDate.now())
+                updateDateState(dateState.load(runCatching { LocalDate.parse(record.date) }.getOrNull()))
                 selectedType = record.type
                 selectedCategory = record.category
                 selectedAccountId = when (record.type) {
@@ -231,11 +242,11 @@ class LogViewModel @Inject constructor(
                 else selectedAccountId = prefillAccountId
             }
             // From the Calendar's "Add on <day>": that date for this Transaction only. Not pinned, so the
-            // next one after saving starts on today again. Not reapplied over a date restored after
-            // the process was killed.
-            savedStateHandle.get<String>("prefillDate")?.takeIf { it.isNotBlank() && !savedStateHandle.contains(KEY_SELECTED_DATE) }
+            // next one after saving starts on today again. Not reapplied over a date the user picked,
+            // or after a save, when the screen comes back after the process was killed.
+            savedStateHandle.get<String>("prefillDate")?.takeIf { it.isNotBlank() }
                 ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-                ?.let { selectedDate = it }
+                ?.let { updateDateState(dateState.prefill(it)) }
         } else {
             viewModelScope.launch {
                 val source = repository.getById(copyTransactionId)
@@ -244,11 +255,13 @@ class LogViewModel @Inject constructor(
                     return@launch
                 }
 
-                selectedDate = if (copyDateMode.equals("today", ignoreCase = true)) {
-                    LocalDate.now()
-                } else {
-                    runCatching { LocalDate.parse(source.date) }.getOrDefault(LocalDate.now())
-                }
+                // Copy to today follows today, like a new Transaction.
+                updateDateState(
+                    dateState.load(
+                        if (copyDateMode.equals("today", ignoreCase = true)) null
+                        else runCatching { LocalDate.parse(source.date) }.getOrNull()
+                    )
+                )
 
                 // Only Reconcile creates Balance adjustments, so a copy of one starts as an Expense.
                 val isAdjustment = source.type == TransactionType.ADJUSTMENT
@@ -279,7 +292,7 @@ class LogViewModel @Inject constructor(
         }
         capture = found
         val form = CaptureForm.prefill(found, captureDraftHandoff.take(id), captureRepository.titleFor(found))
-        if (!savedStateHandle.contains(KEY_SELECTED_DATE)) selectedDate = form.date
+        updateDateState(dateState.prefill(form.date))
         selectedType = form.type
         selectedCategory = form.category
         selectedAccountId = form.accountId
@@ -303,7 +316,7 @@ class LogViewModel @Inject constructor(
         repeatRule = rule
         val next = LocalDate.parse(rule.nextDate)
         repeatOccurrenceDate = next
-        if (!savedStateHandle.contains(KEY_SELECTED_DATE)) selectedDate = next
+        updateDateState(dateState.prefill(next))
         selectedType = rule.type
         selectedCategory = rule.category
         selectedAccountId = if (rule.type == TransactionType.TRANSFER) null else rule.accountId
@@ -336,8 +349,11 @@ class LogViewModel @Inject constructor(
             if (selectedAccountId == null) { errorMessage = "Select an account"; return }
         }
 
+        // Today as it is now, not when the screen opened: right even if the screen never redrew past midnight.
+        val saveDate = dateState.dateOn(currentDate.now())
+
         if (isCaptureMode) {
-            capture?.let { confirmCapture(it, parsedAmount) }
+            capture?.let { confirmCapture(it, parsedAmount, saveDate) }
             return
         }
 
@@ -347,7 +363,7 @@ class LogViewModel @Inject constructor(
 
             var record = ExpenseRecord(
                 id = baseRecord?.id ?: 0,
-                date = selectedDate.toString(),
+                date = saveDate.toString(),
                 type = selectedType,
                 category = if (selectedType == TransactionType.TRANSFER) TransactionType.TRANSFER else selectedCategory,
                 description = description,
@@ -390,23 +406,23 @@ class LogViewModel @Inject constructor(
                         toAccountId = record.toAccountId,
                         frequency = frequency,
                         interval = repeatInterval,
-                        anchorDay = RepeatSchedule.anchorDayFor(frequency, selectedDate),
-                        nextDate = selectedDate.toString()
+                        anchorDay = RepeatSchedule.anchorDayFor(frequency, saveDate),
+                        nextDate = saveDate.toString()
                     )
                 )
                 saveSuccess = true
                 return@launch
             }
             if (repeatEditMode == RepeatEditMode.Occurrence && rule != null) {
-                recurringRepository.saveEditedOccurrence(rule.id, repeatOccurrenceDate ?: selectedDate, record)
-                reminderPreferences.markLoggedToday(LocalDate.now().toEpochDay())
+                recurringRepository.saveEditedOccurrence(rule.id, repeatOccurrenceDate ?: saveDate, record)
+                reminderPreferences.markLoggedToday(currentDate.now().toEpochDay())
                 saveSuccess = true
                 return@launch
             }
 
             val frequency = repeatFrequency
             if (!isEditMode && frequency != null) {
-                val anchorDay = RepeatSchedule.anchorDayFor(frequency, selectedDate)
+                val anchorDay = RepeatSchedule.anchorDayFor(frequency, saveDate)
                 val ruleId = recurringRepository.createRule(
                     RecurringRule(
                         type = record.type,
@@ -421,8 +437,8 @@ class LogViewModel @Inject constructor(
                         interval = repeatInterval,
                         anchorDay = anchorDay,
                         startDate = record.date,
-                        nextDate = RecurrenceCalculator.nextAfter(selectedDate, frequency, repeatInterval, anchorDay).toString(),
-                        createdAt = LocalDate.now().toString()
+                        nextDate = RecurrenceCalculator.nextAfter(saveDate, frequency, repeatInterval, anchorDay).toString(),
+                        createdAt = currentDate.now().toString()
                     )
                 )
                 record = record.copy(recurringRuleId = ruleId)
@@ -433,7 +449,7 @@ class LogViewModel @Inject constructor(
             } else {
                 repository.save(record)
                 // A backdated entry logged tonight still counts as logged today.
-                reminderPreferences.markLoggedToday(LocalDate.now().toEpochDay())
+                reminderPreferences.markLoggedToday(currentDate.now().toEpochDay())
             }
 
             if (!isEditMode) {
@@ -442,7 +458,7 @@ class LogViewModel @Inject constructor(
                 } else {
                     null
                 }
-                lastSavedDate = selectedDate
+                lastSavedDate = saveDate
                 resetForm()
             }
             saveSuccess = true
@@ -450,7 +466,7 @@ class LogViewModel @Inject constructor(
     }
 
     /** Save from a capture is its Confirm, offering Undo on To review once this screen closes. */
-    private fun confirmCapture(capture: CapturedTransaction, parsedAmount: Double) {
+    private fun confirmCapture(capture: CapturedTransaction, parsedAmount: Double, date: LocalDate) {
         val edits = CaptureForm.toEdits(
             capture = capture,
             type = selectedType,
@@ -462,7 +478,7 @@ class LogViewModel @Inject constructor(
             description = description.trim().ifEmpty { capture.displayTitle() },
             remarks = remarks,
             amount = parsedAmount,
-            date = selectedDate,
+            date = date,
             alwaysUse = alwaysUse && alwaysUseMerchant != null
         ) ?: run { errorMessage = "Select an account"; return }
         val accountNames = accounts.value.associate { it.id to it.accountName }
@@ -479,8 +495,7 @@ class LogViewModel @Inject constructor(
 
     /** Called when the user picks a date from the date pill's picker. */
     fun pickDate(date: LocalDate) {
-        selectedDate = date
-        datePinned = date != LocalDate.now()
+        updateDateState(dateState.pick(date, currentDate.now()))
     }
 
     fun deleteCurrent() {
@@ -583,7 +598,7 @@ class LogViewModel @Inject constructor(
         accounts
     ) { (type, uses), query, expense, income, accountList ->
         val categories = if (type == TransactionType.INCOME) income else expense
-        DescriptionSuggestions.suggest(uses, query, categories.toSet(), accountList.map { it.id }.toSet(), LocalDate.now())
+        DescriptionSuggestions.suggest(uses, query, categories.toSet(), accountList.map { it.id }.toSet(), currentDate.now())
             .filterNot { it.description.equals(query.trim(), ignoreCase = true) }
     }.flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -629,7 +644,7 @@ class LogViewModel @Inject constructor(
     }
 
     private fun resetForm() {
-        if (!datePinned) selectedDate = LocalDate.now()
+        updateDateState(dateState.afterSave())
         selectedType = TransactionType.EXPENSE
         selectedCategory = ""
         selectedAccountId = null
@@ -654,6 +669,7 @@ class LogViewModel @Inject constructor(
     private companion object {
         const val KEY_SELECTED_DATE = "logSelectedDate"
         const val KEY_DATE_PINNED = "logDatePinned"
+        const val KEY_DATE_SETTLED = "logDateSettled"
     }
 }
 

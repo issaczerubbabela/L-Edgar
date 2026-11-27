@@ -16,6 +16,16 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
+        version = "v1.8.1",
+        date = "2026-11-28",
+        fixed = listOf(
+            "Add Transaction: left open past midnight, it saves on the new day instead of the day the screen opened"
+        ),
+        developer = listOf(
+            "CurrentDate: a today that moves on at midnight and on time or time zone changes; LogDateState holds the date pill's rules"
+        )
+    ),
+    ChangelogRelease(
         version = "v1.8.0",
         date = "2026-11-27",
         added = listOf(
