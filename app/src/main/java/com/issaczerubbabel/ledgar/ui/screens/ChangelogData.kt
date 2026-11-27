@@ -37,7 +37,7 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "TransferPairMatcher pairs a confirmed Transfer with its other half (ADR-0006 accepted); CaptureConfirmer shares Undo",
             "Capture predictor: pure HistoryMatch (R2), NaiveBayesCategorizer, DescriptionGuesser and AccountGuesser, unit tested",
             "ADR-0010 \"Only a saved rule reaches High\"; guesses live in traceJson via CaptureTrace, adding no migration",
-            "CaptureIngestor.reguessPending runs after each Confirm; CaptureReguessTest covers it on Room with Robolectric"
+            "CaptureIngestor.reguessPending runs after each Confirm (CaptureReguessTest); a picked Category or other Account pins the type"
         )
     ),
     ChangelogRelease(

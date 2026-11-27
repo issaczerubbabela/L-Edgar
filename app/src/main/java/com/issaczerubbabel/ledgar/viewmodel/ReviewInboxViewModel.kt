@@ -84,10 +84,12 @@ class ReviewInboxViewModel @Inject constructor(
     /** The card's Expense / Income / Transfer switch. */
     fun setType(captureId: Long, type: String) = edit(captureId) { CaptureRows.switchType(it, type) }
 
-    fun setCategory(captureId: Long, category: String) = edit(captureId) { it.copy(category = category) }
+    fun setCategory(captureId: Long, category: String) =
+        edit(captureId) { CaptureRows.pickCategory(it, shownType(captureId), category) }
 
     /** A Transfer's other Account: the To-account of a debit, the From-account of a credit. */
-    fun setOtherAccount(captureId: Long, accountId: Long) = edit(captureId) { it.copy(otherAccountId = accountId) }
+    fun setOtherAccount(captureId: Long, accountId: Long) =
+        edit(captureId) { CaptureRows.pickOtherAccount(it, shownType(captureId), accountId) }
 
     fun setAlwaysUse(captureId: Long, alwaysUse: Boolean) = edit(captureId) { it.copy(alwaysUse = alwaysUse) }
 
@@ -150,6 +152,9 @@ class ReviewInboxViewModel @Inject constructor(
             confirmer.confirm(chosen, accountNames) { captureId -> edits.update { it - captureId } }
         }
     }
+
+    /** The type the card shows right now; a pick made on it pins it (see [CaptureRows.pickCategory]). */
+    private fun shownType(captureId: Long): String? = rows.value.firstOrNull { it.capture.id == captureId }?.type
 
     private fun edit(captureId: Long, change: (CaptureRowEdit) -> CaptureRowEdit) {
         edits.update { it + (captureId to change(it[captureId] ?: CaptureRowEdit())) }

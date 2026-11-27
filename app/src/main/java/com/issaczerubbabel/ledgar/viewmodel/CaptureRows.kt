@@ -150,6 +150,17 @@ object CaptureRows {
         )
     }
 
+    /**
+     * The user picked [category] while the card was on [type]: pins that type too, so a later
+     * re-guess that changes the suggested type can't switch the card away and hide the pick.
+     */
+    fun pickCategory(edit: CaptureRowEdit, type: String?, category: String): CaptureRowEdit =
+        edit.copy(type = edit.type ?: type, category = category)
+
+    /** The user picked a Transfer's other Account while the card was on [type]; pins it like [pickCategory]. */
+    fun pickOtherAccount(edit: CaptureRowEdit, type: String?, accountId: Long): CaptureRowEdit =
+        edit.copy(type = edit.type ?: type, otherAccountId = accountId)
+
     /** Switching the type forgets the Category and other Account picked for the old one. */
     fun switchType(edit: CaptureRowEdit, type: String): CaptureRowEdit =
         edit.copy(type = type, category = null, otherAccountId = null)

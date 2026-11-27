@@ -161,6 +161,35 @@ class CaptureRowsTest {
         assertEquals(FormAccounts(HDFC, null, null), CaptureForm.place(capture(), TransactionType.INCOME, HDFC, null))
     }
 
+    @Test
+    fun aReguessThatFlipsTheTypeKeepsACategoryTheUserPicked() {
+        val waiting = capture(suggestedCategory = null)
+        val picked = CaptureRows.pickCategory(CaptureRowEdit(), row(waiting).type, "Food")
+
+        // A 3rd Transfer Confirm makes the merchant's rule a learned Transfer and re-guesses this one.
+        val reguessed = waiting.copy(suggestedType = TransactionType.TRANSFER, suggestedCategory = null, suggestedToAccountId = CUB)
+        val card = row(reguessed, picked)
+
+        assertEquals(TransactionType.EXPENSE, card.type)
+        assertEquals("Food", card.category)
+        assertNull(card.otherAccountId)
+        assertTrue(card.canConfirm)
+    }
+
+    @Test
+    fun aReguessThatFlipsTheTypeKeepsATransfersOtherAccountTheUserPicked() {
+        val waiting = capture(suggestedType = TransactionType.TRANSFER, suggestedCategory = null)
+        val picked = CaptureRows.pickOtherAccount(CaptureRowEdit(), row(waiting).type, CUB)
+
+        val reguessed = waiting.copy(suggestedType = TransactionType.EXPENSE, suggestedCategory = "Bills")
+        val card = row(reguessed, picked)
+
+        assertEquals(TransactionType.TRANSFER, card.type)
+        assertEquals(CUB, card.otherAccountId)
+        assertNull(card.category)
+        assertTrue(card.canConfirm)
+    }
+
     private companion object {
         const val HDFC = 1L
         const val CUB = 2L
