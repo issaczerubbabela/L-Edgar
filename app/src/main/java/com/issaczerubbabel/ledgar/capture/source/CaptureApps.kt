@@ -20,6 +20,9 @@ object CaptureApps {
         GOOGLE_MESSAGES to "Messages"
     )
 
+    /** The labels of banks' own apps, whose alerts are about an Account at that bank. UPI apps aren't one. */
+    private val bankApps: Set<String> = setOf("HDFC Bank", "Axis Bank", "City Union Bank")
+
     /**
      * Debug builds also accept `adb shell cmd notification post`, which posts as the shell, so a
      * capture can be tried without making a real payment. Release builds never look at it.
@@ -32,6 +35,9 @@ object CaptureApps {
     /** True for a watched app's label or a bank-style SMS sender ID: the only alerts worth keeping when unreadable. */
     fun looksLikeBankSender(sender: String): Boolean =
         sender in labels.values || SMS_SENDER_ID.matches(sender.trim())
+
+    /** True when [sender] is a bank's own app, so an Account guess from that bank's aliases makes sense. */
+    fun isBankApp(sender: String): Boolean = sender in bankApps
 
     fun isWatched(packageName: String): Boolean =
         packageName in labels || (BuildConfig.DEBUG && packageName == SHELL)

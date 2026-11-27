@@ -1,6 +1,7 @@
 package com.issaczerubbabel.ledgar.data.repository
 
 import android.util.Log
+import com.issaczerubbabel.ledgar.capture.LedgerEditLearner
 import com.issaczerubbabel.ledgar.data.local.dao.AccountDao
 import com.issaczerubbabel.ledgar.data.bucket.BucketBackupMapper
 import com.issaczerubbabel.ledgar.data.local.dao.BudgetDao
@@ -42,7 +43,8 @@ class ExpenseRepositoryImpl @Inject constructor(
     private val preferenceRepository: ThemePreferenceRepository,
     private val transactionSyncer: TransactionSyncer,
     private val syncStore: TransactionSyncStore,
-    private val syncState: SyncStateRepository
+    private val syncState: SyncStateRepository,
+    private val ledgerEditLearner: LedgerEditLearner
 ) : ExpenseRepository {
 
     private val importLogTag = "ExpenseImport"
@@ -52,7 +54,9 @@ class ExpenseRepositoryImpl @Inject constructor(
 
     override suspend fun getById(id: Long): ExpenseRecord? = dao.getById(id)
 
-    override suspend fun update(record: ExpenseRecord) = dao.updateKeepingSyncState(record)
+    // A captured Transaction's new type or Category teaches its merchant's rule (#143).
+    override suspend fun update(record: ExpenseRecord) =
+        ledgerEditLearner.around(listOf(record.id)) { dao.updateKeepingSyncState(record) }
 
     override suspend fun hardDeleteById(id: Long) = dao.hardDeleteById(id)
 
@@ -83,7 +87,7 @@ class ExpenseRepositoryImpl @Inject constructor(
         dao.updateTransactionsDateByIds(ids = ids, newDate = newDate)
 
     override suspend fun updateTransactionsCategoryByIds(ids: List<Long>, newCategory: String, type: String) =
-        dao.updateTransactionsCategoryByIds(ids = ids, newCategory = newCategory, type = type)
+        ledgerEditLearner.around(ids) { dao.updateTransactionsCategoryByIds(ids = ids, newCategory = newCategory, type = type) }
 
     override suspend fun updateTransactionsAssetByIds(ids: List<Long>, accountId: Long) =
         dao.updateTransactionsAssetByIds(ids = ids, accountId = accountId)

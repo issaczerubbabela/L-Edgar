@@ -26,7 +26,7 @@ interface CaptureDao {
     )
     fun observePending(): Flow<List<CapturedTransaction>>
 
-    @Query("SELECT COUNT(*) FROM captured_transactions WHERE status = 'PENDING'")
+    @Query("SELECT COUNT(*) FROM captured_transactions WHERE status IN ('PENDING', 'POSSIBLE_DUPLICATE')")
     fun observePendingCount(): Flow<Int>
 
     @Query("SELECT * FROM captured_transactions WHERE refNumber = :ref LIMIT 1")
@@ -47,6 +47,31 @@ interface CaptureDao {
     )
     suspend fun markConfirmed(id: Long, expenseId: Long, finalCategory: String?)
 
+    /** The other half of a confirmed Transfer (ADR-0006): resolved by the same Transaction. */
+    @Query("UPDATE captured_transactions SET status = 'PAIRED', confirmedExpenseId = :expenseId, finalCategory = 'Transfer' WHERE id = :id")
+    suspend fun markPaired(id: Long, expenseId: Long)
+
+    /**
+     * A Link (#125): the capture is the bank's alert for a Transaction the user had already logged,
+     * so it resolves to that Transaction's id without writing a new one.
+     */
+    @Query("UPDATE captured_transactions SET status = 'LINKED', confirmedExpenseId = :expenseId, finalCategory = :finalCategory WHERE id = :id")
+    suspend fun markLinked(id: Long, expenseId: Long, finalCategory: String?)
+
+    /** Transactions a capture already resolved (Confirm, a Transfer's other half or a Link): each absorbs one alert. */
+    @Query("SELECT DISTINCT confirmedExpenseId FROM captured_transactions WHERE confirmedExpenseId IS NOT NULL")
+    fun observeLinkedExpenseIds(): Flow<List<Long>>
+
+    @Query("SELECT DISTINCT confirmedExpenseId FROM captured_transactions WHERE confirmedExpenseId IS NOT NULL")
+    suspend fun getLinkedExpenseIds(): List<Long>
+
+    /** Captures still waiting in one direction within a time window: a Transfer's possible other halves. */
+    @Query(
+        "SELECT * FROM captured_transactions WHERE status IN ('PENDING', 'POSSIBLE_DUPLICATE') " +
+            "AND direction = :direction AND txnTime BETWEEN :from AND :to"
+    )
+    suspend fun getWaiting(direction: String, from: Long, to: Long): List<CapturedTransaction>
+
     /** The user turned this capture into a Trip expense instead of a Transaction (ADR-0008). */
     @Query("UPDATE captured_transactions SET status = 'TRIP' WHERE id = :id")
     suspend fun markAddedToTrip(id: Long)
@@ -61,10 +86,45 @@ interface CaptureDao {
     )
     suspend fun assignAccountToPending(hint: String, accountId: Long)
 
-    @Query("SELECT * FROM captured_transactions WHERE status IN ('PENDING', 'POSSIBLE_DUPLICATE') AND suggestedCategory IS NULL")
-    suspend fun getPendingWithoutCategory(): List<CapturedTransaction>
+    /**
+     * Writes a re-guess onto a capture that is still waiting. Only the guess columns change, and a
+     * capture confirmed or dismissed meanwhile is left alone, so a re-guess can never undo a Confirm.
+     */
+    @Query(
+        """
+        UPDATE captured_transactions
+        SET suggestedType = :suggestedType, suggestedCategory = :suggestedCategory,
+            suggestedToAccountId = :suggestedToAccountId, confidence = :confidence,
+            decidedBy = :decidedBy, traceJson = :traceJson
+        WHERE id = :id AND status IN ('PENDING', 'POSSIBLE_DUPLICATE')
+        """
+    )
+    suspend fun updateGuesses(
+        id: Long,
+        suggestedType: String?,
+        suggestedCategory: String?,
+        suggestedToAccountId: Long?,
+        confidence: Double,
+        decidedBy: String?,
+        traceJson: String?
+    )
+
+    /** Rewrites a waiting capture's trace, say to keep a Split; a resolved capture is left alone. */
+    @Query("UPDATE captured_transactions SET traceJson = :traceJson WHERE id = :id AND status IN ('PENDING', 'POSSIBLE_DUPLICATE')")
+    suspend fun updateTrace(id: Long, traceJson: String)
+
+    /**
+     * The captures a Transaction came from by a Confirm or a Link, so editing it in the Ledger can
+     * teach their Merchant rules. A Transfer's PAIRED other half is left out: its Confirm never taught it.
+     */
+    @Query("SELECT * FROM captured_transactions WHERE confirmedExpenseId IN (:expenseIds) AND status IN ('CONFIRMED', 'LINKED')")
+    suspend fun getTeachingFor(expenseIds: List<Long>): List<CapturedTransaction>
+
+    /** Every waiting capture, for re-guessing. */
+    @Query("SELECT * FROM captured_transactions WHERE status IN ('PENDING', 'POSSIBLE_DUPLICATE')")
+    suspend fun getPendingSnapshot(): List<CapturedTransaction>
 
     /** R3-Q1: turning auto-capture off clears queued work but never touches learned data. */
-    @Query("DELETE FROM captured_transactions WHERE status = 'PENDING'")
+    @Query("DELETE FROM captured_transactions WHERE status IN ('PENDING', 'POSSIBLE_DUPLICATE')")
     suspend fun deleteAllPending()
 }

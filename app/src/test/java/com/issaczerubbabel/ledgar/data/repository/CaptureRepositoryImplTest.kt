@@ -8,6 +8,7 @@ import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRule
+import com.issaczerubbabel.ledgar.data.local.entity.MerchantRuleKey
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRuleOrigin
 import com.issaczerubbabel.ledgar.data.preferences.ReminderPreferences
 import com.issaczerubbabel.ledgar.util.TransactionType
@@ -32,6 +33,7 @@ class CaptureRepositoryImplTest {
     private lateinit var repo: CaptureRepositoryImpl
     private var accountId = 0L
     private var hash = 0
+    private var reguessed = 0
 
     @Before
     fun setUp() = runBlocking {
@@ -39,7 +41,7 @@ class CaptureRepositoryImplTest {
             .allowMainThreadQueries()
             .build()
         repo = CaptureRepositoryImpl(
-            db, db.captureDao(), db.merchantRuleDao(), db.accountAliasDao(), db.expenseDao(), db.unparsedAlertDao()
+            db, db.captureDao(), db.merchantRuleDao(), db.accountAliasDao(), db.expenseDao(), db.unparsedAlertDao(), { reguessed++ }
         )
         accountId = db.accountDao().insert(AccountRecord(groupName = "Bank", accountName = "HDFC Savings", initialBalance = 0.0))
     }
@@ -74,7 +76,7 @@ class CaptureRepositoryImplTest {
         val expenseId = confirm(first, "Instamart")
 
         assertEquals("Instamart", db.expenseDao().getById(expenseId!!)!!.description)
-        assertEquals("Instamart", db.merchantRuleDao().getByMerchant("SWIGGY INSTAMART")!!.description)
+        assertEquals("Instamart", db.merchantRuleDao().get("SWIGGY INSTAMART", "DEBIT")!!.description)
     }
 
     @Test
@@ -83,7 +85,7 @@ class CaptureRepositoryImplTest {
         val next = capture(amount = 120.0)
 
         assertEquals("Instamart", repo.titleFor(next))
-        assertEquals(mapOf("SWIGGY INSTAMART" to "Instamart"), repo.observeRenames().first())
+        assertEquals(mapOf(MerchantRuleKey("SWIGGY INSTAMART", "DEBIT") to "Instamart"), repo.observeRenames().first())
     }
 
     @Test
@@ -109,7 +111,7 @@ class CaptureRepositoryImplTest {
         confirm(capture(), "Instamart")
         confirm(capture(amount = 50.0), "SWIGGY*BLR INSTAMART")
 
-        assertNull(db.merchantRuleDao().getByMerchant("SWIGGY INSTAMART")!!.description)
+        assertNull(db.merchantRuleDao().get("SWIGGY INSTAMART", "DEBIT")!!.description)
         assertEquals("SWIGGY*BLR INSTAMART", repo.titleFor(capture(amount = 1.0)))
     }
 
@@ -122,7 +124,7 @@ class CaptureRepositoryImplTest {
     fun aRenameSurvivesTheLearnedCategoryBeingDropped() = runBlocking {
         db.merchantRuleDao().upsert(
             MerchantRule(
-                "SWIGGY INSTAMART", "Groceries", TransactionType.EXPENSE, origin = MerchantRuleOrigin.LEARNED,
+                "SWIGGY INSTAMART", "DEBIT", "Groceries", TransactionType.EXPENSE, origin = MerchantRuleOrigin.LEARNED,
                 hitCount = 5, streak = 1, updatedAt = 0, description = "Instamart"
             )
         )
@@ -130,7 +132,7 @@ class CaptureRepositoryImplTest {
         // The second override in a row would delete a learned rule.
         confirm(capture(), "Instamart", category = "Food")
 
-        val rule = db.merchantRuleDao().getByMerchant("SWIGGY INSTAMART")
+        val rule = db.merchantRuleDao().get("SWIGGY INSTAMART", "DEBIT")
         assertNotNull("the rule is kept for its description", rule)
         assertEquals(MerchantRuleOrigin.CANDIDATE, rule!!.origin)
         assertEquals("Instamart", rule.description)
@@ -140,12 +142,12 @@ class CaptureRepositoryImplTest {
     @Test
     fun aUserRuleKeepsItsCategoryButTakesTheRename() = runBlocking {
         db.merchantRuleDao().upsert(
-            MerchantRule("SWIGGY INSTAMART", "Groceries", TransactionType.EXPENSE, origin = MerchantRuleOrigin.USER, updatedAt = 0)
+            MerchantRule("SWIGGY INSTAMART", "DEBIT", "Groceries", TransactionType.EXPENSE, origin = MerchantRuleOrigin.USER, updatedAt = 0)
         )
 
         confirm(capture(), "Instamart", category = "Food")
 
-        val rule = db.merchantRuleDao().getByMerchant("SWIGGY INSTAMART")!!
+        val rule = db.merchantRuleDao().get("SWIGGY INSTAMART", "DEBIT")!!
         assertEquals("Groceries", rule.category)
         assertEquals(MerchantRuleOrigin.USER, rule.origin)
         assertEquals("Instamart", rule.description)

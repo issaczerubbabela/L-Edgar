@@ -78,7 +78,7 @@ class CaptureMigrationTest {
         // Every capture table works through its DAO.
         db.unparsedAlertDao().insert(UnparsedAlert(sender = "AD-HDFCBK-T", rawText = "x", rawHash = "u1", capturedAt = 1))
         assertEquals(1, db.unparsedAlertDao().getAllSnapshot().size)
-        assertEquals(null, db.merchantRuleDao().getByMerchant("NOBODY"))
+        assertEquals(null, db.merchantRuleDao().get("NOBODY", "DEBIT"))
         assertTrue(db.accountAliasDao().getAllSnapshot().isEmpty())
     }
 
@@ -119,12 +119,53 @@ class CaptureMigrationTest {
         }
 
         val db = DatabaseModule.provideDatabase(context)
-        val rule = db.merchantRuleDao().getByMerchant("SWIGGY INSTAMART")!!
+        val rule = db.merchantRuleDao().get("SWIGGY INSTAMART", "DEBIT")!!
         assertEquals("Groceries", rule.category)
         assertEquals(null, rule.description)
 
         db.merchantRuleDao().upsert(rule.copy(description = "Instamart"))
-        assertEquals("Instamart", db.merchantRuleDao().getByMerchant("SWIGGY INSTAMART")!!.description)
+        assertEquals("Instamart", db.merchantRuleDao().get("SWIGGY INSTAMART", "DEBIT")!!.description)
+        db.close()
+    }
+
+    @Test
+    fun version27KeysEveryRuleByDirectionAndKeepsIt() = runBlocking {
+        createAt(20) { db ->
+            CaptureMigration.createTables(db)
+            db.execSQL(
+                "INSERT INTO merchant_rules (merchantNorm, category, type, defaultAccountId, origin, hitCount, streak, updatedAt) VALUES " +
+                    "('SWIGGY INSTAMART', 'Groceries', 'Expense', 1, 'LEARNED', 4, 0, 1), " +
+                    "('ACME PAYROLL', 'Salary', 'Income', NULL, 'USER', 2, 0, 2), " +
+                    "('CHAI POINT', 'Food', 'Expense', NULL, 'CANDIDATE', 1, 1, 3)"
+            )
+            insertCapture(db)
+        }
+
+        val db = DatabaseModule.provideDatabase(context)
+        val rules = db.merchantRuleDao()
+
+        val expense = rules.get("SWIGGY INSTAMART", "DEBIT")!!
+        assertEquals("Groceries", expense.category)
+        assertEquals("Expense", expense.type)
+        assertEquals(1L, expense.defaultAccountId)
+        assertEquals(4, expense.hitCount)
+        assertEquals(null, expense.toAccountId)
+        assertEquals(null, rules.get("SWIGGY INSTAMART", "CREDIT"))
+
+        val income = rules.get("ACME PAYROLL", "CREDIT")!!
+        assertEquals("Salary", income.category)
+        assertEquals("USER", income.origin)
+        assertEquals(null, rules.get("ACME PAYROLL", "DEBIT"))
+
+        assertEquals("CANDIDATE", rules.get("CHAI POINT", "DEBIT")!!.origin)
+
+        // A merchant can now have a rule for each direction, and a Transfer rule.
+        rules.upsert(expense.copy(direction = "CREDIT", category = "Transfer", type = "Transfer", toAccountId = 1))
+        assertEquals("Groceries", rules.get("SWIGGY INSTAMART", "DEBIT")!!.category)
+        assertEquals(1L, rules.get("SWIGGY INSTAMART", "CREDIT")!!.toAccountId)
+
+        val waiting = db.captureDao().observePending().first().single()
+        assertEquals("captures made before the upgrade are kept", null, waiting.suggestedToAccountId)
         db.close()
     }
 

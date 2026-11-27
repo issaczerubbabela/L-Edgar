@@ -51,7 +51,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
         TripSettlementRecord::class,
         RecurringRule::class
     ],
-    version = 26,
+    version = 27,
     exportSchema = false
 )
 abstract class SheetSyncDatabase : RoomDatabase() {

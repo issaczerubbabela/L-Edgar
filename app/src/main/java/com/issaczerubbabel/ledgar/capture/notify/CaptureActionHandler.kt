@@ -16,24 +16,26 @@ class CaptureActionHandler @Inject constructor(
 ) {
 
     /**
-     * Returns true if the capture became a Transaction. It needs both a suggested Category and a
-     * known Account; without them nothing is saved and the capture stays waiting in the inbox.
+     * Returns true if the capture became a Transaction. It needs a known Account and a suggested
+     * Category, or for a Transfer rule its other Account; without them nothing is saved and the
+     * capture stays waiting in the inbox. So does a capture that has since gained a match in the
+     * Ledger: the user decides in To review. A Transfer pairs its other half as the inbox's Confirm does.
      */
     suspend fun confirm(captureId: Long): Boolean {
         val capture = captureDao.getById(captureId) ?: return false
         if (capture.status != "PENDING") return false
-        val category = capture.suggestedCategory?.takeIf { it.isNotBlank() } ?: return false
         val accountId = capture.accountId ?: return false
+        val title = captureRepository.titleFor(capture)
+        val edits = if (capture.suggestedType == TransactionType.TRANSFER) {
+            val otherAccountId = capture.suggestedToAccountId?.takeIf { it != accountId } ?: return false
+            CaptureEdits(TransactionType.TRANSFER, TransactionType.TRANSFER, accountId, title, otherAccountId = otherAccountId)
+        } else {
+            val category = capture.suggestedCategory?.takeIf { it.isNotBlank() } ?: return false
+            CaptureEdits(capture.suggestedType ?: TransactionType.EXPENSE, category, accountId, title)
+        }
+        if (captureRepository.findLedgerMatch(captureId) != null) return false
 
-        val confirmed = captureRepository.confirm(
-            captureId,
-            CaptureEdits(
-                type = capture.suggestedType ?: TransactionType.EXPENSE,
-                category = category,
-                accountId = accountId,
-                description = captureRepository.titleFor(capture)
-            )
-        ) != null
+        val confirmed = captureRepository.confirm(captureId, edits) != null
         // A confirmed capture is something logged today, so the evening reminder stays quiet.
         if (confirmed) reminderPreferences.markLoggedToday(LocalDate.now().toEpochDay())
         return confirmed

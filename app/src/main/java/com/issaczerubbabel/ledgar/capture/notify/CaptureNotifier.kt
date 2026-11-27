@@ -11,13 +11,14 @@ import com.issaczerubbabel.ledgar.R
 import com.issaczerubbabel.ledgar.data.local.dao.AccountDao
 import com.issaczerubbabel.ledgar.data.local.dao.CaptureDao
 import com.issaczerubbabel.ledgar.data.repository.CaptureRepository
+import com.issaczerubbabel.ledgar.util.TransactionType
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Posts the "confirm this?" notification, only for a capture that is ready: High confidence with a
- * known Account (the ingestor decides that). The lock screen sees a generic line, and Confirm needs
+ * known Account, and for a Transfer rule a known other Account (the ingestor decides that). The lock screen sees a generic line, and Confirm needs
  * the phone unlocked, so neither shows nor saves anything to someone holding a locked phone.
  */
 @Singleton
@@ -33,8 +34,11 @@ class CaptureNotifier @Inject constructor(
     suspend fun notify(captureId: Long) {
         if (!manager.areNotificationsEnabled()) return
         val capture = captureDao.getById(captureId)?.takeIf { it.status == "PENDING" } ?: return
-        val category = capture.suggestedCategory ?: return
         val account = capture.accountId?.let { accountDao.getAccountById(it) } ?: return
+        val isTransfer = capture.suggestedType == TransactionType.TRANSFER
+        // A Transfer rule's other Account isn't a foreign key, so it may have been deleted since.
+        val otherAccount = if (isTransfer) capture.suggestedToAccountId?.let { accountDao.getAccountById(it) } ?: return else null
+        val category = if (isTransfer) TransactionType.TRANSFER else capture.suggestedCategory ?: return
 
         manager.createNotificationChannel(
             NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_DEFAULT)
@@ -43,7 +47,9 @@ class CaptureNotifier @Inject constructor(
                 .build()
         )
 
-        val content = CaptureNotificationText.build(capture, captureRepository.titleFor(capture), category, account.accountName)
+        val content = CaptureNotificationText.build(
+            capture, captureRepository.titleFor(capture), category, account.accountName, otherAccount?.accountName
+        )
         val publicVersion = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_qs_log_expense)
             .setContentTitle(content.publicTitle)

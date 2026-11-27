@@ -1,7 +1,6 @@
 package com.issaczerubbabel.ledgar.data.local.entity
 
 import androidx.room.Entity
-import androidx.room.PrimaryKey
 
 object MerchantRuleOrigin {
     /** Set by the user ("Always use this"); never demoted automatically. */
@@ -10,27 +9,38 @@ object MerchantRuleOrigin {
     /** Earned by repeated confirmations; deleted after two overrides in a row. */
     const val LEARNED = "LEARNED"
 
-    /** Not a rule yet: only tracks a run of same-category confirmations. Never matched. */
+    /** Not a rule yet: only tracks a run of identical confirmations. Never matched. */
     const val CANDIDATE = "CANDIDATE"
 }
 
+/** A Merchant rule is looked up by merchant and by the bank's direction (DEBIT or CREDIT). */
+data class MerchantRuleKey(val merchantNorm: String, val direction: String)
+
 /**
- * A saved mapping from a normalized merchant name to a Category, and to the description the user
- * last renamed it to, used for future Captured transactions from the same merchant. See "Merchant
- * rule" in CONTEXT.md.
+ * A saved mapping from a normalized merchant name and the bank's direction to an outcome: Expense
+ * or Income with a Category, or a Transfer with the other Account. It also keeps the description
+ * the user last renamed the merchant to. See "Merchant rule" in CONTEXT.md.
  */
-@Entity(tableName = "merchant_rules")
+@Entity(tableName = "merchant_rules", primaryKeys = ["merchantNorm", "direction"])
 data class MerchantRule(
-    @PrimaryKey val merchantNorm: String,
+    val merchantNorm: String,
+    /** DEBIT | CREDIT, as the bank wrote it. A debit and a credit from one merchant are two rules. */
+    val direction: String,
+    /** The Category, or "Transfer" for a Transfer rule. */
     val category: String,
-    val type: String, // Expense | Income
+    val type: String, // Expense | Income | Transfer
     val defaultAccountId: Long? = null,
     val origin: String, // see MerchantRuleOrigin
     /** Confirmations recorded for this merchant. */
     val hitCount: Int = 0,
-    /** CANDIDATE: consecutive same-category confirmations. LEARNED: consecutive overrides. */
+    /** CANDIDATE: consecutive identical confirmations. LEARNED: consecutive overrides. */
     val streak: Int = 0,
     val updatedAt: Long,
     /** What the user renamed this merchant to when confirming, shown instead of the bank's text. */
-    val description: String? = null
+    val description: String? = null,
+    /**
+     * A Transfer rule's other Account: the To-account of a debit, the From-account of a credit.
+     * Null for Expense and Income rules.
+     */
+    val toAccountId: Long? = null
 )

@@ -136,8 +136,12 @@ _Avoid_: pending transaction, alert, capture (as a standalone noun)
 Turning a Captured transaction into a real Transaction. Only the user confirms; nothing about auto-capture does this on its own.
 _Avoid_: auto-log, auto-add
 
+**Link**:
+Resolving a Captured transaction as the bank's alert for a Transaction the user had already logged (by hand, with Quick Add or by a Repeat rule), instead of confirming it into a second one. Like Confirm, only the user links ("Same one"); nothing new is written to the Ledger. A Captured transaction that looks like a logged Transaction is a **Possible duplicate** until the user decides.
+_Avoid_: merge, match (as the user's action)
+
 **Merchant rule**:
-A saved mapping from a normalized merchant name to a Category, and to the description the user last renamed it to, used for future Captured transactions from the same merchant. The Category is either set by the user or learned from repeated confirmations.
+A saved mapping from a normalized merchant name and the bank's direction (debit or credit) to an outcome, and to the description the user last renamed it to, used for future Captured transactions from the same merchant. The outcome is an Expense or Income with a Category, or a Transfer with the other Account (the To-account of a debit, the From-account of a credit). It is either set by the user or learned from repeated identical confirmations. Changing the type or Category of a captured Transaction in the Ledger counts like a Confirm with that outcome.
 _Avoid_: category rule
 
 **Account alias**:
@@ -149,8 +153,20 @@ A bank or UPI alert that showed an amount but that no parser could read. It is k
 _Avoid_: failed alert
 
 **Confidence band**:
-High, Check or Low: how sure auto-capture is about a Captured transaction's suggested Category. Only High, with its Account already resolved, notifies the user; everything else waits in the inbox.
+High, Check or Low: how sure auto-capture is about a Captured transaction's suggested Category. Only a saved Merchant rule reaches High (ADR-0010); a guess from history or the on-phone guesser is at most Check. Only High, with its Account already resolved, notifies the user; everything else waits in the inbox.
 _Avoid_: confidence score
+
+**Ready**:
+A waiting Captured transaction that could be confirmed as it stands: it has a Category (or a Transfer's other Account), an Account that isn't merely guessed, and no Transaction in the Ledger it may repeat. To review filters by it, and the bulk sheet lists a Ready Check capture unticked. Anything not Ready needs a pick.
+_Avoid_: complete, confirmable
+
+**Suggested description**:
+The Description auto-capture guesses for a Captured transaction from the user's own Transactions, by merchant, amount, time of day and weekday (₹80 at 1pm is "Lunch", ₹30 at 4:30pm is "Tea"). It fills the capture's title, marked as a guess, with up to two alternatives as chips. A saved rename on the Merchant rule wins over it until the merchant has had different Descriptions. It never changes the Confidence band, and keeping it doesn't rename the merchant.
+_Avoid_: auto-description, predicted title
+
+**Suggested Transfer**:
+A waiting debit and credit that To review shows as one row because they look like one Transfer between the user's own Accounts: the same amount to the paisa, within 2 days, each the other's only match, and at least one side's digits an Account alias (ADR-0006). The user confirms it as one Transfer, which resolves both, or splits it back into two Captured transactions.
+_Avoid_: merged capture, auto-transfer
 
 ## Google Sheets
 

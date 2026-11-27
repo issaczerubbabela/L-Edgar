@@ -80,7 +80,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object Log : Screen(
         "log?transactionId={transactionId}&copyTransactionId={copyTransactionId}&copyDateMode={copyDateMode}" +
             "&prefillType={prefillType}&prefillAccountId={prefillAccountId}&prefillDate={prefillDate}" +
-            "&repeatRuleId={repeatRuleId}&repeatMode={repeatMode}",
+            "&repeatRuleId={repeatRuleId}&repeatMode={repeatMode}&captureId={captureId}",
         "Log",
         Icons.Filled.AddCircle
     )
@@ -194,7 +194,9 @@ private fun logRoute(
     prefillDate: java.time.LocalDate? = null,
     /** With [repeatMode] "occurrence" (Edit & add) or "rule" (edit the Repeat rule). */
     repeatRuleId: Long? = null,
-    repeatMode: String? = null
+    repeatMode: String? = null,
+    /** Edit on a To review card: Save confirms that capture. */
+    captureId: Long? = null
 ): String {
     val params = mutableListOf<String>()
     transactionId?.let { params += "transactionId=$it" }
@@ -209,6 +211,7 @@ private fun logRoute(
         params += "repeatRuleId=$it"
         params += "repeatMode=${repeatMode.orEmpty()}"
     }
+    captureId?.let { params += "captureId=$it" }
     return if (params.isEmpty()) LOG_BASE_ROUTE else "$LOG_BASE_ROUTE?${params.joinToString("&")}" 
 }
 
@@ -602,6 +605,10 @@ fun AppNavigation(
                     navArgument("repeatMode") {
                         type = NavType.StringType
                         defaultValue = ""
+                    },
+                    navArgument("captureId") {
+                        type = NavType.LongType
+                        defaultValue = -1L
                     }
                 )
             ) {
@@ -816,6 +823,9 @@ fun AppNavigation(
                     onBack = { navController.popBackStack() },
                     onAddToTrip = { tripId, captureId ->
                         navController.navigate(tripExpenseRoute(tripId, captureId = captureId)) { launchSingleTop = true }
+                    },
+                    onEdit = { captureId ->
+                        navController.navigate(logRoute(captureId = captureId)) { launchSingleTop = true }
                     }
                 )
             }

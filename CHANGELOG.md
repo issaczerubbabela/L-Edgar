@@ -6,21 +6,48 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `app/src/main/java/com/issaczerubbabel/ledgar/ui/screens/ChangelogData.kt`,
 which is also what the app shows under More > Changelog. Developer notes appear here only.
 
-## [1.6.1] - 2026-11-16
+## [1.7.0] - 2026-11-27
 
 ### Added
 
 - Web version (web folder): view and edit transactions, Stats, Budget and Accounts from a PC or iPad browser
+- Auto-capture: switch a capture to a Transfer, or open it in full with Edit
+- Auto-capture: a merchant you keep confirming as a Transfer to one Account is suggested that way next time
+- Auto-capture: guesses Category and Description from what you logged before, like Lunch or Tea
+- To review: up to 2 other guessed titles show as chips under a card, and tapping one uses it
+- Auto-capture: an alert from your bank's app with an unknown account number suggests your Account
+- To review: each Confirm sharpens the guesses on waiting captures, never changing what you picked
+- Auto-capture: a capture you already logged by hand says so, and Same one links it instead of adding it twice
+- Auto-capture: a debit and credit between your own Accounts pair up as one Transfer, even from the notification
+- Ledger: changing a captured transaction's Category or type teaches Auto-capture, as a Confirm would
+
+### Changed
+
+- To review: captures grouped by day with Confirm day, compact rows and Ready / Needs a pick filters
+- To review: the bulk sheet lists Check captures that are Ready unticked, so you can tick them in too
 
 ### Fixed
 
 - Auto-capture: a bank alert saying "debited ... NAME credited" is filed as an Expense, not Income
+- Auto-capture: a payment to a UPI ID shows who you paid instead of Payment
 
 ### Developer
 
 - web/: Vite + React client on the Apps Script contract, with ported account, bucket and Stats maths, tests and a mock script
 - Web workflow tests and builds web/ on each change and publishes it to GitHub Pages from main
 - ParsingUtils.directionOf picks whichever debit/credit word comes first, shared by Generic/HDFC/Axis parsers
+- ParsingUtils.vpaOf reads the "to VPA/UPI ID handle@psp" payee for Generic/HDFC/Axis debits, tested on synthetic alerts
+- Merchant rules are keyed by merchant and direction and can mean a Transfer (Room 26 → 27, migration tested)
+- TransferPairMatcher pairs a confirmed Transfer with its other half (ADR-0006 accepted); CaptureConfirmer shares Undo
+- Capture predictor: pure HistoryMatch (R2), NaiveBayesCategorizer, DescriptionGuesser and AccountGuesser, unit tested
+- ADR-0010 "Only a saved rule reaches High"; guesses live in traceJson via CaptureTrace, adding no migration
+- CaptureIngestor.reguessPending runs after each Confirm (CaptureReguessTest); a picked Category or other Account pins the type
+- Pure LedgerMatcher finds the logged Transaction a capture repeats; a link is status LINKED, no migration
+- Pure CaptureInbox groups To review by day and builds its filters, bulk sheet and TalkBack sentence, unit tested
+- Pure TransferSuggestions reuses TransferPairMatcher's rules; a Split is kept in traceJson, so no migration
+- LedgerEditLearner in ExpenseRepository teaches rules from Category/type edits via MerchantRuleTeacher, as Confirm does
+- CaptureIngestor notifies High Transfer rules; CaptureActionHandler confirms them with the inbox's pairing
+- LedgerEditLearner teaches each rule in its own Room transaction, best effort via the shared bestEffort helper
 
 ## [1.6.0] - 2026-10-13
 
@@ -310,7 +337,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - Room database, Vico charts and date-parsing tests
 
-[1.6.1]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.6.1
+[1.7.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.7.0
 [1.6.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.6.0
 [1.5.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.5.0
 [1.4.0]: https://github.com/issaczerubbabela/L-Edgar/releases/tag/v1.4.0

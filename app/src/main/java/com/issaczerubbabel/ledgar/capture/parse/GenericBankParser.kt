@@ -15,7 +15,9 @@ class GenericBankParser : TransactionParser {
         val direction = ParsingUtils.directionOf(normalized) ?: return null
 
         val merchant = if (direction == Direction.DEBIT) {
-            CREDITED_COUNTERPARTY.find(normalized)?.groupValues?.get(1) ?: MERCHANT.find(normalized)?.groupValues?.get(1)
+            CREDITED_COUNTERPARTY.find(normalized)?.groupValues?.get(1)
+                ?: ParsingUtils.vpaOf(normalized)
+                ?: MERCHANT.find(normalized)?.groupValues?.get(1)
         } else {
             MERCHANT.find(normalized)?.groupValues?.get(1)
         }

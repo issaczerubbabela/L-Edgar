@@ -51,4 +51,29 @@ object CaptureMigration {
         db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_unparsed_alerts_rawHash` ON `unparsed_alerts` (`rawHash`)")
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_unparsed_alerts_capturedAt` ON `unparsed_alerts` (`capturedAt`)")
     }
+
+    /**
+     * 26 -> 27: a Merchant rule is keyed by merchant and direction and can mean a Transfer. Every
+     * existing rule is kept: an Expense rule becomes the merchant's DEBIT rule and an Income rule its
+     * CREDIT rule. A capture can carry a suggested Transfer's other Account.
+     */
+    fun upgradeTo27(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `merchant_rules_new` (" +
+                "`merchantNorm` TEXT NOT NULL, `direction` TEXT NOT NULL, `category` TEXT NOT NULL, `type` TEXT NOT NULL, " +
+                "`defaultAccountId` INTEGER, `origin` TEXT NOT NULL, `hitCount` INTEGER NOT NULL, " +
+                "`streak` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `description` TEXT, `toAccountId` INTEGER, " +
+                "PRIMARY KEY(`merchantNorm`, `direction`))"
+        )
+        db.execSQL(
+            "INSERT OR REPLACE INTO merchant_rules_new " +
+                "(merchantNorm, direction, category, type, defaultAccountId, origin, hitCount, streak, updatedAt, description, toAccountId) " +
+                "SELECT merchantNorm, CASE WHEN LOWER(type) = 'income' THEN 'CREDIT' ELSE 'DEBIT' END, category, type, " +
+                "defaultAccountId, origin, hitCount, streak, updatedAt, description, NULL FROM merchant_rules"
+        )
+        db.execSQL("DROP TABLE merchant_rules")
+        db.execSQL("ALTER TABLE merchant_rules_new RENAME TO merchant_rules")
+
+        db.execSQL("ALTER TABLE captured_transactions ADD COLUMN suggestedToAccountId INTEGER")
+    }
 }

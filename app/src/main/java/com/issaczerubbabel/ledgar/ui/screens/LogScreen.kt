@@ -1,6 +1,8 @@
 package com.issaczerubbabel.ledgar.ui.screens
 
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -140,10 +142,11 @@ fun LogScreen(
                 .padding(scaffoldPadding)
         ) {
             LogTopBar(
-                title = when (vm.repeatEditMode) {
-                    RepeatEditMode.Rule -> "Edit Repeat rule"
-                    RepeatEditMode.Occurrence -> "Add repeating transaction"
-                    RepeatEditMode.None -> null
+                title = when {
+                    vm.isCaptureMode -> "Review capture"
+                    vm.repeatEditMode == RepeatEditMode.Rule -> "Edit Repeat rule"
+                    vm.repeatEditMode == RepeatEditMode.Occurrence -> "Add repeating transaction"
+                    else -> null
                 },
                 isEditMode = vm.isEditMode,
                 showEnterAppButton = showEnterAppButton,
@@ -205,7 +208,8 @@ fun LogScreen(
             }
             // A new Transaction can start repeating; an edited one only links to the rule it came from.
             // "Edit & add" saves one occurrence, so it has no Repeat chip of its own.
-            val showRepeatChip = !isAdjustment && when (vm.repeatEditMode) {
+            // A capture becomes one Transaction: its Confirm can't start a Repeat.
+            val showRepeatChip = !isAdjustment && !vm.isCaptureMode && when (vm.repeatEditMode) {
                 RepeatEditMode.Rule -> true
                 RepeatEditMode.Occurrence -> false
                 RepeatEditMode.None -> !vm.isEditMode || activeRule != null
@@ -249,6 +253,26 @@ fun LogScreen(
                     }
                 )
             )
+
+            // Opened from a To review card: the same "Always use" as on the card.
+            vm.alwaysUseMerchant?.let { merchant ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(value = vm.alwaysUse, role = Role.Checkbox, onValueChange = { vm.alwaysUse = it })
+                        .padding(horizontal = 4.dp)
+                ) {
+                    Checkbox(checked = vm.alwaysUse, onCheckedChange = null, modifier = Modifier.padding(12.dp))
+                    Text(
+                        "Always use this for $merchant",
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
 
             val hasExpression = isAmountExpression(vm.amount)
             NumericKeypad(

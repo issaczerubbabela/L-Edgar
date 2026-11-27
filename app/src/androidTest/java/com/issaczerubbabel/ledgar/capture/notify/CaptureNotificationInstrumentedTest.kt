@@ -11,8 +11,10 @@ import com.issaczerubbabel.ledgar.capture.CaptureIngestor
 import com.issaczerubbabel.ledgar.capture.CaptureSettingsSource
 import com.issaczerubbabel.ledgar.capture.CaptureSource
 import com.issaczerubbabel.ledgar.capture.IngestResult
+import com.issaczerubbabel.ledgar.capture.RoomCaptureHistorySource
 import com.issaczerubbabel.ledgar.capture.categorize.CategorizationPipeline
 import com.issaczerubbabel.ledgar.capture.categorize.KeywordDictionary
+import com.issaczerubbabel.ledgar.capture.pair.LedgerMatchFinder
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.entity.AccountAlias
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
@@ -61,13 +63,15 @@ class CaptureNotificationInstrumentedTest {
         accountId = db.accountDao().insert(AccountRecord(groupName = "Accounts", accountName = "Axis Savings", initialBalance = 0.0))
         db.dropdownOptionDao().insertAll(listOf(DropdownOption(optionType = "EXPENSE_CATEGORY", name = "Fuel", displayOrder = 0)))
         db.merchantRuleDao().upsert(
-            MerchantRule("SHRI UJAGAR FUELS", "Fuel", "Expense", origin = MerchantRuleOrigin.USER, updatedAt = 0)
+            MerchantRule("SHRI UJAGAR FUELS", "DEBIT", "Fuel", "Expense", origin = MerchantRuleOrigin.USER, updatedAt = 0)
         )
         ingestor = CaptureIngestor(
             db.captureDao(), db.accountAliasDao(), DropdownOptionRepositoryImpl(db.dropdownOptionDao()),
-            CategorizationPipeline(KeywordDictionary(emptyMap())) { db.merchantRuleDao().getByMerchant(it) }, settings, db.unparsedAlertDao()
+            CategorizationPipeline(KeywordDictionary(emptyMap())) { db.merchantRuleDao().get(it) }, settings, db.unparsedAlertDao(),
+            RoomCaptureHistorySource(db.expenseDao(), db.accountAliasDao()),
+            LedgerMatchFinder(db.expenseDao(), db.captureDao())
         )
-        val repository = CaptureRepositoryImpl(db, db.captureDao(), db.merchantRuleDao(), db.accountAliasDao(), db.expenseDao(), db.unparsedAlertDao())
+        val repository = CaptureRepositoryImpl(db, db.captureDao(), db.merchantRuleDao(), db.accountAliasDao(), db.expenseDao(), db.unparsedAlertDao(), ingestor)
         handler = CaptureActionHandler(db.captureDao(), repository, ReminderPreferences(context))
         notifier = CaptureNotifier(context, db.captureDao(), db.accountDao(), repository)
     }

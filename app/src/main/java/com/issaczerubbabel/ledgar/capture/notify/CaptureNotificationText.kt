@@ -22,12 +22,32 @@ data class CaptureNotificationContent(
 
 object CaptureNotificationText {
 
-    fun build(capture: CapturedTransaction, title: String, category: String, accountName: String): CaptureNotificationContent {
+    /**
+     * [otherAccountName] is a Transfer's other Account (To for a debit, From for a credit): with it,
+     * the notification reads "Transfer ₹5,000 to HDFC Credit Card" and [category] is ignored.
+     */
+    fun build(
+        capture: CapturedTransaction,
+        title: String,
+        category: String,
+        accountName: String,
+        otherAccountName: String? = null
+    ): CaptureNotificationContent {
+        if (capture.suggestedType == TransactionType.TRANSFER && otherAccountName != null) {
+            val isDebit = capture.direction != "CREDIT"
+            return CaptureNotificationContent(
+                title = "Transfer ${formatRupeesExact(capture.amount)} ${if (isDebit) "to" else "from"} $otherAccountName",
+                text = "$title · ${if (isDebit) "from" else "to"} $accountName. Confirm it, or open the app to change it.",
+                publicTitle = PUBLIC_TITLE
+            )
+        }
         val sign = if (capture.suggestedType == TransactionType.INCOME) "+" else "−"
         return CaptureNotificationContent(
             title = "$title  $sign${formatRupeesExact(capture.amount)}",
             text = "$category · $accountName. Confirm it, or open the app to change it.",
-            publicTitle = "A captured transaction is waiting"
+            publicTitle = PUBLIC_TITLE
         )
     }
+
+    private const val PUBLIC_TITLE = "A captured transaction is waiting"
 }

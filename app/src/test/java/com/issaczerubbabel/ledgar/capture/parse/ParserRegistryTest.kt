@@ -57,4 +57,14 @@ class ParserRegistryTest {
         assertNull(registry.parse("HDFC Bank", "123456 is your OTP for txn of Rs.2,500 at FLIPKART."))
         assertNull(registry.parse("Anyone", "Your statement is ready to view."))
     }
+
+    // Synthetic: no real VPA-addressed bank alert has been captured yet.
+    @Test
+    fun aVpaDebitFromAnUnknownBankNamesTheHandle() {
+        val parsed = registry.parse("XYZBNK", "Rs.250.00 debited from A/c XX1234 to VPA swiggy.stores@axb on 12-11-26 Ref 1234")!!
+
+        assertEquals(250.0, parsed.amount, 0.001)
+        assertEquals(Direction.DEBIT, parsed.direction)
+        assertEquals("swiggy.stores@axb", parsed.merchantRaw)
+    }
 }

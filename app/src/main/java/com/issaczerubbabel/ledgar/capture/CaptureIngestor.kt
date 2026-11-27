@@ -1,9 +1,14 @@
 package com.issaczerubbabel.ledgar.capture
 
-import com.google.gson.Gson
+import com.issaczerubbabel.ledgar.capture.categorize.AccountGuesser
+import com.issaczerubbabel.ledgar.capture.categorize.CaptureFacts
+import com.issaczerubbabel.ledgar.capture.categorize.Categorization
 import com.issaczerubbabel.ledgar.capture.categorize.CategorizationPipeline
 import com.issaczerubbabel.ledgar.capture.categorize.ConfidenceBand
+import com.issaczerubbabel.ledgar.capture.categorize.HistoryPredictor
+import com.issaczerubbabel.ledgar.capture.pair.LedgerMatchFinder
 import com.issaczerubbabel.ledgar.capture.parse.Direction
+import com.issaczerubbabel.ledgar.capture.parse.ParsedTxn
 import com.issaczerubbabel.ledgar.capture.parse.ParserRegistry
 import com.issaczerubbabel.ledgar.capture.parse.ParsingUtils
 import com.issaczerubbabel.ledgar.capture.source.CaptureApps
@@ -17,6 +22,8 @@ import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.util.TransactionType
 import kotlinx.coroutines.flow.first
 import java.security.MessageDigest
+import java.time.Instant
+import java.time.LocalDateTime
 import java.time.ZoneId
 import javax.inject.Inject
 
@@ -31,13 +38,22 @@ sealed interface IngestResult {
     data object Unparsed : IngestResult
     data object Duplicate : IngestResult
 
-    /** [shouldNotify] is true only for a High-confidence capture whose Account is already known. */
+    /**
+     * [shouldNotify] is true only for a High-confidence capture whose Account is already known (and,
+     * for a Transfer rule, its other Account) and that doesn't look like a Transaction already in the Ledger.
+     */
     data class Captured(val id: Long, val band: ConfidenceBand, val shouldNotify: Boolean) : IngestResult
+}
+
+/** Guesses every waiting capture again; CaptureRepository calls it after each Confirm. */
+fun interface CaptureReguesser {
+    suspend fun reguessPending()
 }
 
 /**
  * Turns one raw alert into a pending Captured transaction: parse, drop repeats, resolve the
- * Account, categorize, store. It never creates a Transaction (ADR-0005); only Confirm does.
+ * Account, guess its Category, Description and (when the digits are unknown) Account, store. It
+ * never creates a Transaction (ADR-0005); only Confirm does.
  */
 class CaptureIngestor @Inject constructor(
     private val captureDao: CaptureDao,
@@ -45,10 +61,11 @@ class CaptureIngestor @Inject constructor(
     private val dropdownOptions: DropdownOptionRepository,
     private val pipeline: CategorizationPipeline,
     private val settings: CaptureSettingsSource,
-    private val unparsedDao: UnparsedAlertDao
-) {
+    private val unparsedDao: UnparsedAlertDao,
+    private val history: CaptureHistorySource,
+    private val ledgerMatches: LedgerMatchFinder
+) : CaptureReguesser {
     private val registry = ParserRegistry.default()
-    private val gson = Gson()
 
     suspend fun ingest(
         source: String,
@@ -64,9 +81,8 @@ class CaptureIngestor @Inject constructor(
         }
 
         val accountId = parsed.accountHint?.let { aliasDao.getByAlias(it)?.accountId }
-        val expenseCategories = dropdownOptions
-            .getOptionsByType(TransactionType.EXPENSE_CATEGORY_OPTION).first().map { it.name }
-        val result = pipeline.categorize(parsed, settings.categoryMapping(), expenseCategories)
+        val txnTime = TxnTime.resolve(parsed.txnDate, nowMillis, ZoneId.systemDefault())
+        val (result, trace) = guess(parsed, sender, accountId, txnTime, loadInputs())
 
         val row = CapturedTransaction(
             sources = source,
@@ -74,7 +90,7 @@ class CaptureIngestor @Inject constructor(
             rawText = text,
             rawHash = dedupeKey(source, sender, text, parsed.refNumber, nowMillis),
             capturedAt = nowMillis,
-            txnTime = TxnTime.resolve(parsed.txnDate, nowMillis, ZoneId.systemDefault()),
+            txnTime = txnTime,
             amount = parsed.amount,
             direction = if (parsed.direction == Direction.CREDIT) "CREDIT" else "DEBIT",
             channel = parsed.channel.name,
@@ -85,16 +101,21 @@ class CaptureIngestor @Inject constructor(
             refNumber = parsed.refNumber,
             suggestedType = result.type,
             suggestedCategory = result.category,
+            suggestedToAccountId = result.transferAccountId,
             confidence = result.confidence,
             decidedBy = result.decidedBy,
-            traceJson = gson.toJson(
-                mapOf("rule" to result.decidedBy, "why" to result.why, "unmappedCanonical" to result.unmappedCanonical)
-            )
+            traceJson = trace.toJson()
         )
 
-        val id = captureDao.insert(row)
+        // A payment already logged by hand waits quietly as a POSSIBLE_DUPLICATE: no Confirm from the shade (#125).
+        val alreadyLogged = ledgerMatches.find(row) != null
+        val id = captureDao.insert(if (alreadyLogged) row.copy(status = "POSSIBLE_DUPLICATE") else row)
         if (id == -1L) return IngestResult.Duplicate
-        return IngestResult.Captured(id, result.band, shouldNotify = result.band == ConfidenceBand.HIGH && accountId != null)
+        // A Transfer rule notifies too, once it names an other Account that isn't this one (#143).
+        val outcomeKnown = result.type != TransactionType.TRANSFER ||
+            (result.transferAccountId != null && result.transferAccountId != accountId)
+        val shouldNotify = result.band == ConfidenceBand.HIGH && accountId != null && outcomeKnown && !alreadyLogged
+        return IngestResult.Captured(id, result.band, shouldNotify)
     }
 
     /**
@@ -116,28 +137,70 @@ class CaptureIngestor @Inject constructor(
     }
 
     /**
-     * Run again over captures still waiting without a category, using the raw text they came from.
-     * Call after the category mapping changes: a keyword that was unmapped may now resolve. It only
-     * ever fills in a missing category, never changes one already suggested or chosen.
+     * Guesses every waiting capture again from the raw text it came from, with what the app knows
+     * now. Called after each Confirm (once its Undo is over) and after the category mapping
+     * changes. Only the guesses stored on the capture change: what the user picked or typed on a
+     * card stays in the inbox until Confirm, so it is never overwritten (see [withGuesses]).
      */
-    suspend fun recategorizePending() {
-        val expenseCategories = dropdownOptions
-            .getOptionsByType(TransactionType.EXPENSE_CATEGORY_OPTION).first().map { it.name }
-        val mapping = settings.categoryMapping()
-        captureDao.getPendingWithoutCategory().forEach { capture ->
+    override suspend fun reguessPending() {
+        val pending = captureDao.getPendingSnapshot()
+        if (pending.isEmpty()) return
+        val inputs = loadInputs()
+        pending.forEach { capture ->
             val parsed = registry.parse(capture.sender, capture.rawText) ?: return@forEach
-            val result = pipeline.categorize(parsed, mapping, expenseCategories)
-            val category = result.category ?: return@forEach
-            captureDao.update(
-                capture.copy(
-                    suggestedType = result.type,
-                    suggestedCategory = category,
-                    confidence = result.confidence,
-                    decidedBy = result.decidedBy,
-                    traceJson = gson.toJson(mapOf("rule" to result.decidedBy, "why" to result.why))
+            val (result, trace) = guess(parsed, capture.sender, capture.accountId, capture.txnTime, inputs)
+            val updated = capture.withGuesses(result, trace)
+            if (updated != capture) {
+                captureDao.updateGuesses(
+                    updated.id, updated.suggestedType, updated.suggestedCategory, updated.suggestedToAccountId, updated.confidence,
+                    updated.decidedBy, updated.traceJson
                 )
-            )
+            }
         }
+    }
+
+    /** What the guessers need, read once per ingest or re-guess pass. */
+    private class Inputs(
+        val mapping: Map<String, String>,
+        val expenseCategories: List<String>,
+        val predictor: HistoryPredictor
+    )
+
+    private suspend fun loadInputs(): Inputs {
+        val expense = categories(TransactionType.EXPENSE_CATEGORY_OPTION)
+        val income = categories(TransactionType.INCOME_CATEGORY_OPTION)
+        return Inputs(
+            mapping = settings.categoryMapping(),
+            expenseCategories = expense,
+            predictor = HistoryPredictor(
+                history.pastTransactions(),
+                mapOf(TransactionType.EXPENSE to expense, TransactionType.INCOME to income)
+            )
+        )
+    }
+
+    private suspend fun categories(optionType: String) = dropdownOptions.getOptionsByType(optionType).first().map { it.name }
+
+    /** The Category (R1, R2, Naive Bayes, R7), the Suggested description and the Account guess. */
+    private suspend fun guess(
+        parsed: ParsedTxn,
+        sender: String,
+        accountId: Long?,
+        txnTime: Long,
+        inputs: Inputs
+    ): Pair<Categorization, CaptureTrace> {
+        val at = LocalDateTime.ofInstant(Instant.ofEpochMilli(txnTime), ZoneId.systemDefault())
+        val result = pipeline.categorize(parsed, inputs.mapping, inputs.expenseCategories, inputs.predictor, at)
+        val description = inputs.predictor.describe(
+            CaptureFacts(result.merchantNorm, result.type, parsed.amount, at),
+            // The card shows the bank's text anyway, so it is no guess.
+            ignore = listOfNotNull(parsed.merchantRaw)
+        )
+        val guessedAccount = if (accountId != null) null else AccountGuesser.guess(
+            isBankApp = CaptureApps.isBankApp(sender),
+            accountsAliasedForBank = history.accountsAliasedForSender(sender)
+        )
+        return result to CaptureTrace.of(result, description, guessedAccount)
     }
 
     /**
@@ -155,5 +218,30 @@ class CaptureIngestor @Inject constructor(
     private companion object {
         const val TEN_MINUTES_MS = 10 * 60 * 1000L
         const val UNPARSED_RETENTION_MS = 30L * 24 * 60 * 60 * 1000
+    }
+}
+
+/**
+ * A waiting capture with a new pass of guesses. A pass with neither a Category nor a Transfer's
+ * other Account keeps the suggestion already there (and what explained it), so re-guessing never
+ * takes a suggestion away; the Suggested description and the Account guess always follow the new
+ * pass. A type, Category or Account the user picked lives in the inbox, never here; a Split
+ * ([CaptureTrace.splitFromTransfer]) is kept.
+ */
+internal fun CapturedTransaction.withGuesses(result: Categorization, trace: CaptureTrace): CapturedTransaction {
+    val kept = CaptureTrace.parse(traceJson)
+    // A Split is the user's decision, not a guess, so a new pass never brings the suggestion back.
+    val next = trace.copy(splitFromTransfer = kept.splitFromTransfer)
+    return if (result.category != null || result.transferAccountId != null || (suggestedCategory == null && suggestedToAccountId == null)) {
+        copy(
+            suggestedType = result.type,
+            suggestedCategory = result.category,
+            suggestedToAccountId = result.transferAccountId,
+            confidence = result.confidence,
+            decidedBy = result.decidedBy,
+            traceJson = next.toJson()
+        )
+    } else {
+        copy(traceJson = next.copy(rule = kept.rule, why = kept.why, unmappedCanonical = kept.unmappedCanonical).toJson())
     }
 }
