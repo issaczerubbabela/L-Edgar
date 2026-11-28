@@ -9,7 +9,7 @@ internal object ParsingUtils {
     val AMOUNT = Regex("""(?:rs\.?|inr|₹)\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE)
 
     val DEBIT_WORDS = Regex(
-        """\b(debited|spent|paid|sent|withdrawn|withdrawal|purchase)\b""",
+        """\b(debited|deducted|spent|paid|sent|withdrawn|withdrawal|purchase)\b""",
         RegexOption.IGNORE_CASE
     )
 

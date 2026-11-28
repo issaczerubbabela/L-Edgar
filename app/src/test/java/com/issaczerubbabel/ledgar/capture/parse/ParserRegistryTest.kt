@@ -67,4 +67,29 @@ class ParserRegistryTest {
         assertEquals(Direction.DEBIT, parsed.direction)
         assertEquals("swiggy.stores@axb", parsed.merchantRaw)
     }
+
+    @Test
+    fun aNotAPaymentAlertIsReadAsNotAPaymentRatherThanUnreadable() {
+        val request = "<NAME> has requested money from you on Google Pay. On approving the request, INR 500.00 will be " +
+            "debited from your A/c - Axis Bank"
+
+        assertEquals(AlertReading.NotAPayment, registry.read("AX-AXISBK-S", request))
+        assertNull(registry.parse("AX-AXISBK-S", request))
+        assertEquals(AlertReading.NotAPayment, registry.read("Google Pay", "Up to ₹2,500 in welcome rewards. Open a savings account"))
+    }
+
+    @Test
+    fun anAlertNoParserCanReadIsUnreadable() {
+        assertEquals(AlertReading.Unreadable, registry.read("AX-HDFCBK-S", "Your HDFC Bank statement for Rs.0 is ready"))
+    }
+
+    @Test
+    fun aRealPaymentIsReadAsAPayment() {
+        val reading = registry.read("HDFC Bank", "UPI Mandate: Sent Rs.2000.00 from HDFC Bank A/c 1234 To ZERODHA BROKING LTD On 05/11/26 Ref 111111111111")
+
+        val txn = (reading as AlertReading.Payment).txn
+        assertEquals(2000.0, txn.amount, 0.001)
+        assertEquals(Direction.DEBIT, txn.direction)
+        assertEquals("ZERODHA BROKING LTD", txn.merchantRaw)
+    }
 }

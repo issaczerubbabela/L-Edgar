@@ -8,9 +8,15 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 ## [1.9.0] - 2026-11-28
 
+### Fixed
+
+- Auto-capture: payment requests, offers, mandates and refunds still pending no longer show as captures
+- Auto-capture: reads HDFC NEFT, NetBanking and RD debits, which landed under Alerts we couldn't read
+
 ### Developer
 
 - Auto-capture design for email, Amazon Pay and merged alerts (#176): Alert, Not-a-payment alert, ADR-0012
+- Auto-capture: NotAPayment phrase list checked by ParserRegistry.read before any parser (#177)
 
 ## [1.8.1] - 2026-11-28
 
