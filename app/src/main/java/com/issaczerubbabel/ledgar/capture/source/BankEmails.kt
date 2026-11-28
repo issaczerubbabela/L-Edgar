@@ -20,11 +20,11 @@ object BankEmails {
      */
     val HDFC = EmailSender("HDFC Bank InstaAlerts", "alerts@hdfcbank.bank.in", threadNames = setOf("HDFC", "alerts"))
 
-    /** Amazon Pay Balance (#181): in the filter already, so it is set up once, but not read until its parser lands. */
+    /** Amazon Pay Balance's payments, gift cards and cashback (#181), which reach no bank. */
     val AMAZON_PAY = EmailSender("Amazon Pay India", "no-reply@amazonpay.in")
 
     /** Read now. A sender joins this list with its parser. */
-    private val read: List<EmailSender> = listOf(HDFC)
+    private val read: List<EmailSender> = listOf(HDFC, AMAZON_PAY)
 
     /** What the setup steps ask the user to filter on in Gmail. */
     val FILTER_QUERY: String = listOf(HDFC, AMAZON_PAY).joinToString(" OR ") { it.address }

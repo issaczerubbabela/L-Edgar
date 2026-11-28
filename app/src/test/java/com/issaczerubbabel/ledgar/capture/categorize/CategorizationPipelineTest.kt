@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.capture.categorize
 
+import com.issaczerubbabel.ledgar.capture.CaptureKinds
 import com.issaczerubbabel.ledgar.capture.parse.Channel
 import com.issaczerubbabel.ledgar.capture.parse.Direction
 import com.issaczerubbabel.ledgar.capture.parse.ParsedTxn
@@ -316,5 +317,59 @@ class CategorizationPipelineTest {
 
         assertEquals(7L, result.transferAccountId)
         assertEquals(ConfidenceBand.HIGH, result.band)
+    }
+
+    private fun cashback() = ParsedTxn(
+        amount = 25.0, direction = Direction.CREDIT, merchantRaw = "Amazon Pay Cashback", accountHint = null,
+        refNumber = null, channel = Channel.UNKNOWN, kind = CaptureKinds.CASHBACK
+    )
+
+    @Test
+    fun aCashbackSuggestsTheIncomeCategoryItsKindIsMappedTo() = runBlocking {
+        val result = pipeline().categorize(cashback(), mapOf(CaptureKinds.CASHBACK to "refund"), categoriesByType)
+
+        assertEquals("Income", result.type)
+        assertEquals("Refund", result.category)
+        assertEquals("R7", result.decidedBy)
+        assertEquals(ConfidenceBand.CHECK, result.band)
+    }
+
+    @Test
+    fun anUnmappedCashbackNeedsACategoryAndSaysWhichKindToMap() = runBlocking {
+        val result = pipeline().categorize(cashback(), mapping, categoriesByType)
+
+        assertNull(result.category)
+        assertEquals(CaptureKinds.CASHBACK, result.unmappedCanonical)
+        assertEquals(ConfidenceBand.LOW, result.band)
+    }
+
+    @Test
+    fun theCashbackKindComesBeforeAHistoryGuess() = runBlocking {
+        // Read off a phone: unmapped, Naive Bayes guessed "Refund" from similar credits instead of asking.
+        val history = List(3) { past("Refund", "AMAZON PAY CASHBACK", type = "Income") }
+
+        val unmapped = pipeline().categorize(cashback(), mapping, categoriesByType, predictor(history), at)
+        assertNull(unmapped.category)
+        assertEquals(CaptureKinds.CASHBACK, unmapped.unmappedCanonical)
+
+        val mapped = pipeline().categorize(cashback(), mapOf(CaptureKinds.CASHBACK to "Salary"), categoriesByType, predictor(history), at)
+        assertEquals("Salary", mapped.category)
+        assertEquals("R7", mapped.decidedBy)
+    }
+
+    @Test
+    fun aCashbackMappedToAnExpenseCategoryNeedsACategory() = runBlocking {
+        // The app never files Income under an Expense Category, or one the user no longer has.
+        assertNull(pipeline().categorize(cashback(), mapOf(CaptureKinds.CASHBACK to "Groceries"), categoriesByType).category)
+        assertNull(pipeline().categorize(cashback(), mapOf(CaptureKinds.CASHBACK to "Rewards"), categoriesByType).category)
+    }
+
+    @Test
+    fun aSavedRuleStillWinsOverTheCashbackKind() = runBlocking {
+        val salary = rule(MerchantRuleOrigin.USER, category = "Salary", type = "Income").copy(merchantNorm = "AMAZON PAY CASHBACK", direction = "CREDIT")
+        val result = CategorizationPipeline(keywords) { salary }.categorize(cashback(), mapOf(CaptureKinds.CASHBACK to "Refund"), categoriesByType)
+
+        assertEquals("Salary", result.category)
+        assertEquals("R1", result.decidedBy)
     }
 }

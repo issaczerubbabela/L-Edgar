@@ -3,6 +3,7 @@ package com.issaczerubbabel.ledgar.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.issaczerubbabel.ledgar.capture.CaptureIngestor
+import com.issaczerubbabel.ledgar.capture.CaptureKinds
 import com.issaczerubbabel.ledgar.capture.categorize.KeywordDictionary
 import com.issaczerubbabel.ledgar.capture.source.BankEmails
 import com.issaczerubbabel.ledgar.data.preferences.CapturePreferencesRepository
@@ -30,7 +31,11 @@ class CaptureSettingsViewModel @Inject constructor(
     dropdownOptionRepository: DropdownOptionRepository
 ) : ViewModel() {
 
-    val canonicalKeys: List<String> = keywords.canonicalKeys
+    /** The merchant kinds (Expense), then the kinds of money in an alert names itself (Income, a cashback). */
+    val canonicalKeys: List<String> = keywords.canonicalKeys + CaptureKinds.INCOME
+
+    /** True for a kind mapped to an Income Category; the rest map to Expense ones. */
+    fun isIncomeKind(key: String): Boolean = key in CaptureKinds.INCOME
 
     val enabled: StateFlow<Boolean> = preferences.enabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
@@ -54,6 +59,11 @@ class CaptureSettingsViewModel @Inject constructor(
 
     val expenseCategories: StateFlow<List<String>> = dropdownOptionRepository
         .getOptionsByType(TransactionType.EXPENSE_CATEGORY_OPTION)
+        .map { options -> options.map { it.name } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val incomeCategories: StateFlow<List<String>> = dropdownOptionRepository
+        .getOptionsByType(TransactionType.INCOME_CATEGORY_OPTION)
         .map { options -> options.map { it.name } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 

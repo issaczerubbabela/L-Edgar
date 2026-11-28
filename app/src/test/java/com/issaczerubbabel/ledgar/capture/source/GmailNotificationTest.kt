@@ -75,9 +75,17 @@ class GmailNotificationTest {
     }
 
     @Test
-    fun amazonPayIsInTheFilterButNotReadYet() {
-        assertNull(read("Amazon Pay India"))
-        assertTrue(BankEmails.FILTER_QUERY.contains("no-reply@amazonpay.in"))
+    fun amazonPaysEmailIsRead() {
+        val subject = "Your cashback of ₹25.00 is here!"
+        val preview = "Hi NAME, Yay! Here's ₹25.00 cashback!"
+        val alert = read("Amazon Pay India", bigText = "$subject\n$preview", text = subject)!!
+
+        assertEquals("Amazon Pay India", alert.sender)
+        assertEquals("$subject\n$preview", alert.text)
+        // Only under the user's label, like HDFC's, and never a lookalike name.
+        assertNull(read("Amazon Pay India", subText = "Promotions"))
+        assertNull(read("Amazon Pay"))
+        assertNull(read("Amazon Pay India, HDFC"))
     }
 
     @Test

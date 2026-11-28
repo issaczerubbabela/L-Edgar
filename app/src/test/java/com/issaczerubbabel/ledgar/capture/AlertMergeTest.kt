@@ -112,4 +112,13 @@ class AlertMergeTest {
 
         assertEquals("HDFC Bank", facts.bankSender)
     }
+
+    @Test
+    fun aKindStatedByAnyAlertIsKept() {
+        val amazonPay = AlertSource(AlertSourceKind.EMAIL, "Amazon Pay India")
+        val cashback = read(amazonPay, at = 12).let { it.copy(parsed = it.parsed.copy(kind = CaptureKinds.CASHBACK)) }
+
+        // The other source's Alert arrived first and leads, but the cashback's kind still counts.
+        assertEquals(CaptureKinds.CASHBACK, AlertMerge.facts(listOf(read(hdfcSms, at = 10, account = "1234"), cashback)).parsed.kind)
+    }
 }

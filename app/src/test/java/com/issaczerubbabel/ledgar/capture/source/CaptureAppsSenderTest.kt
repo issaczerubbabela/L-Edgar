@@ -23,8 +23,9 @@ class CaptureAppsSenderTest {
         assertTrue(CaptureApps.isDebugEmail("com.android.shell", "HDFC Bank InstaAlerts"))
         assertFalse(CaptureApps.isDebugEmail("com.android.shell", "AD-HDFCBK-T"))
         assertFalse(CaptureApps.isDebugEmail(CaptureApps.GOOGLE_MESSAGES, "HDFC Bank InstaAlerts"))
-        // Amazon Pay's emails are read only once their parser lands (#181).
-        assertFalse(CaptureApps.looksLikeBankSender("Amazon Pay India"))
+        // Amazon Pay's emails are read too (#181), so an unreadable one is kept under Alerts we couldn't read.
+        assertTrue(CaptureApps.looksLikeBankSender("Amazon Pay India"))
+        assertTrue(CaptureApps.isDebugEmail("com.android.shell", "Amazon Pay India"))
     }
 
     @Test

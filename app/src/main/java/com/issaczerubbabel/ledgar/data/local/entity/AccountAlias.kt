@@ -6,7 +6,8 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * A saved mapping from a bank account's last four digits or a UPI VPA to one of the user's own
+ * A saved mapping from a bank account's last digits, or an Alert source with no digits (Amazon Pay
+ * Balance, see [com.issaczerubbabel.ledgar.capture.AccountHint]), to one of the user's own
  * Accounts, used to work out which Account a Captured transaction belongs to. See "Account
  * alias" in CONTEXT.md.
  */
