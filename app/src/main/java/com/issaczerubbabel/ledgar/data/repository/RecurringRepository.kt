@@ -2,6 +2,7 @@ package com.issaczerubbabel.ledgar.data.repository
 
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.RecurringRule
+import com.issaczerubbabel.ledgar.util.RepeatSuggestion
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 
@@ -45,4 +46,23 @@ interface RecurringRepository {
      * crash or a concurrent run can't double-add. Returns how many Transactions were created.
      */
     suspend fun materializeDue(today: LocalDate = LocalDate.now()): Int
+
+    /**
+     * Repeats found in the Ledger as of [today] that no Repeat rule covers and the user hasn't
+     * answered Not a repeat to, soonest first. Recomputed off the main thread as the Ledger, the
+     * rules or the dismissals change; empty (and logged) if the scan fails.
+     */
+    fun observeSuggestions(today: LocalDate = LocalDate.now()): Flow<List<RepeatSuggestion>>
+
+    /**
+     * Makes [suggestion] a Repeat rule starting on its next date, Ask me first unless [askFirst] is
+     * false. Nothing in the Ledger changes. Returns the new rule's id.
+     */
+    suspend fun acceptSuggestion(suggestion: RepeatSuggestion, askFirst: Boolean = true, today: LocalDate = LocalDate.now()): Long
+
+    /** Not a repeat: hides the suggestion with [key] for good, on this phone. */
+    suspend fun dismissSuggestion(key: String)
+
+    /** Undo for [dismissSuggestion]. */
+    suspend fun undismissSuggestion(key: String)
 }

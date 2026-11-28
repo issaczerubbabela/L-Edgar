@@ -45,12 +45,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,11 +62,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.issaczerubbabel.ledgar.data.local.entity.RecurringRule
 import com.issaczerubbabel.ledgar.viewmodel.RepeatRuleUi
+import com.issaczerubbabel.ledgar.viewmodel.RepeatSuggestionUi
 import com.issaczerubbabel.ledgar.viewmodel.RepeatingViewModel
 
 /**
- * More > Repeating transactions: occurrences waiting for the user (Ask me first), what's coming in
- * the next 30 days, and every Repeat rule, each opening a sheet to pause, edit or delete it.
+ * More > Repeating transactions: occurrences waiting for the user (Ask me first), repeats found in
+ * the Ledger to make into rules, what's coming in the next 30 days, and every Repeat rule, each
+ * opening a sheet to pause, edit or delete it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,11 +86,18 @@ fun RepeatingScreen(
     val state by vm.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var openRuleId by rememberSaveable { mutableLongStateOf(initialRuleId ?: -1L) }
+    var openSuggestionKey by rememberSaveable { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         vm.deleted.collect { deleted ->
             val result = snackbarHostState.showSnackbar(deleted.message, actionLabel = "Undo", duration = SnackbarDuration.Short)
             if (result == SnackbarResult.ActionPerformed) vm.undoDelete(deleted)
+        }
+    }
+    LaunchedEffect(Unit) {
+        vm.suggestionEvents.collect { event ->
+            val result = snackbarHostState.showSnackbar(event.message, actionLabel = "Undo", duration = SnackbarDuration.Short)
+            if (result == SnackbarResult.ActionPerformed) vm.undo(event)
         }
     }
 
@@ -108,7 +120,12 @@ fun RepeatingScreen(
             .fillMaxSize()
             .padding(scaffoldPadding)
             .padding(bottom = innerPadding.calculateBottomPadding())
-        if (state.isLoaded && state.rules.isEmpty()) {
+        if (state.isLoaded && state.rules.isEmpty() && !state.suggestionsChecked) {
+            // A moment while the Ledger is read, so the empty text doesn't flash before suggestions.
+            Box(modifier = modifier)
+            return@Scaffold
+        }
+        if (state.isLoaded && state.rules.isEmpty() && state.suggestions.isEmpty()) {
             Box(modifier = modifier, contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
                     Icon(
@@ -142,13 +159,33 @@ fun RepeatingScreen(
                     )
                 }
             }
+            if (state.suggestions.isNotEmpty()) {
+                item(key = "suggested-header") { SectionHeader("Suggested for you") }
+                if (state.rules.isEmpty()) {
+                    item(key = "suggested-lead") {
+                        Text(
+                            text = "These look like they repeat. Make them repeat so they add themselves.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp)
+                        )
+                    }
+                }
+                items(state.suggestions, key = { "suggestion-${it.suggestion.key}" }) { row ->
+                    SuggestionCard(
+                        row = row,
+                        onAccept = { openSuggestionKey = row.suggestion.key },
+                        onDismiss = { vm.dismiss(row) }
+                    )
+                }
+            }
             if (state.upcoming.isNotEmpty()) {
                 item(key = "upcoming-header") { SectionHeader("Upcoming (next 30 days)") }
                 items(state.upcoming, key = { "upcoming-${it.rule.id}" }) { row ->
                     RuleRow(row = row, onClick = { openRuleId = row.rule.id })
                 }
             }
-            item(key = "all-header") { SectionHeader("All rules") }
+            if (state.rules.isNotEmpty()) item(key = "all-header") { SectionHeader("All rules") }
             items(state.rules, key = { "rule-${it.rule.id}" }) { row ->
                 RuleRow(row = row, onClick = { openRuleId = row.rule.id })
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
@@ -165,6 +202,128 @@ fun RepeatingScreen(
             onEdit = { openRuleId = -1L; onEditRule(row.rule.id) },
             onDelete = { openRuleId = -1L; vm.delete(row.rule) }
         )
+    }
+
+    state.suggestions.firstOrNull { it.suggestion.key == openSuggestionKey }?.let { row ->
+        SuggestionSheet(
+            row = row,
+            onDismiss = { openSuggestionKey = null },
+            onSave = { askFirst ->
+                openSuggestionKey = null
+                vm.accept(row, askFirst)
+            }
+        )
+    }
+}
+
+/**
+ * A repeat found in the Ledger. TalkBack reads the details as one sentence, then the two buttons.
+ */
+@Composable
+private fun SuggestionCard(row: RepeatSuggestionUi, onAccept: () -> Unit, onDismiss: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+    ) {
+        Column(modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)) {
+            Box(modifier = Modifier.padding(end = 8.dp).clearAndSetSemantics { contentDescription = row.spoken }) {
+                SuggestionSummary(row)
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = onDismiss) { Text("Not a repeat") }
+                Spacer(Modifier.width(4.dp))
+                Button(onClick = onAccept) { Text("Make it repeat") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SuggestionSummary(row: RepeatSuggestionUi) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = row.title,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(text = row.amount, style = MaterialTheme.typography.bodyLarge)
+        }
+        Text(
+            text = row.cadence,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = "${row.seen} · ${row.account}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/** Make it repeat: what the rule will be, an Ask me first switch (on), and Save. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SuggestionSheet(row: RepeatSuggestionUi, onDismiss: () -> Unit, onSave: (askFirst: Boolean) -> Unit) {
+    var askFirst by rememberSaveable(row.suggestion.key) { mutableStateOf(true) }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp)
+        ) {
+            Text(
+                text = "Make it repeat",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier
+                    .padding(horizontal = 24.dp, vertical = 8.dp)
+                    .semantics { heading() }
+            )
+            Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
+                SuggestionSummary(row)
+                Text(
+                    text = row.startsOn,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            SwitchRow(
+                title = "Ask me first",
+                subtitle = "Wait here for Add or Skip instead of adding it on the day",
+                checked = askFirst,
+                onCheckedChange = { askFirst = it }
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancel") }
+                Button(onClick = { onSave(askFirst) }, modifier = Modifier.weight(1f)) { Text("Save") }
+            }
+            Text(
+                text = "Uses the latest amount. To change it or the day, open the repeat after saving and tap Edit.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 24.dp)
+            )
+        }
     }
 }
 

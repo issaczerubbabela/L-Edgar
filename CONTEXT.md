@@ -154,6 +154,10 @@ _Avoid_: recurring rule, schedule, scheduled transaction
 A Transaction a Repeat rule added. Once added it is an ordinary Transaction: it syncs, counts and can be edited or deleted like any other.
 _Avoid_: recurring transaction, upcoming transaction
 
+**Suggested repeat**:
+Transactions the user already logs on a schedule (weekly, monthly or every 3 months, each within a few days of its date and within 10% of the same amount), found in their own Ledger and offered under Suggested for you on More > Repeating transactions. Make it repeat turns one into an Ask me first Repeat rule; Not a repeat hides it for good on this phone. Neither changes the Transactions it was found in.
+_Avoid_: detected subscription, recurring stream
+
 ## Auto-capture
 
 **Captured transaction**:

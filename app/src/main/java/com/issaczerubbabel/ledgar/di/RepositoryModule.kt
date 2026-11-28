@@ -1,5 +1,7 @@
 package com.issaczerubbabel.ledgar.di
 
+import com.issaczerubbabel.ledgar.data.preferences.DismissedRepeatSuggestions
+import com.issaczerubbabel.ledgar.data.preferences.RepeatSuggestionPreferences
 import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.AccountRepositoryImpl
 import com.issaczerubbabel.ledgar.data.repository.BucketBudgetRepository
@@ -49,6 +51,10 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindRecurringRepository(impl: RecurringRepositoryImpl): RecurringRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindDismissedRepeatSuggestions(impl: RepeatSuggestionPreferences): DismissedRepeatSuggestions
 
     @Binds
     @Singleton
