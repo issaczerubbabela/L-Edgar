@@ -6,6 +6,7 @@ import com.issaczerubbabel.ledgar.capture.CaptureIngestor
 import com.issaczerubbabel.ledgar.capture.CaptureReguesser
 import com.issaczerubbabel.ledgar.capture.CaptureSettingsSource
 import com.issaczerubbabel.ledgar.capture.RoomCaptureHistorySource
+import com.issaczerubbabel.ledgar.capture.SamePaymentSplitter
 import com.issaczerubbabel.ledgar.capture.categorize.CategorizationPipeline
 import com.issaczerubbabel.ledgar.capture.categorize.KeywordDictionary
 import com.issaczerubbabel.ledgar.data.local.dao.MerchantRuleDao
@@ -37,6 +38,9 @@ abstract class CaptureBindingsModule {
 
     @Binds
     abstract fun bindCaptureReguesser(impl: CaptureIngestor): CaptureReguesser
+
+    @Binds
+    abstract fun bindSamePaymentSplitter(impl: CaptureIngestor): SamePaymentSplitter
 }
 
 @Module

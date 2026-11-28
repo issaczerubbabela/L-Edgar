@@ -17,7 +17,9 @@ alert) are defined in [CONTEXT.md](../CONTEXT.md).
 2. **Map categories once.** The app recognises kinds of merchant (food delivery, groceries, fuel and so on)
    but only ever files into the user's own Categories. The same screen matches each kind to one of them. A
    kind left unmapped shows "Needs a category".
-3. **Alerts arrive.** Each one from a watched app becomes a pending capture. A banner on the Trans screen
+3. **Alerts arrive.** Each payment from a watched app becomes a pending capture. Its Alerts from different
+   Alert sources (the bank's SMS and Google Pay's "<NAME> paid you", say) become **one** capture with the
+   bank's Account and Google Pay's payer (section 5). A banner on the Trans screen
    ("3 captured transactions to review") and a badge on the Trans tab count them.
 4. **Review.** To review (`CaptureInbox`, all pure) groups waiting captures **by day**, newest first, by the
    date Confirm will write (the alert's own time, in the phone's zone). Each day's header shows the date
@@ -38,7 +40,10 @@ alert) are defined in [CONTEXT.md](../CONTEXT.md).
    The expanded row shows, per capture: merchant, exact amount, account number, the date (if the alert
    states one), the guessed Category and Account, and why it was guessed. The user picks a Category and
    Account where missing, then **Confirm** or **Dismiss**, with the buttons or by swiping the row right or
-   left. "Original text" shows the alert as received. "Always use X for Y" saves a rule after one
+   left. "Original text" shows every Alert the capture was read from, each under its source ("SMS from CUB",
+   "Google Pay"). On a capture merged from several Alerts, **Not the same payment** (also a TalkBack custom
+   action) splits it back into one capture per Alert, marked (`CaptureTrace.keptApartFrom`) so they never
+   merge again; like Split, it has no Undo. "Always use X for Y" saves a rule after one
    confirmation. Tapping the title renames it before confirming, with Descriptions used before as
    suggestions; the merchant's rule remembers the new name for its next captures.
    An **Expense / Income / Transfer** switch sets the type. **Transfer** swaps the Category pick for the other
@@ -120,12 +125,12 @@ aliases and unparsed alerts are local only and are not sent to the Sheet.
 | Area | Files |
 | --- | --- |
 | `capture/source` | `BankNotificationListener` (the service), `CaptureApps` (the allowlist and sender rules) |
-| `capture` | `CaptureIngestor` (parse, dedupe, account lookup, categorize, store), `CaptureSettingsSource`, `CaptureConfirmer` (Confirm with Undo, shared by To review and Edit) |
-| `capture/pair` | `TransferPairMatcher` (a confirmed Transfer's other half, ADR-0006), `LedgerMatcher` + `LedgerMatchFinder` (the logged Transaction a capture repeats) |
+| `capture` | `CaptureIngestor` (parse, dedupe, merge, account lookup, categorize, store), `AlertMerge` (what a payment's Alerts say together), `CaptureSettingsSource`, `CaptureConfirmer` (Confirm with Undo, shared by To review and Edit) |
+| `capture/pair` | `SamePaymentMatcher` (one payment's Alerts across sources, ADR-0012), `TransferPairMatcher` (a confirmed Transfer's other half, ADR-0006), `LedgerMatcher` + `LedgerMatchFinder` (the logged Transaction a capture repeats) |
 | `capture/parse` | `ParserRegistry`, `HdfcParser`, `CubParser`, `AxisParser`, `UpiAppParser`, `GenericBankParser`, `ParsingUtils`, `ParsedTxn`, `TxnTime` |
 | `capture/categorize` | `MerchantNormalizer`, `KeywordDictionary`, `CategoryResolver`, `CategorizationPipeline`, `MerchantRuleLearner` |
 | `capture/notify` | `CaptureNotifier`, `CaptureActionReceiver`, `CaptureActionHandler`, `CaptureNotificationText` |
-| `data/local` | entities `CapturedTransaction`, `MerchantRule`, `AccountAlias`, `UnparsedAlert`; matching DAOs; `CaptureMigration` (v18 to v19, v19 to v20, v26 to v27) |
+| `data/local` | entities `CapturedTransaction`, `CaptureAlert`, `MerchantRule`, `AccountAlias`, `UnparsedAlert`; matching DAOs; `CaptureMigration` (v18 to v19, v19 to v20, v26 to v27, v28 to v29) |
 | `data` | `CaptureRepository(Impl)`, `CapturePreferencesRepository` (on/off flag and category mapping, in DataStore) |
 | `viewmodel`, `ui/screens` | `ReviewInboxViewModel` + `CaptureInboxScreen` (cards built by `CaptureRows`, days, filters and the bulk sheet by `CaptureInbox`), `LogViewModel` + `LogScreen` for Edit (`CaptureForm`), `CaptureSettingsViewModel` + `CaptureSettingsScreen`, `UnparsedAlertsViewModel` + `UnparsedAlertsScreen`, `CaptureBadgeViewModel` |
 | `di` | `CaptureModule` (keyword list from `assets/merchant_keywords.json`, the pipeline, bindings) |
@@ -180,9 +185,10 @@ the alerts in tests, since they are the only record of what a bank actually send
 VPA-addressed debit above is tested only on a synthetic sample, so swap in a real (redacted) alert when one
 turns up under Alerts we couldn't read.
 
-## 5. Keeping one capture per alert
+## 5. Keeping one capture per payment
 
-Each capture has a `rawHash` with a unique index; a repeat is dropped by the database.
+**One Alert read twice.** Each Alert (`capture_alerts`, one or more per capture) has a `rawHash` with a
+unique index; a repeat of any of them, merged or not, is dropped by the database.
 
 - Alert **with a reference number**: the hash is of source, sender and the alert text. The reference makes
   each payment's text unique.
@@ -190,6 +196,25 @@ Each capture has a `rawHash` with a unique index; a repeat is dropped by the dat
   same notification read again gets the same key, while two real identical payments more than ten minutes
   apart both land. Two identical payments within ten minutes count as one; nothing in the alert can tell
   them apart.
+
+**One payment, several Alert sources** ([ADR-0012](adr/0012-one-captured-transaction-per-payment-across-alert-sources.md)).
+An Alert source (`AlertSource`) is one bank's SMS (whatever its sender prefix), one bank or UPI app, or one
+bank's email. A new Alert joins a capture (`SamePaymentMatcher`, pure) when the reference numbers are equal, or,
+when at most one of them shows one, the amount is equal to the paisa within 10 minutes of any of the
+capture's Alerts. The direction must agree either way, so a reversal that reuses a payment's reference
+stays its own capture. Two different references never match, and an Alert never joins a capture that
+already has one from its own source or that the user split from it: only a reference tells two identical
+payments apart. A reference match wins, then a waiting capture, then the nearest in time. The check and the
+write run in one Room transaction, so two Alerts read at once can't both start a capture.
+
+The merged capture keeps its id, so what the user picked on its card still wins, and is put together
+again (`AlertMerge`, pure) and re-guessed: the payee from the UPI app, then the email, then the SMS or bank
+app; the Account digits only from a bank's Alert; the date from the earliest Alert. A Merchant rule is looked
+up under the payee first and then the bank's own text, so a rule saved before the merge still matches, and
+a Confirm teaches the rule under the payee shown. A High-confidence capture notifies once per payment: a
+merge notifies only when it first made the capture worth a notification (Google Pay's Alert alone never
+names the Account). An Alert for a capture already confirmed, linked, paired or dismissed is attached to it
+quietly: no card, no notification, and the Transaction is never edited (ADR-0005).
 
 **Against the Ledger.** The hash only compares alerts with alerts. Before storing a capture,
 `CaptureIngestor` also asks `LedgerMatchFinder` whether it repeats a Transaction already logged (the rule
@@ -262,7 +287,7 @@ stored on the capture change: its suggested type and Category (or Transfer and o
 description and the Account guess. What the user picked or typed on a card, including switching it to a
 Transfer, lives in the inbox until Confirm, so it always wins, and a pass with no suggestion keeps the one
 already there, unless its Category is no longer one of the user's. The guesses, why text and alternatives are kept in the capture's `traceJson`
-(`CaptureTrace`), so no table changed.
+(`CaptureTrace`), so no table changed. A merged capture is re-guessed from all its Alerts.
 
 **Merchant rules** (`MerchantRuleLearner`), keyed by merchant and **direction** (`DEBIT` or `CREDIT`, as the
 bank wrote it), so a debit and a credit from one merchant have separate rules. A rule's outcome is
@@ -356,7 +381,8 @@ with those, and a recurring one is worth a phrase in `NotAPayment`.
 
 | Table | Holds | Sent to the Sheet |
 | --- | --- | --- |
-| `captured_transactions` | Waiting and resolved captures, including the alert's text | No |
+| `captured_transactions` | Waiting and resolved captures, including the first alert's text | No |
+| `capture_alerts` | Every Alert a capture was read from (Room 28 → 29 gave each existing capture its one) | No |
 | `merchant_rules` | Saved and learned rules | No |
 | `account_aliases` | Account digits to Account | No |
 | `unparsed_alerts` | Unreadable alerts, 30 days | No |
@@ -393,7 +419,7 @@ with those, and a recurring one is worth a phrase in `NotAPayment`.
 Deliberate omissions and gaps, so nobody assumes otherwise:
 
 - **Google Pay posts nothing for a payment you send; the bank's alert covers it.** Only money received and
-  Autopay come from Google Pay. Paytm has no sample and is unverified.
+  Autopay come from Google Pay, so City Union Bank's sends, which never name the payee, still have none. Paytm has no sample and is unverified.
 - **Sources.** Only notifications. No SMS permission path, no email capture.
 - **Categorization.** Rules, history, an on-phone Naive Bayes guesser and keywords, with no network and no
   cloud model. The Naive Bayes counts are rebuilt in memory on each ingest and re-guess rather than stored,
@@ -413,8 +439,10 @@ Deliberate omissions and gaps, so nobody assumes otherwise:
   edit, and changing a Transaction back counts as one more decision, not an undo.
 - **Linking.** Only Transactions dated in the last 35 days are offered, and only the best match: there is
   no picker for "2 other matches", no Unlink, and a link never corrects the Transaction's date or amount to
-  the bank's. Two captures of one payment from different apps (the bank's SMS and Google Pay) are still two
-  captures; once one is linked or confirmed, the other no longer matches.
+  the bank's.
+- **Merging across Alert sources** (ADR-0012). Two real payments of the same amount and direction within 10
+  minutes, from different sources and without matching references, merge wrongly; Not the same payment splits
+  them, with no Undo. A late Alert attached to a resolved capture never corrects its Transaction.
 - **No 30-day purge of a capture's raw text** (only unparsed alerts are purged). The database is not
   excluded from Android's automatic backup, which is on for the app.
 - **Learned data is local.** Rules, aliases and the mapping aren't backed up to the Sheet, so a reinstall

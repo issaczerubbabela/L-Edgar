@@ -57,11 +57,13 @@ class ReviewInboxViewModel @Inject constructor(
         edits,
         undoableActions.hiddenCaptureIds,
         // Worked out live: a capture picks up its match the moment the Transaction it repeats is saved.
-        combine(accounts, captureRepository.observeLedgerCandidates(), ::Pair)
-    ) { pending, renames, edited, hidden, (accountList, ledger) ->
+        combine(accounts, captureRepository.observeLedgerCandidates(), captureRepository.observePendingAlerts(), ::Triple)
+    ) { pending, renames, edited, hidden, (accountList, ledger, alerts) ->
         val knownAccountIds = accountList.map { it.id }.toSet()
         val cards = pending.filterNot { it.id in hidden }.map { capture ->
-            CaptureRows.build(capture, edited[capture.id], renames, knownAccountIds, match = ledger.bestMatch(capture))
+            CaptureRows.build(
+                capture, edited[capture.id], renames, knownAccountIds, match = ledger.bestMatch(capture), alerts = alerts[capture.id].orEmpty()
+            )
         }
         // A waiting debit and credit that look like one Transfer between own Accounts show as one row.
         CaptureInbox.withTransferSuggestions(cards)
@@ -155,6 +157,15 @@ class ReviewInboxViewModel @Inject constructor(
     fun split(row: CaptureRowUi) {
         val credit = row.transferPartner ?: return
         viewModelScope.launch { captureRepository.splitTransferSuggestion(row.capture.id, credit.capture.id) }
+    }
+
+    /**
+     * Not the same payment: a capture merged from several Alerts splits back into one capture per
+     * Alert, which never merge again. No Undo, like Split.
+     */
+    fun notSamePayment(row: CaptureRowUi) {
+        if (!row.isMerged) return
+        viewModelScope.launch { captureRepository.splitSamePayment(row.capture.id) }
     }
 
     /** The bulk sheet (Confirm day or Review all): one decision, so one Undo puts every card back. */

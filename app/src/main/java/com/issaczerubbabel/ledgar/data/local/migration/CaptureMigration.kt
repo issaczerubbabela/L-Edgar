@@ -76,4 +76,26 @@ object CaptureMigration {
 
         db.execSQL("ALTER TABLE captured_transactions ADD COLUMN suggestedToAccountId INTEGER")
     }
+
+    /**
+     * 28 -> 29: a capture can have several Alerts (ADR-0012), each a `capture_alerts` row. Every
+     * existing capture keeps its one Alert, copied from its own columns, so its repeat is still
+     * dropped and its Original text still shows. Idempotent: a copy already made isn't made twice.
+     */
+    fun upgradeTo29(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `capture_alerts` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `captureId` INTEGER NOT NULL, " +
+                "`source` TEXT NOT NULL, `sender` TEXT NOT NULL, `rawText` TEXT NOT NULL, " +
+                "`rawHash` TEXT NOT NULL, `capturedAt` INTEGER NOT NULL, " +
+                "FOREIGN KEY(`captureId`) REFERENCES `captured_transactions`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+        )
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_capture_alerts_rawHash` ON `capture_alerts` (`rawHash`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_capture_alerts_captureId` ON `capture_alerts` (`captureId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_capture_alerts_capturedAt` ON `capture_alerts` (`capturedAt`)")
+        db.execSQL(
+            "INSERT OR IGNORE INTO capture_alerts (captureId, source, sender, rawText, rawHash, capturedAt) " +
+                "SELECT id, sources, sender, rawText, rawHash, capturedAt FROM captured_transactions"
+        )
+    }
 }

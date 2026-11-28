@@ -30,11 +30,15 @@ import androidx.room.PrimaryKey
 )
 data class CapturedTransaction(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    /** Comma-separated capture sources that produced or merged into this row: NOTIF, SMS, EMAIL. */
+    /**
+     * [sources], [sender], [rawText], [rawHash] and [capturedAt] are the first Alert's, the one that
+     * made this capture. Every Alert, that one included, is a [CaptureAlert]; the other columns are
+     * what the Alerts say together (`AlertMerge`).
+     */
     val sources: String,
     val sender: String,
     val rawText: String,
-    /** sha256 of source+sender+normalized text; the unique index is same-source dedupe. */
+    /** sha256 of source+sender+normalized text; [CaptureAlert.rawHash] is the dedupe that counts. */
     val rawHash: String,
     val capturedAt: Long,
     val txnTime: Long,

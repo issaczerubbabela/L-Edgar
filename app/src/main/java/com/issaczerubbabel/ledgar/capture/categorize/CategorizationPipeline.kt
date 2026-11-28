@@ -57,30 +57,35 @@ class CategorizationPipeline(
     /**
      * [categoriesByType] holds the user's own Categories per type (Expense, Income): R1 and R7 only
      * ever return one of them, in the user's spelling. [at] is when the payment happened, which the
-     * Naive Bayes step reads as time of day and weekday.
+     * Naive Bayes step reads as time of day and weekday. [alsoKnownAs] is the bank's own merchant
+     * text when another Alert source named the payee ([parsed]'s merchant) differently: a rule saved
+     * under it still counts after the merge (ADR-0012), but the capture keeps the payee's name.
      */
     suspend fun categorize(
         parsed: ParsedTxn,
         categoryMapping: Map<String, String>,
         categoriesByType: Map<String, Collection<String>>,
         predictor: HistoryPredictor = HistoryPredictor.EMPTY,
-        at: LocalDateTime = LocalDateTime.now()
+        at: LocalDateTime = LocalDateTime.now(),
+        alsoKnownAs: String? = null
     ): Categorization {
         val merchantNorm = MerchantNormalizer.normalize(parsed.merchantRaw).norm
         val type = if (parsed.direction == Direction.CREDIT) TransactionType.INCOME else TransactionType.EXPENSE
+        val direction = if (parsed.direction == Direction.CREDIT) "CREDIT" else "DEBIT"
+        // The best payee's rule first, then the bank's.
+        val names = listOf(merchantNorm, MerchantNormalizer.normalize(alsoKnownAs).norm).filter { it.isNotBlank() }.distinct()
 
         var rename: String? = null
         var staleRule: String? = null
-        if (merchantNorm.isNotBlank()) {
-            val direction = if (parsed.direction == Direction.CREDIT) "CREDIT" else "DEBIT"
-            val rule = lookupRule(MerchantRuleKey(merchantNorm, direction))
+        for (name in names) {
+            val rule = lookupRule(MerchantRuleKey(name, direction))
             if (rule != null && rule.origin != MerchantRuleOrigin.CANDIDATE) {
                 if (rule.type != TransactionType.TRANSFER) {
                     val category = categoriesByType[rule.type].orEmpty().firstOrNull { it.equals(rule.category.trim(), ignoreCase = true) }
                     if (category != null) {
                         return Categorization(merchantNorm, rule.type, category, 0.98, "R1", "Saved rule for this merchant")
                     }
-                    staleRule = "Saved rule's Category ${rule.category} no longer exists"
+                    if (staleRule == null) staleRule = "Saved rule's Category ${rule.category} no longer exists"
                 } else if (rule.toAccountId != null) {
                     return Categorization(
                         merchantNorm, TransactionType.TRANSFER, null, 0.98, "R1", "Saved Transfer rule for this merchant",
@@ -88,7 +93,7 @@ class CategorizationPipeline(
                     )
                 }
             }
-            rename = rule?.description
+            if (rename == null) rename = rule?.description
         }
 
         /** A guess's own reason, after the note that the saved rule was passed over. */

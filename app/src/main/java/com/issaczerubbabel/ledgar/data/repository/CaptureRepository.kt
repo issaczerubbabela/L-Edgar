@@ -2,6 +2,7 @@ package com.issaczerubbabel.ledgar.data.repository
 
 import com.issaczerubbabel.ledgar.capture.pair.LedgerCandidates
 import com.issaczerubbabel.ledgar.capture.pair.TransferPairing
+import com.issaczerubbabel.ledgar.data.local.entity.CaptureAlert
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRuleKey
@@ -38,6 +39,9 @@ data class CaptureEdits(
 interface CaptureRepository {
     fun observePending(): Flow<List<CapturedTransaction>>
     fun observePendingCount(): Flow<Int>
+
+    /** Every waiting capture's Alerts, by capture id, in the order they arrived (ADR-0012). */
+    fun observePendingAlerts(): Flow<Map<Long, List<CaptureAlert>>>
 
     suspend fun getById(captureId: Long): CapturedTransaction?
 
@@ -89,6 +93,13 @@ interface CaptureRepository {
      * the pair is never suggested again.
      */
     suspend fun splitTransferSuggestion(debitId: Long, creditId: Long)
+
+    /**
+     * Not the same payment: a waiting capture merged from several Alerts (ADR-0012) becomes one
+     * capture per Alert, each waiting on its own and never merged with the others again. No Undo,
+     * like Split. The first Alert's capture keeps its id.
+     */
+    suspend fun splitSamePayment(captureId: Long)
 
     suspend fun dismiss(captureId: Long)
 

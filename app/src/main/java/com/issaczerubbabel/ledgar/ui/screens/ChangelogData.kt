@@ -19,6 +19,7 @@ val changelogReleases: List<ChangelogRelease> = listOf(
         version = "v1.9.0",
         date = "2026-11-28",
         added = listOf(
+            "Auto-capture: a payment's bank SMS and Google Pay alert become one capture, with who you paid",
             "Auto-capture: reads HDFC NEFT, NetBanking and RD debits, which landed under Alerts we couldn't read"
         ),
         fixed = listOf(

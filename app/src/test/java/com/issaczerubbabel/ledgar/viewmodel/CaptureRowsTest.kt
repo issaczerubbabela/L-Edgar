@@ -1,6 +1,7 @@
 package com.issaczerubbabel.ledgar.viewmodel
 
 import com.issaczerubbabel.ledgar.capture.categorize.ConfidenceBand
+import com.issaczerubbabel.ledgar.data.local.entity.CaptureAlert
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRuleKey
 import com.issaczerubbabel.ledgar.data.repository.CaptureEdits
@@ -188,6 +189,20 @@ class CaptureRowsTest {
         assertEquals(CUB, card.otherAccountId)
         assertNull(card.category)
         assertTrue(card.canConfirm)
+    }
+
+    @Test
+    fun originalTextListsEveryAlertUnderItsSource() {
+        val alerts = listOf(
+            CaptureAlert(id = 1, captureId = 1, source = "NOTIF", sender = "VM-CUBANK", rawText = "bank text", rawHash = "a", capturedAt = T0),
+            CaptureAlert(id = 2, captureId = 1, source = "NOTIF", sender = "Google Pay", rawText = "app text", rawHash = "b", capturedAt = T0 + 1)
+        )
+
+        val merged = CaptureRows.build(capture(), null, emptyMap(), accounts, alerts = alerts)
+
+        assertEquals(listOf(OriginalText("SMS from CUB", "bank text"), OriginalText("Google Pay", "app text")), merged.originals)
+        assertTrue(merged.isMerged)
+        assertFalse(row(capture()).isMerged)
     }
 
     private companion object {

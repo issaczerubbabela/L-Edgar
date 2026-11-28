@@ -10,6 +10,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 ### Added
 
+- Auto-capture: a payment's bank SMS and Google Pay alert become one capture, with who you paid
 - Auto-capture: reads HDFC NEFT, NetBanking and RD debits, which landed under Alerts we couldn't read
 
 ### Fixed

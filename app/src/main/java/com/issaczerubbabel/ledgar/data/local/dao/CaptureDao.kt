@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import com.issaczerubbabel.ledgar.data.local.entity.CaptureAlert
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import kotlinx.coroutines.flow.Flow
 
@@ -123,6 +124,46 @@ interface CaptureDao {
     /** Every waiting capture, for re-guessing. */
     @Query("SELECT * FROM captured_transactions WHERE status IN ('PENDING', 'POSSIBLE_DUPLICATE')")
     suspend fun getPendingSnapshot(): List<CapturedTransaction>
+
+    /** A repeat of an Alert already stored, on any capture, is rejected by the unique index on rawHash: -1. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAlert(alert: CaptureAlert): Long
+
+    @Query("SELECT EXISTS(SELECT 1 FROM capture_alerts WHERE rawHash = :rawHash)")
+    suspend fun hasAlert(rawHash: String): Boolean
+
+    /** A capture's Alerts, in the order they arrived. */
+    @Query("SELECT * FROM capture_alerts WHERE captureId = :captureId ORDER BY capturedAt, id")
+    suspend fun getAlerts(captureId: Long): List<CaptureAlert>
+
+    @Query("SELECT * FROM capture_alerts WHERE captureId IN (:captureIds) ORDER BY capturedAt, id")
+    suspend fun getAlertsFor(captureIds: List<Long>): List<CaptureAlert>
+
+    /** The Alerts of every waiting capture, for the inbox's Original text and Not the same payment. */
+    @Query(
+        "SELECT a.* FROM capture_alerts a INNER JOIN captured_transactions c ON c.id = a.captureId " +
+            "WHERE c.status IN ('PENDING', 'POSSIBLE_DUPLICATE') ORDER BY a.capturedAt, a.id"
+    )
+    fun observePendingAlerts(): Flow<List<CaptureAlert>>
+
+    /** Not the same payment: an Alert leaves its capture for one of its own. */
+    @Query("UPDATE capture_alerts SET captureId = :captureId WHERE id = :alertId")
+    suspend fun moveAlert(alertId: Long, captureId: Long)
+
+    /**
+     * Captures, in any status, that a new Alert could repeat (ADR-0012): the same reference number,
+     * or the same direction and amount with an Alert that arrived between [from] and [to].
+     * `SamePaymentMatcher` decides among them.
+     */
+    @Query(
+        """
+        SELECT * FROM captured_transactions
+        WHERE (:refNumber IS NOT NULL AND refNumber = :refNumber)
+           OR (direction = :direction AND amount BETWEEN :amount - 0.005 AND :amount + 0.005
+               AND id IN (SELECT captureId FROM capture_alerts WHERE capturedAt BETWEEN :from AND :to))
+        """
+    )
+    suspend fun getSamePaymentCandidates(refNumber: String?, direction: String, amount: Double, from: Long, to: Long): List<CapturedTransaction>
 
     /** R3-Q1: turning auto-capture off clears queued work but never touches learned data. */
     @Query("DELETE FROM captured_transactions WHERE status IN ('PENDING', 'POSSIBLE_DUPLICATE')")
