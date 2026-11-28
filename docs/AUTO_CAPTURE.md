@@ -140,7 +140,8 @@ permission is never needed. Notifications from any other app are never read. Deb
 adb shell (see section 11); release builds never do.
 
 **What is read.** The notification's title and big text. For a bank or UPI app the app names itself as the
-sender; for Messages the notification title is the sender (an ID like `AD-HDFCBK-T`).
+sender and the parser sees the title, a newline, then the text (Google Pay puts a received amount only in the
+title); for Messages the notification title is the sender (an ID like `AD-HDFCBK-T`) and only the text is parsed.
 
 **When.** Live, through `onNotificationPosted`, and once on `onListenerConnected` for notifications already in
 the shade. The second matters because Android can stop the service or access can be off for a while, and
@@ -163,8 +164,8 @@ Formats covered by tests built from real (redacted) alerts:
 | HDFC | UPI send (`Sent Rs.70.00 From HDFC Bank A/C *1234 To Name On 26/09/26 Ref ...`); UPI ATM withdrawal; deposit narration (`INR ... deposited in HDFC Bank A/c XX1234 on 25-SEP-26 for PAYER CREDIT`); `Credit Alert! Rs.X credited to HDFC Bank A/c XX1234 ...`; mandate debit (`UPI Mandate: Sent Rs.X from HDFC Bank A/c 1234 To PAYEE ...`); NEFT (`Amt Deducted! Rs.X from your HDFC Bank A/c XX1234 for NEFT txn ...`); NetBanking (`Payment Successful! Rs. X from A/c **…1234 to PAYEE via HDFC Bank NetBanking`, the payee is the merchant); RD (`RD Booked! Your HDFC Bank RD XX5678 ... for INR X` and `INR X debited from HDFC Bank XX1234 ... Info: RD through MOBILE-…5678`), both debits with the RD's digits as `counterpartyAccountHint`, so an Account alias on the RD can suggest a Transfer |
 | City Union Bank | `Your a/c no. XXXXXXXX1234 is credited/debited for Rs.X on 14-09-2026 and debited from/credited to a/c no. ... (UPI Ref no ...)`. Direction is always about "Your a/c"; the other account is only a counterparty hint |
 | Axis | UPI merchant debit, recognised by its `UPI/P2M/<ref>/<merchant>` narration because it never says "Axis"; IMPS credit |
-| Google Pay | `Paid Rs.500 to NAME.` and `Received ... from NAME.` Built from a description of the notifications, **not** a capture from a real phone |
-| Paytm | Same patterns as Google Pay on trust. No sample exists yet |
+| Google Pay | Money received: title `NAME paid you ₹1.00`, text `Tap to view.` (CREDIT from NAME). Autopay: title `Payment successful`, text `Payment for Autopay of ₹2,000.00 to PAYEE was successful. Tap to view.` (DEBIT to PAYEE). Read off a real phone on 2026-11-28. Neither names the Account. Offers and cashback (`Up to ₹2,500 in welcome rewards`, `Earn flat ₹11 cashback`) are claimed by the parser but never parse, so they don't fall through to the generic parser |
+| Paytm | Google Pay's two patterns on trust. No sample exists yet, so a Paytm payment lands under Alerts we couldn't read until one does |
 | VPA debit (Generic, HDFC, Axis) | `Rs.250.00 debited from A/c XX1234 to VPA swiggy.stores@axb on 12-11-26 ...`, also `to UPI ID handle@psp` and a bare `to handle@psp`. `ParsingUtils.vpaOf` takes the handle as the merchant, and `MerchantNormalizer` strips the `@psp` (a phone-number handle becomes `P2P:<number>`). The handle must contain `@`, so the bank's `SMS BLOCK ... to <number>` footer is never the payee, and an email address (`care@bank.net`) is skipped. Built from a synthetic sample, **not** a real alert. CUB is left alone |
 | Generic | Any text with an amount and a debit or credit word, e.g. ICICI's UPI debit alert (`ICICI Bank Acct XX123 debited for Rs 240.00 on 28-Sep-26; ZOMATO credited. UPI:... Call ... SMS BLOCK 123 to ...`), where the debit word comes before "credited" for the payee |
 
@@ -391,8 +392,8 @@ with those, and a recurring one is worth a phrase in `NotAPayment`.
 
 Deliberate omissions and gaps, so nobody assumes otherwise:
 
-- **Google Pay and Paytm are unverified.** Google Pay's layout comes from a description, and Paytm has no
-  sample.
+- **Google Pay posts nothing for a payment you send; the bank's alert covers it.** Only money received and
+  Autopay come from Google Pay. Paytm has no sample and is unverified.
 - **Sources.** Only notifications. No SMS permission path, no email capture.
 - **Categorization.** Rules, history, an on-phone Naive Bayes guesser and keywords, with no network and no
   cloud model. The Naive Bayes counts are rebuilt in memory on each ingest and re-guess rather than stored,

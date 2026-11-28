@@ -15,6 +15,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 ### Fixed
 
 - Auto-capture: payment requests, offers and game bonuses, mandates and pending refunds aren't captured
+- Auto-capture: reads Google Pay's real notifications for money received and Autopay
 
 ### Developer
 

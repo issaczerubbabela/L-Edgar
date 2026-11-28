@@ -27,8 +27,9 @@ class ParserRegistryTest {
         )!!
         assertEquals("Shri Ujagar Fuels", axis.merchantRaw)
 
-        val gpay = registry.parse("Google Pay", "Paid ₹500 to Ramesh Kumar. ₹500.00 debited from Bank Account (XXXX1234).")!!
-        assertEquals("Ramesh Kumar", gpay.merchantRaw)
+        val gpay = registry.parse("Google Pay", "A B KUMAR paid you ₹1.00\nTap to view.")!!
+        assertEquals("A B KUMAR", gpay.merchantRaw)
+        assertEquals(Direction.CREDIT, gpay.direction)
     }
 
     // Synthetic: "deducted" is read as a debit only in HDFC's "Amt Deducted!", never by the generic parser.
