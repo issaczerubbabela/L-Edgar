@@ -27,6 +27,9 @@ class MainActivity : FragmentActivity() {
     /** Set when a launch asks for Add Transaction (the daily reminder's tap); cleared once opened. */
     private var openAddTransaction by mutableStateOf(false)
 
+    /** Set when a launch asks for To review (the daily reminder's Review); cleared once opened. */
+    private var openCaptureInbox by mutableStateOf(false)
+
     /** Opening the app pulls edits made in the Sheet since the last Sync (ADR-0003). */
     override fun onStart() {
         super.onStart()
@@ -50,7 +53,9 @@ class MainActivity : FragmentActivity() {
             SheetSyncTheme(themeOption = currentTheme) {
                 AppNavigation(
                     openAddTransaction = openAddTransaction,
-                    onAddTransactionOpened = { openAddTransaction = false }
+                    onAddTransactionOpened = { openAddTransaction = false },
+                    openCaptureInbox = openCaptureInbox,
+                    onCaptureInboxOpened = { openCaptureInbox = false }
                 )
             }
         }
@@ -63,9 +68,11 @@ class MainActivity : FragmentActivity() {
 
     private fun readLaunchRequest(intent: Intent?) {
         if (intent?.getBooleanExtra(EXTRA_OPEN_ADD_TRANSACTION, false) == true) openAddTransaction = true
+        if (intent?.getBooleanExtra(EXTRA_OPEN_CAPTURE_INBOX, false) == true) openCaptureInbox = true
     }
 
     companion object {
         const val EXTRA_OPEN_ADD_TRANSACTION = "open_add_transaction"
+        const val EXTRA_OPEN_CAPTURE_INBOX = "open_capture_inbox"
     }
 }

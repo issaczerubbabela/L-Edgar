@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.reminder
 
+import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.util.formatRupees
 import java.time.Instant
 import java.time.ZoneId
@@ -29,13 +30,19 @@ object ReminderRules {
         lastLoggedEpochDay != todayEpochDay
 
     /**
-     * The notification's text: "₹X left to spend this cycle" while a Salary cycle is running with
-     * money left, otherwise one of a few short lines picked by the day so it doesn't go stale.
+     * The notification's text. With captures [waiting], how many and what their debits add up to
+     * ("6 waiting to review · ₹1,240"), then Left to spend if a cycle has money left: the day's
+     * spends are already there to confirm, so there's nothing to type. Otherwise "₹X left to spend
+     * this cycle" while a Salary cycle is running with money left, else one of a few short lines
+     * picked by the day so it doesn't go stale.
      */
-    fun message(todayEpochDay: Long, leftToSpend: Double?): String {
-        if (leftToSpend != null && leftToSpend > 0.0) {
-            return "${formatRupees(leftToSpend)} left to spend this cycle. Add today's spending to keep it right."
+    fun message(todayEpochDay: Long, leftToSpend: Double?, waiting: WaitingCaptures = WaitingCaptures.NONE): String {
+        val left = leftToSpend?.takeIf { it > 0.0 }?.let(::formatRupees)
+        if (waiting.any) {
+            val total = if (waiting.debitTotal > 0.0) " · ${formatRupees(waiting.debitTotal)}" else ""
+            return "${waiting.count} waiting to review$total." + (left?.let { " $it left to spend this cycle." } ?: "")
         }
+        if (left != null) return "$left left to spend this cycle. Add today's spending to keep it right."
         return MESSAGES[Math.floorMod(todayEpochDay, MESSAGES.size.toLong()).toInt()]
     }
 
@@ -45,4 +52,22 @@ object ReminderRules {
         "Nothing logged yet today. Quick Add takes a few taps.",
         "Keep Left to spend accurate. Add what you spent today."
     )
+}
+
+/**
+ * Captured transactions waiting in To review (status PENDING or POSSIBLE_DUPLICATE) when the
+ * reminder fires: how many, and the total of the debits among them.
+ */
+data class WaitingCaptures(val count: Int, val debitTotal: Double) {
+    val any: Boolean get() = count > 0
+
+    companion object {
+        val NONE = WaitingCaptures(count = 0, debitTotal = 0.0)
+
+        /** From the captures waiting in To review; money received doesn't add to the total. */
+        fun of(captures: List<CapturedTransaction>): WaitingCaptures = WaitingCaptures(
+            count = captures.size,
+            debitTotal = captures.filter { it.direction == "DEBIT" }.sumOf { it.amount }
+        )
+    }
 }

@@ -24,8 +24,12 @@ class ReminderNotifier @Inject constructor(
 ) {
     private val manager = NotificationManagerCompat.from(context)
 
+    /**
+     * [opensReview]: captures are waiting, so the first button is Review and a tap opens To review
+     * instead of Log now and Add Transaction.
+     */
     @SuppressLint("MissingPermission") // areNotificationsEnabled() is checked first.
-    fun notify(bodyText: String) {
+    fun notify(bodyText: String, opensReview: Boolean = false) {
         if (!manager.areNotificationsEnabled()) return
 
         manager.createNotificationChannel(
@@ -42,8 +46,14 @@ class ReminderNotifier @Inject constructor(
             .setStyle(NotificationCompat.BigTextStyle().bigText(bodyText))
             .setAutoCancel(true)
             .setOnlyAlertOnce(true)
-            .setContentIntent(addTransactionIntent())
-            .addAction(NotificationCompat.Action.Builder(0, "Log now", logNowIntent()).build())
+            .setContentIntent(if (opensReview) reviewIntent() else addTransactionIntent())
+            .addAction(
+                if (opensReview) {
+                    NotificationCompat.Action.Builder(0, "Review", reviewIntent()).build()
+                } else {
+                    NotificationCompat.Action.Builder(0, "Log now", logNowIntent()).build()
+                }
+            )
             .addAction(NotificationCompat.Action.Builder(0, "Nothing today", dismissTodayIntent()).build())
             .build()
 
@@ -79,6 +89,17 @@ class ReminderNotifier @Inject constructor(
         )
     }
 
+    /** Opens the app on To review; App Lock still applies, and To review opens once unlocked. */
+    private fun reviewIntent(): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            putExtra(MainActivity.EXTRA_OPEN_CAPTURE_INBOX, true)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        return PendingIntent.getActivity(
+            context, REQUEST_CODE_OPEN_REVIEW, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+    }
+
     private fun dismissTodayIntent(): PendingIntent {
         val intent = Intent(context, DailyReminderReceiver::class.java).setAction(ACTION_DISMISS_TODAY)
         return PendingIntent.getBroadcast(
@@ -94,5 +115,6 @@ class ReminderNotifier @Inject constructor(
         private const val REQUEST_CODE_LOG_NOW = 9101
         private const val REQUEST_CODE_DISMISS = 9102
         private const val REQUEST_CODE_OPEN_ADD = 9103
+        private const val REQUEST_CODE_OPEN_REVIEW = 9104
     }
 }

@@ -229,7 +229,9 @@ val bottomNavItems = listOf(Screen.Trans, Screen.Stats, Screen.Budget, Screen.Ac
 @Composable
 fun AppNavigation(
     openAddTransaction: Boolean = false,
-    onAddTransactionOpened: () -> Unit = {}
+    onAddTransactionOpened: () -> Unit = {},
+    openCaptureInbox: Boolean = false,
+    onCaptureInboxOpened: () -> Unit = {}
 ) {
     val navController = rememberNavController()
     // What a transaction sheet's Edit and Copy buttons open, wherever the sheet is.
@@ -380,6 +382,17 @@ fun AppNavigation(
             navController.navigate(logRoute()) { launchSingleTop = true }
         }
         onAddTransactionOpened()
+    }
+
+    // A launch that asked for To review. With App Lock on, it waits for the unlock: the lock gate
+    // would send any other screen straight back to Add Transaction.
+    LaunchedEffect(openCaptureInbox, lockConfig.enabled, appLockViewModel.isUnlocked, currentDest?.route) {
+        if (!openCaptureInbox || currentDest == null) return@LaunchedEffect
+        if (lockConfig.enabled && !appLockViewModel.isUnlocked) return@LaunchedEffect
+        if (currentDest.route != Screen.CaptureInbox.route) {
+            navController.navigate(Screen.CaptureInbox.route) { launchSingleTop = true }
+        }
+        onCaptureInboxOpened()
     }
 
     LaunchedEffect(lockConfig.enabled, appLockViewModel.isUnlocked, currentDest?.route) {

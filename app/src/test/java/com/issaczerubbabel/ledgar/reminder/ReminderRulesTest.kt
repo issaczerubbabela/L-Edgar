@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.reminder
 
+import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -96,5 +97,67 @@ class ReminderRulesTest {
         // A different day picks a different line, and negative epoch days don't crash.
         assertTrue(plain != ReminderRules.message(todayEpochDay = 101L, leftToSpend = null))
         ReminderRules.message(todayEpochDay = -3L, leftToSpend = null)
+    }
+
+    private fun capture(amount: Double, direction: String = "DEBIT") = CapturedTransaction(
+        sources = "NOTIF", sender = "HDFC Bank", rawText = "x", rawHash = "h", capturedAt = 0, txnTime = 0,
+        amount = amount, direction = direction, channel = "UPI"
+    )
+
+    @Test
+    fun `message with captures waiting gives the count and the total of their debits`() {
+        val waiting = WaitingCaptures(count = 6, debitTotal = 1_240.0)
+
+        assertEquals("6 waiting to review · ₹1,240.", ReminderRules.message(todayEpochDay = 100L, leftToSpend = null, waiting = waiting))
+    }
+
+    @Test
+    fun `message with one capture waiting reads the same way`() {
+        val waiting = WaitingCaptures(count = 1, debitTotal = 212.4)
+
+        assertEquals("1 waiting to review · ₹212.", ReminderRules.message(todayEpochDay = 100L, leftToSpend = null, waiting = waiting))
+    }
+
+    @Test
+    fun `message with captures waiting adds Left to spend while a cycle has money left`() {
+        val waiting = WaitingCaptures(count = 6, debitTotal = 1_240.0)
+
+        assertEquals(
+            "6 waiting to review · ₹1,240. ₹12,500 left to spend this cycle.",
+            ReminderRules.message(todayEpochDay = 100L, leftToSpend = 12_500.0, waiting = waiting)
+        )
+        assertEquals(
+            "6 waiting to review · ₹1,240.",
+            ReminderRules.message(todayEpochDay = 100L, leftToSpend = -40.0, waiting = waiting)
+        )
+    }
+
+    @Test
+    fun `message with only money received waiting leaves out the total`() {
+        val waiting = WaitingCaptures(count = 2, debitTotal = 0.0)
+
+        assertEquals("2 waiting to review.", ReminderRules.message(todayEpochDay = 100L, leftToSpend = null, waiting = waiting))
+    }
+
+    @Test
+    fun `message with nothing waiting is today's text, as before`() {
+        assertEquals(
+            ReminderRules.message(todayEpochDay = 100L, leftToSpend = null),
+            ReminderRules.message(todayEpochDay = 100L, leftToSpend = null, waiting = WaitingCaptures.NONE)
+        )
+        assertTrue(
+            ReminderRules.message(todayEpochDay = 100L, leftToSpend = 12_500.0, waiting = WaitingCaptures(0, 0.0))
+                .startsWith("₹12,500 left to spend this cycle")
+        )
+    }
+
+    @Test
+    fun `waiting captures count every capture but total only the debits`() {
+        val waiting = WaitingCaptures.of(listOf(capture(450.0), capture(790.0), capture(5_000.0, direction = "CREDIT")))
+
+        assertEquals(3, waiting.count)
+        assertEquals(1_240.0, waiting.debitTotal, 0.0)
+        assertTrue(waiting.any)
+        assertFalse(WaitingCaptures.of(emptyList()).any)
     }
 }

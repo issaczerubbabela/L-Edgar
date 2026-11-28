@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import com.issaczerubbabel.ledgar.data.bucket.BucketPreviewSource
 import com.issaczerubbabel.ledgar.data.preferences.ReminderPreferences
+import com.issaczerubbabel.ledgar.data.repository.CaptureRepository
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -35,6 +36,7 @@ class DailyReminderReceiver : BroadcastReceiver() {
         fun reminderNotifier(): ReminderNotifier
         fun reminderScheduler(): DailyReminderScheduler
         fun reminderCycleSource(): BucketPreviewSource
+        fun reminderCaptureRepository(): CaptureRepository
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -60,7 +62,13 @@ class DailyReminderReceiver : BroadcastReceiver() {
             val leftToSpend = runCatching {
                 withTimeoutOrNull(5_000) { deps.reminderCycleSource().context.first() }?.summary?.leftToSpend
             }.getOrNull()
-            deps.reminderNotifier().notify(ReminderRules.message(today, leftToSpend))
+            // Captures waiting in To review, counted as the Trans tab's badge counts them; a failed
+            // read just means the reminder as it was before anything was captured.
+            val waiting = runCatching {
+                withTimeoutOrNull(5_000) { deps.reminderCaptureRepository().observePending().first() }
+                    ?.let(WaitingCaptures::of)
+            }.getOrNull() ?: WaitingCaptures.NONE
+            deps.reminderNotifier().notify(ReminderRules.message(today, leftToSpend, waiting), opensReview = waiting.any)
         }
         // This is a one-shot alarm: line up tomorrow's firing now that this one has run.
         deps.reminderScheduler().reschedule()
