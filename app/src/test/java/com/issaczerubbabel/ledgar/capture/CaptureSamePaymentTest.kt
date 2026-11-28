@@ -46,6 +46,7 @@ class CaptureSamePaymentTest {
 
     private val settings = object : CaptureSettingsSource {
         override suspend fun isEnabled() = true
+        override suspend fun readsBankEmails() = true
         override suspend fun categoryMapping() = emptyMap<String, String>()
     }
 
@@ -132,7 +133,12 @@ class CaptureSamePaymentTest {
         assertEquals(1, pending().size)
 
         // Another source, the same amount two seconds later, but its own reference: another payment.
-        ingestor.ingest(CaptureSource.EMAIL, "HDFC Bank InstaAlerts", hdfcSent("222222222222"), T0 + 2_000)
+        ingestor.ingest(
+            CaptureSource.EMAIL, "HDFC Bank InstaAlerts",
+            "You have done a UPI txn. Check details!\nDear Customer, Greetings from HDFC Bank! Rs.70.00 is debited from your " +
+                "account ending 1234 towards VPA xxxx@okaxis (SHOP) on 26-09-26. UPI transaction reference no.: 222222222222.",
+            T0 + 2_000
+        )
         assertEquals(2, pending().size)
     }
 

@@ -13,6 +13,18 @@ class CaptureAppsSenderTest {
         assertTrue(CaptureApps.looksLikeBankSender("AD-HDFCBK-T"))
         assertTrue(CaptureApps.looksLikeBankSender("JM-HDFCBN-S"))
         assertTrue(CaptureApps.looksLikeBankSender("VM-HDFCBK"))
+        assertTrue(CaptureApps.looksLikeBankSender("HDFC Bank InstaAlerts"))
+    }
+
+    @Test
+    fun gmailIsWatchedAndOnlyAnAdbPostStandsInForIt() {
+        assertTrue(CaptureApps.isWatched(CaptureApps.GMAIL))
+        // Debug builds read an adb post titled like a known sender as an email, and nothing else.
+        assertTrue(CaptureApps.isDebugEmail("com.android.shell", "HDFC Bank InstaAlerts"))
+        assertFalse(CaptureApps.isDebugEmail("com.android.shell", "AD-HDFCBK-T"))
+        assertFalse(CaptureApps.isDebugEmail(CaptureApps.GOOGLE_MESSAGES, "HDFC Bank InstaAlerts"))
+        // Amazon Pay's emails are read only once their parser lands (#181).
+        assertFalse(CaptureApps.looksLikeBankSender("Amazon Pay India"))
     }
 
     @Test
