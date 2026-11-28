@@ -18,11 +18,22 @@ val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
         version = "v1.8.1",
         date = "2026-11-28",
+        added = listOf(
+            "Budget: Repeats still due before payday, and a Daily pace that leaves room for them",
+            "Repeating: suggests repeats found in your Ledger, made a Repeat rule in one tap"
+        ),
+        changed = listOf(
+            "Daily reminder: says how many captures are waiting, and Review opens To review",
+            "Categories: Delete asks first when a Category is in use, and Undo brings it back"
+        ),
         fixed = listOf(
-            "Auto-capture: a saved rule no longer files captures under a Category you've removed"
+            "Add Transaction: saves on today's date when the screen was left open past midnight",
+            "Auto-capture: a saved rule no longer files captures under a Category you've removed",
+            "Budget: offers to raise spendable when Funds start mid-cycle, so Set aside isn't counted twice"
         ),
         developer = listOf(
-            "CategorizationPipeline takes categoriesByType and passes over a stale rule; withGuesses drops a kept guess whose Category is gone (#158)"
+            "CurrentDate source and LogDateState replace dates read once (#22); CyclePace is the one Daily pace (#135)",
+            "Pure RepeatFinder (#98), SpendableTopUp (#156), WaitingCaptures (#161) and Dropdown usage counts (#160), tested"
         )
     ),
     ChangelogRelease(

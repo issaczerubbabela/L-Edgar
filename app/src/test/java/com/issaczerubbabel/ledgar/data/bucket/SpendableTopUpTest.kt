@@ -56,7 +56,8 @@ class SpendableTopUpTest {
 
         assertEquals(35_000.0, after.leftToSpend, 0.0) // what v1.7.0 showed
         assertEquals(before.leftToSpend + topUp, after.leftToSpend, 0.0)
-        assertEquals(before.dailyPace + topUp / before.daysLeft, after.dailyPace, 0.001)
+        val paceBefore = CyclePace.dailyPace(before, stillDue = 0.0)
+        assertEquals(paceBefore + topUp / before.daysLeft, CyclePace.dailyPace(after, stillDue = 0.0), 0.001)
     }
 
     @Test
