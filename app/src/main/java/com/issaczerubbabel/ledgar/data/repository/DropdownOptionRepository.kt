@@ -1,5 +1,6 @@
 package com.issaczerubbabel.ledgar.data.repository
 
+import com.issaczerubbabel.ledgar.data.local.dao.DropdownUsage
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import kotlinx.coroutines.flow.Flow
 
@@ -17,6 +18,13 @@ interface DropdownOptionRepository {
     suspend fun addOptionIfAbsent(optionType: String, name: String): String?
     suspend fun update(option: DropdownOption)
     suspend fun delete(option: DropdownOption)
+
+    /**
+     * What uses [option]'s name: Transactions, Bucket routes, Merchant rules and Repeat rules for a
+     * Category (of its own type only: an Expense and an Income Category may share a name), Accounts
+     * for an Account group, and nothing for a Payment mode, which no Transaction stores.
+     */
+    suspend fun usage(option: DropdownOption): DropdownUsage
     suspend fun updateOptions(options: List<DropdownOption>)
     suspend fun overwriteAllOptions(options: List<DropdownOption>)
 }
