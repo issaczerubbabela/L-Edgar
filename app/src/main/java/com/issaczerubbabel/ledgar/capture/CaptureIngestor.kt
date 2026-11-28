@@ -7,6 +7,7 @@ import com.issaczerubbabel.ledgar.capture.categorize.CategorizationPipeline
 import com.issaczerubbabel.ledgar.capture.categorize.ConfidenceBand
 import com.issaczerubbabel.ledgar.capture.categorize.HistoryPredictor
 import com.issaczerubbabel.ledgar.capture.pair.LedgerMatchFinder
+import com.issaczerubbabel.ledgar.capture.parse.AlertReading
 import com.issaczerubbabel.ledgar.capture.parse.Direction
 import com.issaczerubbabel.ledgar.capture.parse.ParsedTxn
 import com.issaczerubbabel.ledgar.capture.parse.ParserRegistry
@@ -75,9 +76,13 @@ class CaptureIngestor @Inject constructor(
     ): IngestResult {
         if (!settings.isEnabled()) return IngestResult.Ignored("Auto-capture is off")
 
-        val parsed = registry.parse(sender, text) ?: run {
-            recordUnparsed(source, sender, text, nowMillis)
-            return IngestResult.Unparsed
+        val parsed = when (val reading = registry.read(sender, text)) {
+            is AlertReading.Payment -> reading.txn
+            AlertReading.NotAPayment -> return IngestResult.Ignored("Not a payment")
+            AlertReading.Unreadable -> {
+                recordUnparsed(source, sender, text, nowMillis)
+                return IngestResult.Unparsed
+            }
         }
 
         val accountId = parsed.accountHint?.let { aliasDao.getByAlias(it)?.accountId }

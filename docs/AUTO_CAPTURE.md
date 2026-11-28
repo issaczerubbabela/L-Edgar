@@ -152,15 +152,16 @@ same time, or it would be captured a second time.
 
 ## 4. Parsing
 
-`ParserRegistry` tries parsers in order and uses the first that claims the text: City Union Bank, HDFC,
-Axis, UPI apps, then a generic fallback. Each returns a `ParsedTxn` (amount, direction, merchant, account
-digits, reference, channel, and the alert's date if stated).
+`ParserRegistry.read` first drops a Not-a-payment alert (section 9), then tries parsers in order and uses
+the first that claims the text: City Union Bank, HDFC, Axis, UPI apps, then a generic fallback. Each returns
+a `ParsedTxn` (amount, direction, merchant, account digits, reference, channel, and the alert's date if
+stated).
 
 Formats covered by tests built from real (redacted) alerts:
 
 | Parser | Formats |
 | --- | --- |
-| HDFC | UPI send (`Sent Rs.70.00 From HDFC Bank A/C *1234 To Name On 26/09/26 Ref ...`); UPI ATM withdrawal; deposit narration (`INR ... deposited in HDFC Bank A/c XX1234 on 25-SEP-26 for PAYER CREDIT`) |
+| HDFC | UPI send (`Sent Rs.70.00 From HDFC Bank A/C *1234 To Name On 26/09/26 Ref ...`); UPI ATM withdrawal; deposit narration (`INR ... deposited in HDFC Bank A/c XX1234 on 25-SEP-26 for PAYER CREDIT`); `Credit Alert! Rs.X credited to HDFC Bank A/c XX1234 ...`; mandate debit (`UPI Mandate: Sent Rs.X from HDFC Bank A/c 1234 To PAYEE ...`); NEFT (`Amt Deducted! Rs.X from your HDFC Bank A/c XX1234 for NEFT txn ...`); NetBanking (`Payment Successful! Rs. X from A/c **…1234 to PAYEE via HDFC Bank NetBanking`, the payee is the merchant); RD (`RD Booked! Your HDFC Bank RD XX5678 ... for INR X` and `INR X debited from HDFC Bank XX1234 ... Info: RD through MOBILE-…5678`), both debits with the RD's digits as `counterpartyAccountHint`, so an Account alias on the RD can suggest a Transfer |
 | City Union Bank | `Your a/c no. XXXXXXXX1234 is credited/debited for Rs.X on 14-09-2026 and debited from/credited to a/c no. ... (UPI Ref no ...)`. Direction is always about "Your a/c"; the other account is only a counterparty hint |
 | Axis | UPI merchant debit, recognised by its `UPI/P2M/<ref>/<merchant>` narration because it never says "Axis"; IMPS credit |
 | Google Pay | Money received: title `NAME paid you ₹1.00`, text `Tap to view.` (CREDIT from NAME). Autopay: title `Payment successful`, text `Payment for Autopay of ₹2,000.00 to PAYEE was successful. Tap to view.` (DEBIT to PAYEE). Read off a real phone on 2026-11-28. Neither names the Account. Offers and cashback (`Up to ₹2,500 in welcome rewards`, `Earn flat ₹11 cashback`) are claimed by the parser but never parse, so they don't fall through to the generic parser |
@@ -322,13 +323,34 @@ also needs that other Account to exist and differ from the capture's own.
 - Tapping the notification opens the app normally, so the app lock still applies before anything is shown.
 - It is cancelled when the capture is resolved in the inbox.
 
-## 9. Unparsed alerts
+## 9. Unparsed and Not-a-payment alerts
 
-An alert no parser could read is kept only if it comes from a watched app or a bank-style SMS sender ID
+**Not-a-payment alerts** show an amount but report no money moving. `NotAPayment` holds the phrases, one
+pure tested list, and `ParserRegistry.read` checks them before any parser runs. A match is dropped
+completely: no capture and no Unparsed alert. The list covers:
+
+- payment requests (`has requested money`, `requested Rs. ... from you`);
+- an amount still to come (`INR 500.00 will be debited`, `will be deducted`, `will be refunded`);
+- mandates set up, announced or ended (`Mandate Set`, `Mandate Alert`, `mandate ... has been created` / `revoked`);
+- instalments due (`RD Installment Due`);
+- declined, failed or expired payments (`TXN DECLINED`, `has failed`, `has expired`);
+- refunds only initiated (`refund ... initiated`);
+- offers, including Google Pay's reward and loan notifications (`FREE 2GB`, `welcome bonus`,
+  `Up to ₹2,500 in welcome rewards`, `EMI starts at`, `Earn flat ₹11 cashback`, `cashback on ... recharge`),
+  and gaming offers (`Rs.50 Bonus to be credited`, `Credited Bonus with Rs.500`, `Prize Pool`).
+
+An alert that says money was credited (`has been credited`, `credited to your A/c`, `credited back to`) is
+never a Not-a-payment alert (money still to come, `can be credited to`, and `has been Credited Bonus` don't count), so a refund or cashback actually credited still parses, and so does a mandate's
+real debit (`UPI Mandate: Sent Rs....`), which no phrase names. A capture already waiting when a phrase is
+added stays in To review; only new alerts are dropped. Keep each phrase narrow, since a wrong match loses a payment without a trace. Some phrases are only tested on
+samples worded after real alerts; swap in the real one when it turns up.
+
+**Unparsed alerts.** An alert no parser could read is kept only if it comes from a watched app or a bank-style SMS sender ID
 (`AB-BANKID` or `AB-BANKID-S`), shows an amount, and is not an OTP. A friend's message, an alert with no amount
-and an OTP are never stored. Entries are deleted after 30 days and when capture is turned off. A promotional
-SMS from a bank-style sender that shows an amount is also kept, since it can't be told apart from a
-wording change; "Clear all" deals with those.
+and an OTP are never stored, and neither is a Not-a-payment alert. Entries are deleted after 30 days and when
+capture is turned off. A promotional SMS from a bank-style sender that shows an amount and matches none of
+the Not-a-payment phrases is still kept, since it can't be told apart from a wording change; "Clear all" deals
+with those, and a recurring one is worth a phrase in `NotAPayment`.
 
 ## 10. Data and privacy
 

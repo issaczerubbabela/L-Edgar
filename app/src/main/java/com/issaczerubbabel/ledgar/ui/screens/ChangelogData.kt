@@ -18,11 +18,16 @@ val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
         version = "v1.9.0",
         date = "2026-11-28",
+        added = listOf(
+            "Auto-capture: reads HDFC NEFT, NetBanking and RD debits, which landed under Alerts we couldn't read"
+        ),
         fixed = listOf(
+            "Auto-capture: payment requests, offers and game bonuses, mandates and pending refunds aren't captured",
             "Auto-capture: reads Google Pay's real notifications for money received and Autopay"
         ),
         developer = listOf(
-            "Auto-capture design for email, Amazon Pay and merged alerts (#176): Alert, Not-a-payment alert, ADR-0012"
+            "Auto-capture design for email, Amazon Pay and merged alerts (#176): Alert, Not-a-payment alert, ADR-0012",
+            "Auto-capture: NotAPayment phrase list checked by ParserRegistry.read before any parser (#177)"
         )
     ),
     ChangelogRelease(

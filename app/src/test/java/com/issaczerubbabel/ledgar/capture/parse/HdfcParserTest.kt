@@ -90,4 +90,71 @@ class HdfcParserTest {
         assertEquals(Direction.DEBIT, parsed.direction)
         assertEquals("swiggy.stores@axb", parsed.merchantRaw)
     }
+
+    @Test
+    fun parsesANeftDeduction() {
+        val parsed = parser.parse(
+            "Amt Deducted! Rs.5000.00 from your HDFC Bank A/c XX1234 for NEFT txn via HDFC Bank Online Banking " +
+                "Not you?Call 18002586161/SMS BLOCK OB to 7308080808"
+        )!!
+
+        assertEquals(5000.0, parsed.amount, 0.001)
+        assertEquals(Direction.DEBIT, parsed.direction)
+        assertEquals("1234", parsed.accountHint)
+        assertEquals(Channel.NEFT, parsed.channel)
+    }
+
+    @Test
+    fun parsesANetBankingPaymentWithThePayeeAsMerchant() {
+        val parsed = parser.parse(
+            "Payment Successful! Rs. 2500.00 from A/c **********1234 to PAYUAMAZON via HDFC Bank NetBanking. " +
+                "Not you?Call 18002586161/SMS BLOCK OB to 7308080808"
+        )!!
+
+        assertEquals(2500.0, parsed.amount, 0.001)
+        assertEquals(Direction.DEBIT, parsed.direction)
+        assertEquals("1234", parsed.accountHint)
+        assertEquals("PAYUAMAZON", parsed.merchantRaw)
+    }
+
+    @Test
+    fun parsesAnRdBookingAsADebitToTheRd() {
+        val parsed = parser.parse("RD Booked! Your HDFC Bank RD XX5678 is booked on 12OCT-26 for INR 2000")!!
+
+        assertEquals(2000.0, parsed.amount, 0.001)
+        assertEquals(Direction.DEBIT, parsed.direction)
+        assertEquals("5678", parsed.counterpartyAccountHint)
+        assertNull(parsed.accountHint)
+    }
+
+    @Test
+    fun parsesAnRdInstalmentThroughMobileAsADebitToTheRd() {
+        val parsed = parser.parse(
+            "UPDATE: INR 2,000.00 debited from HDFC Bank XX1234 on 12-NOV-26 Info: RD through MOBILE-XXXXXXXXXX5678 " +
+                ":<NAME>. Avl bal:INR 10,000.00"
+        )!!
+
+        assertEquals(2000.0, parsed.amount, 0.001)
+        assertEquals(Direction.DEBIT, parsed.direction)
+        assertEquals("1234", parsed.accountHint)
+        assertEquals("5678", parsed.counterpartyAccountHint)
+    }
+
+    @Test
+    fun stillParsesACreditAlertAndAMandateDebit() {
+        val credit = parser.parse(
+            "Credit Alert! Rs.500.00 credited to HDFC Bank A/c XX1234 on 12-11-26 from VPA xxxxxxxxxx@ybl (UPI 111111111111)"
+        )!!
+        assertEquals(500.0, credit.amount, 0.001)
+        assertEquals(Direction.CREDIT, credit.direction)
+        assertEquals("1234", credit.accountHint)
+
+        val mandate = parser.parse(
+            "UPI Mandate: Sent Rs.2000.00 from HDFC Bank A/c 1234 To ACME BROKING LTD On 05/11/26 Ref 111111111111 Not You? Call 18002586161"
+        )!!
+        assertEquals(2000.0, mandate.amount, 0.001)
+        assertEquals(Direction.DEBIT, mandate.direction)
+        assertEquals("1234", mandate.accountHint)
+        assertEquals("ACME BROKING LTD", mandate.merchantRaw)
+    }
 }
