@@ -1,12 +1,16 @@
 package com.issaczerubbabel.ledgar.capture.parse
 
 /**
- * Google Pay / Paytm payment notifications. Google Pay's layout is taken from a description of its
- * notifications ("Paid ₹500 to X." then "₹500.00 debited from Bank Account (XXXX1234). UPI Ref:
- * ..."), not from a verified capture off a real phone, so its golden tests only prove the parser
- * matches that description. Paytm has no sample at all yet and is matched by the same patterns
- * on trust. [sender] is the posting app's label; the package-name mapping belongs to the
- * notification listener.
+ * Google Pay / Paytm payment notifications, as the listener hands them over: the title, a
+ * newline, then the text. Google Pay's two formats were read off a real phone:
+ *
+ * - money received: `NAME paid you ₹1.00` / `Tap to view.` (the amount is only in the title)
+ * - Autopay: `Payment successful` / `Payment for Autopay of ₹2,000.00 to PAYEE was successful. Tap to view.`
+ *
+ * Google Pay posts nothing for an ordinary payment sent, so the bank's alert covers that, and it
+ * never names the Account. Anything else it posts with an amount (offers, cashback, loans) is not a
+ * payment and parses to null. Paytm has no sample yet and is matched by the same patterns on
+ * trust. [sender] is the posting app's label; the package-name mapping belongs to the listener.
  */
 class UpiAppParser : TransactionParser {
 
@@ -14,24 +18,22 @@ class UpiAppParser : TransactionParser {
         SENDER_HINT.containsMatchIn(sender) && ParsingUtils.AMOUNT.containsMatchIn(text)
 
     override fun parse(text: String): ParsedTxn? {
-        val normalized = ParsingUtils.normalizeWhitespace(text)
-        if (ParsingUtils.OTP.containsMatchIn(normalized)) return null
-        val amount = ParsingUtils.amountOf(normalized) ?: return null
-
-        val paid = PAID_TO.find(normalized)
-        val received = RECEIVED_FROM.find(normalized)
-        val direction = when {
-            paid != null -> Direction.DEBIT
-            received != null -> Direction.CREDIT
+        if (ParsingUtils.OTP.containsMatchIn(text)) return null
+        // The received pattern is the title line alone, so it needs the newline that normalising removes.
+        val received = PAID_YOU.find(text)
+        val autopay = AUTOPAY.find(ParsingUtils.normalizeWhitespace(text))
+        val (match, direction) = when {
+            received != null -> received to Direction.CREDIT
+            autopay != null -> autopay to Direction.DEBIT
             else -> return null
         }
 
         return ParsedTxn(
-            amount = amount,
+            amount = match.groups["amount"]!!.value.replace(",", "").toDoubleOrNull() ?: return null,
             direction = direction,
-            merchantRaw = (paid ?: received)?.groupValues?.get(1)?.trim(),
-            accountHint = MASKED_ACCOUNT.find(normalized)?.groupValues?.get(1),
-            refNumber = ParsingUtils.REF.find(normalized)?.groupValues?.get(1),
+            merchantRaw = match.groups["party"]!!.value.trim(),
+            accountHint = null,
+            refNumber = ParsingUtils.REF.find(text)?.groupValues?.get(1),
             channel = Channel.UPI
         )
     }
@@ -39,21 +41,18 @@ class UpiAppParser : TransactionParser {
     companion object {
         private val SENDER_HINT = Regex("""google pay|gpay|paytm""", RegexOption.IGNORE_CASE)
 
-        private const val AMOUNT_PART = """(?:₹|rs\.?|inr)\s*[\d,]+(?:\.\d{1,2})?"""
+        private const val NAMED_AMOUNT = """(?:₹|rs\.?|inr)\s*(?<amount>[\d,]+(?:\.\d{1,2})?)"""
 
-        /** The payee runs until the next sentence starts with an amount, or the text ends. */
-        private const val PAYEE_END = """(?=\.?\s+(?:₹|rs\.?|inr)\s*\d|\.?$)"""
-
-        private val PAID_TO = Regex(
-            """\bpaid\s+$AMOUNT_PART\s+to\s+(.+?)$PAYEE_END""",
-            RegexOption.IGNORE_CASE
-        )
-        private val RECEIVED_FROM = Regex(
-            """\breceived\s+$AMOUNT_PART\s+from\s+(.+?)$PAYEE_END""",
-            RegexOption.IGNORE_CASE
+        /** The title line on its own: "NAME paid you ₹1.00". */
+        private val PAID_YOU = Regex(
+            """^\s*(?<party>\S.*?)\s+paid\s+you\s+$NAMED_AMOUNT\s*$""",
+            setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE)
         )
 
-        /** "Bank Account (XXXX1234)" */
-        private val MASKED_ACCOUNT = Regex("""\(\s*[x*]+(\d{3,4})\s*\)""", RegexOption.IGNORE_CASE)
+        /** "Payment for Autopay of ₹2,000.00 to PAYEE was successful." */
+        private val AUTOPAY = Regex(
+            """\bpayment\s+for\s+autopay\s+of\s+$NAMED_AMOUNT\s+to\s+(?<party>.+?)\s+was\s+successful\b""",
+            RegexOption.IGNORE_CASE
+        )
     }
 }

@@ -83,6 +83,6 @@ class AlertDateTest {
             LocalDate.of(2024, 12, 19),
             registry.parse("AXISBK", "INR 100.00 was debited from your A/c no. XX1236 on 19-12-24 at 10:19:54 IST via UPI/P2M/435476373861/Shri Ujagar Fuels. Avail. Bal: INR 5,420.10.")!!.txnDate
         )
-        assertNull(registry.parse("Google Pay", "Paid Rs.500 to Ramesh Kumar. Rs.500.00 debited from Bank Account (XXXX1234).")!!.txnDate)
+        assertNull(registry.parse("Google Pay", "A B KUMAR paid you ₹1.00\nTap to view.")!!.txnDate)
     }
 }

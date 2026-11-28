@@ -104,7 +104,7 @@ class CaptureFlowInstrumentedTest {
 
     @Test
     fun identicalTextWithoutARefIsOnlyARepeatWithinTenMinutes() = runBlocking {
-        val chai = "Paid ₹20 to Chai Wala."
+        val chai = "A B KUMAR paid you ₹20.00\nTap to view."
         val t0 = 1_000_000_000L
         ingestor.ingest(CaptureSource.NOTIFICATION, "Google Pay", chai, t0)
 
@@ -331,7 +331,7 @@ class CaptureFlowInstrumentedTest {
     @Test
     fun readingTheSameNotificationAgainAtTheSamePostTimeIsNotASecondCapture() = runBlocking {
         val postedAt = 1_800_000_000_000L
-        val text = "Paid Rs.500 to Ramesh Kumar."
+        val text = "A B KUMAR paid you ₹500.00\nTap to view."
         ingestor.ingest(CaptureSource.NOTIFICATION, "Google Pay", text, postedAt)
 
         // What a listener reconnect does: the same notification, read again much later.

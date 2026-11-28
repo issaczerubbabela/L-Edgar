@@ -8,6 +8,10 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 ## [1.9.0] - 2026-11-28
 
+### Fixed
+
+- Auto-capture: reads Google Pay's real notifications for money received and Autopay
+
 ### Developer
 
 - Auto-capture design for email, Amazon Pay and merged alerts (#176): Alert, Not-a-payment alert, ADR-0012
