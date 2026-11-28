@@ -727,7 +727,8 @@ fun AppNavigation(
                     onStartCycle = {
                         navController.navigate(Screen.StartCycle.route) { launchSingleTop = true }
                     },
-                    onOpenFund = { fundId -> navController.navigate("fund/$fundId") { launchSingleTop = true } }
+                    onOpenFund = { fundId -> navController.navigate("fund/$fundId") { launchSingleTop = true } },
+                    onManageRepeats = { navController.navigate(MoreFeatures.REPEATING_ROUTE) { launchSingleTop = true } }
                 )
             }
             composable(Screen.StartCycle.route) {

@@ -513,7 +513,10 @@ private fun CycleHeadline(s: StatsUiState, cycle: com.issaczerubbabel.ledgar.vie
     CardTitle(if (cycle.isRunning) "Left to spend" else "Left unspent")
     CountingAmount(left, rupees, MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold), if (left < 0) colors.over else Color.Unspecified)
     val sub = if (cycle.isRunning && summary.daysLeft > 0) {
-        "of ${rupees(summary.cycle.spendableAmount)} · ${summary.daysLeft} days left · ${rupees(summary.dailyPace)} a day"
+        // The same Daily pace as the Budget tab: after the Repeats still due before the cycle ends.
+        val pace = cycle.pace
+        "of ${rupees(summary.cycle.spendableAmount)} · ${summary.daysLeft} days left · ${rupees(pace.dailyPace)} a day" +
+            if (pace.isAfterRepeats) " after repeats" else ""
     } else {
         // Spent below counts Expenses paid from Funds too; this figure is only what came out of the cycle.
         val spent = if (summary.drawnFromFunds > 0) "${rupees(summary.totalSpent)} spent from this cycle" else "spent ${rupees(summary.totalSpent)}"

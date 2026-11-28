@@ -11,6 +11,7 @@ import com.issaczerubbabel.ledgar.data.repository.BucketBudgetRepository
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
 import com.issaczerubbabel.ledgar.data.repository.FundRepository
+import com.issaczerubbabel.ledgar.data.repository.RecurringRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.text.NumberFormat
 import java.time.LocalDate
@@ -58,6 +59,7 @@ class StatsViewModel @Inject constructor(
     dropdownOptionRepository: DropdownOptionRepository,
     bucketBudgetRepository: BucketBudgetRepository,
     fundRepository: FundRepository,
+    recurringRepository: RecurringRepository,
     themePreferenceRepository: ThemePreferenceRepository
 ) : ViewModel() {
 
@@ -103,11 +105,11 @@ class StatsViewModel @Inject constructor(
     private val inputs: Flow<StatsInput> = combine(
         expenseRepository.getAllRecords(),
         accountRepository.getAllAccounts(),
-        combine(roles, fundRepository.observeSnapshot(), ::Pair),
+        combine(roles, fundRepository.observeSnapshot(), recurringRepository.observeRules(), ::Triple),
         combine(cycles, periodFlow, ::Pair),
         bucketsForPeriod
-    ) { records, accounts, (roles, funds), (cycles, period), (buckets, assignments) ->
-        StatsInput(records, accounts, roles, cycles, period, LocalDate.now(), buckets, assignments, funds)
+    ) { records, accounts, (roles, funds, repeats), (cycles, period), (buckets, assignments) ->
+        StatsInput(records, accounts, roles, cycles, period, LocalDate.now(), buckets, assignments, funds, repeats)
     }
 
     val uiState: StateFlow<StatsUiState> = combine(inputs, effectiveFilter) { input, f ->

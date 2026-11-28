@@ -29,6 +29,21 @@ class RepeatScheduleTest {
     )
 
     @Test
+    fun `dates through a day go past the catch-up cap and stop at an end date`() {
+        val weeklyFarBehind = rule(nextDate = "2026-01-05", frequency = RecurrenceFrequency.WEEKLY, anchorDay = 1)
+        val endsInMarch = rule(nextDate = "2026-01-01", endDate = "2026-03-15")
+
+        val weekly = RepeatSchedule.datesThrough(weeklyFarBehind, LocalDate.of(2026, 12, 31))
+
+        assertEquals(52, weekly.size)
+        assertEquals(LocalDate.of(2026, 12, 28), weekly.last())
+        assertEquals(
+            listOf(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 2, 1), LocalDate.of(2026, 3, 1)),
+            RepeatSchedule.datesThrough(endsInMarch, LocalDate.of(2026, 12, 31))
+        )
+    }
+
+    @Test
     fun `an Ask me first rule with a due date waits, oldest first`() {
         val later = rule(id = 1, nextDate = "2026-10-10", autoAdd = false)
         val older = rule(id = 2, nextDate = "2026-09-01", autoAdd = false)

@@ -8,7 +8,9 @@ import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.Fund
 import com.issaczerubbabel.ledgar.data.local.entity.FundHolding
 import com.issaczerubbabel.ledgar.data.local.entity.HoldingKind
+import com.issaczerubbabel.ledgar.data.local.entity.RecurringRule
 import com.issaczerubbabel.ledgar.fund.FundsSnapshot
+import com.issaczerubbabel.ledgar.util.RecurrenceFrequency
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -360,6 +362,26 @@ class StatsReportTest {
 
         assertEquals(18000.0, result.totals.spent, 0.0)
         assertEquals(43000.0 - result.totals.spent, result.cycle!!.summary.leftToSpend, 0.0)
+    }
+
+    @Test
+    fun aRunningCyclesDailyPaceLeavesRoomForRepeatsStillDueLikeTheBudgetTab() {
+        val cycle = cycle("2026-08-25", "2026-09-24", 43000.0).copy(id = 7)
+        val today = LocalDate.of(2026, 9, 14)
+        val period = StatsPeriod.cycleOn(today, listOf(cycle), today)!!
+        val phone = RecurringRule(
+            type = "Expense", category = "Phone", description = "Phone", amount = 1000.0, accountId = 4L, remarks = "",
+            frequency = RecurrenceFrequency.MONTHLY, anchorDay = 20, startDate = "2026-01-20", nextDate = "2026-09-20",
+            createdAt = "2026-01-20"
+        )
+        val input = StatsInput(listOf(expense("2026-09-01", 18000.0, "Rent")), accounts, roles, listOf(cycle), period, today, repeats = listOf(phone))
+
+        val view = StatsReport.build(input).cycle!!
+
+        // (₹25,000 left − ₹1,000 phone bill on the 20th) over the 10 days after the 14th.
+        assertEquals(25000.0, view.summary.leftToSpend, 0.0)
+        assertEquals(1000.0, view.pace.stillDueTotal, 0.0)
+        assertEquals(2400.0, view.pace.dailyPace, 0.0001)
     }
 
     @Test
