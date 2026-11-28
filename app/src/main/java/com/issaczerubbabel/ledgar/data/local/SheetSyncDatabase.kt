@@ -20,6 +20,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.BucketCategory
 import com.issaczerubbabel.ledgar.data.local.entity.Budget
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetBucket
 import com.issaczerubbabel.ledgar.data.local.entity.BudgetCycle
+import com.issaczerubbabel.ledgar.data.local.entity.CaptureAlert
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
@@ -45,6 +46,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
         BudgetBucket::class,
         BucketCategory::class,
         CapturedTransaction::class,
+        CaptureAlert::class,
         MerchantRule::class,
         AccountAlias::class,
         UnparsedAlert::class,
@@ -58,7 +60,7 @@ import com.issaczerubbabel.ledgar.data.local.entity.UnparsedAlert
         FundHolding::class,
         FundPlan::class
     ],
-    version = 28,
+    version = 29,
     exportSchema = false
 )
 abstract class SheetSyncDatabase : RoomDatabase() {

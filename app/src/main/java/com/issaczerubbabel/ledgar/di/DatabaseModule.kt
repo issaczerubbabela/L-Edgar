@@ -201,6 +201,13 @@ object DatabaseModule {
         }
     }
 
+    /** A capture can have several Alerts: adds `capture_alerts`, one row per existing capture (ADR-0012). */
+    internal val MIGRATION_28_29 = object : Migration(28, 29) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            CaptureMigration.upgradeTo29(db)
+        }
+    }
+
     private fun columnsOf(db: SupportSQLiteDatabase, table: String): Set<String> =
         db.query("PRAGMA table_info($table)").use { cursor ->
             val nameColumn = cursor.getColumnIndexOrThrow("name")
@@ -351,6 +358,7 @@ object DatabaseModule {
             .addMigrations(MIGRATION_25_26)
             .addMigrations(MIGRATION_26_27)
             .addMigrations(MIGRATION_27_28)
+            .addMigrations(MIGRATION_28_29)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .addCallback(callback)
             .build()

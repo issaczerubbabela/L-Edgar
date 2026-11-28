@@ -2,6 +2,7 @@ package com.issaczerubbabel.ledgar.data.repository
 
 import androidx.room.withTransaction
 import com.issaczerubbabel.ledgar.capture.CaptureReguesser
+import com.issaczerubbabel.ledgar.capture.SamePaymentSplitter
 import com.issaczerubbabel.ledgar.capture.CaptureTrace
 import com.issaczerubbabel.ledgar.capture.bestEffort
 import com.issaczerubbabel.ledgar.capture.categorize.MerchantRuleTeacher
@@ -18,6 +19,7 @@ import com.issaczerubbabel.ledgar.data.local.dao.ExpenseDao
 import com.issaczerubbabel.ledgar.data.local.dao.MerchantRuleDao
 import com.issaczerubbabel.ledgar.data.local.dao.UnparsedAlertDao
 import com.issaczerubbabel.ledgar.data.local.entity.AccountAlias
+import com.issaczerubbabel.ledgar.data.local.entity.CaptureAlert
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRule
@@ -37,7 +39,9 @@ class CaptureRepositoryImpl @Inject constructor(
     private val aliasDao: AccountAliasDao,
     private val expenseDao: ExpenseDao,
     private val unparsedDao: UnparsedAlertDao,
-    private val reguesser: CaptureReguesser
+    private val reguesser: CaptureReguesser,
+    /** The ingestor in the app; a test that never splits can leave it out. */
+    private val splitter: SamePaymentSplitter = SamePaymentSplitter {}
 ) : CaptureRepository {
 
     private val ledgerMatches = LedgerMatchFinder(expenseDao, captureDao)
@@ -47,6 +51,9 @@ class CaptureRepositoryImpl @Inject constructor(
 
     override fun observePendingCount(): Flow<Int> = captureDao.observePendingCount()
 
+    override fun observePendingAlerts(): Flow<Map<Long, List<CaptureAlert>>> =
+        captureDao.observePendingAlerts().map { alerts -> alerts.groupBy { it.captureId } }
+
     override suspend fun getById(captureId: Long): CapturedTransaction? = captureDao.getById(captureId)
 
     override fun observeRenames(): Flow<Map<MerchantRuleKey, String>> =
@@ -55,10 +62,9 @@ class CaptureRepositoryImpl @Inject constructor(
         }
 
     override suspend fun titleFor(capture: CapturedTransaction): String =
-        capture.displayTitle(
-            CaptureTrace.parse(capture.traceJson)
-                .titleBeforeBankText(capture.merchantNorm?.let { merchantRuleDao.get(it, capture.direction)?.description })
-        )
+        CaptureTrace.parse(capture.traceJson).let { trace ->
+            capture.displayTitle(trace.titleBeforeBankText(trace.renameOf(capture.merchantNorm) { merchantRuleDao.get(it, capture.direction)?.description }))
+        }
 
     override suspend fun confirm(captureId: Long, edits: CaptureEdits): Long? {
         val expenseId = confirmInTransaction(captureId, edits)
@@ -246,6 +252,12 @@ class CaptureRepositoryImpl @Inject constructor(
             val capture = captureDao.getById(id)?.takeIf { it.isWaiting() } ?: return@forEach
             captureDao.updateTrace(id, CaptureTrace.parse(capture.traceJson).copy(splitFromTransfer = true).toJson())
         }
+    }
+
+    override suspend fun splitSamePayment(captureId: Long) {
+        splitter.splitSamePayment(captureId)
+        // Each capture now has only its own Alert's facts, so its guesses change with them.
+        reguessQuietly()
     }
 
     override suspend fun dismiss(captureId: Long) = captureDao.markDismissed(captureId)

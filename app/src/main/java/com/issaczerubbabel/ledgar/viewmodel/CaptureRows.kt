@@ -4,11 +4,16 @@ import com.issaczerubbabel.ledgar.capture.CaptureTrace
 import com.issaczerubbabel.ledgar.capture.categorize.ConfidenceBand
 import com.issaczerubbabel.ledgar.capture.categorize.DescriptionGuesser
 import com.issaczerubbabel.ledgar.capture.notify.displayTitle
+import com.issaczerubbabel.ledgar.capture.source.AlertSource
+import com.issaczerubbabel.ledgar.data.local.entity.CaptureAlert
 import com.issaczerubbabel.ledgar.data.local.entity.CapturedTransaction
 import com.issaczerubbabel.ledgar.data.local.entity.ExpenseRecord
 import com.issaczerubbabel.ledgar.data.local.entity.MerchantRuleKey
 import com.issaczerubbabel.ledgar.data.repository.CaptureEdits
 import com.issaczerubbabel.ledgar.util.TransactionType
+
+/** One Alert as the card's Original text shows it: where it came from ("SMS from CUB", "Google Pay") and what it said. */
+data class OriginalText(val label: String, val text: String)
 
 /** One pending capture with whatever the user has already changed on it. */
 data class CaptureRowUi(
@@ -49,9 +54,14 @@ data class CaptureRowUi(
      * that looks like its other half. One row stands for both: Confirm Transfer saves one Transfer
      * from this row's Account to the partner's and resolves both, and Split shows them apart again.
      */
-    val transferPartner: CaptureRowUi? = null
+    val transferPartner: CaptureRowUi? = null,
+    /** Every Alert the capture was read from, in the order they arrived (ADR-0012). */
+    val originals: List<OriginalText> = emptyList()
 ) {
     val isTransferSuggestion: Boolean get() = transferPartner != null
+
+    /** Merged from several Alerts, so Not the same payment can split it back. */
+    val isMerged: Boolean get() = originals.size > 1
 
     /** The merchant's name for "Always use": its rename or the bank's text, never a guessed Description. */
     val merchantTitle: String get() = if (titleIsGuess) bankTitle else title
@@ -142,7 +152,9 @@ object CaptureRows {
         renames: Map<MerchantRuleKey, String>,
         knownAccountIds: Set<Long>,
         why: String? = CaptureTrace.parse(capture.traceJson).whyText,
-        match: ExpenseRecord? = null
+        match: ExpenseRecord? = null,
+        /** The capture's Alerts; none known means the one its own columns describe. */
+        alerts: List<CaptureAlert> = emptyList()
     ): CaptureRowUi {
         val trace = CaptureTrace.parse(capture.traceJson)
         val suggested = suggestedType(capture)
@@ -154,7 +166,7 @@ object CaptureRows {
         val otherAccountId = if (isTransfer) edit?.otherAccountId ?: suggestedOther.takeIf { onSuggestedType } else null
         val pickedByUser = edit?.category != null || edit?.otherAccountId != null
         val hasSuggestion = onSuggestedType && (capture.suggestedCategory != null || suggestedOther != null)
-        val rename = capture.merchantNorm?.let { renames[MerchantRuleKey(it, capture.direction)] }?.trim()?.takeIf { it.isNotEmpty() }
+        val rename = trace.renameOf(capture.merchantNorm) { renames[MerchantRuleKey(it, capture.direction)] }
         val bankTitle = capture.displayTitle()
         // A cleared field means the bank's own text, which also forgets an earlier rename.
         val title = edit?.description?.trim()?.ifEmpty { bankTitle } ?: capture.displayTitle(trace.titleBeforeBankText(rename))
@@ -183,7 +195,9 @@ object CaptureRows {
                 .filterNot { it.equals(title, ignoreCase = true) }
                 .take(DescriptionGuesser.MAX_ALTERNATIVES),
             accountIsGuess = guessedAccount != null,
-            match = match
+            match = match,
+            originals = alerts.map { OriginalText(AlertSource.of(it.source, it.sender).label, it.rawText) }
+                .ifEmpty { listOf(OriginalText(AlertSource.of(capture.sources.substringBefore(','), capture.sender).label, capture.rawText)) }
         )
     }
 

@@ -235,7 +235,7 @@ class CaptureTransferSuggestionTest {
     }
 
     private fun ingestor() = CaptureIngestor(
-        db.captureDao(), db.accountAliasDao(), DropdownOptionRepositoryImpl(db.dropdownOptionDao()),
+        db, db.captureDao(), db.accountAliasDao(), DropdownOptionRepositoryImpl(db.dropdownOptionDao()),
         CategorizationPipeline(KeywordDictionary(emptyMap())) { db.merchantRuleDao().get(it) }, settings, db.unparsedAlertDao(),
         RoomCaptureHistorySource(db.expenseDao(), db.accountAliasDao()), LedgerMatchFinder(db.expenseDao(), db.captureDao())
     )

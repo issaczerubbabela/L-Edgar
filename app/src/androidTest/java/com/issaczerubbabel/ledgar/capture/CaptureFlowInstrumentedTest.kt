@@ -67,7 +67,7 @@ class CaptureFlowInstrumentedTest {
             db.merchantRuleDao().get(it)
         }
         ingestor = CaptureIngestor(
-            db.captureDao(), db.accountAliasDao(), DropdownOptionRepositoryImpl(db.dropdownOptionDao()), pipeline, settings, db.unparsedAlertDao(),
+            db, db.captureDao(), db.accountAliasDao(), DropdownOptionRepositoryImpl(db.dropdownOptionDao()), pipeline, settings, db.unparsedAlertDao(),
             RoomCaptureHistorySource(db.expenseDao(), db.accountAliasDao()),
             LedgerMatchFinder(db.expenseDao(), db.captureDao())
         )

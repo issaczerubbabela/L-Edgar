@@ -57,13 +57,21 @@ class BankNotificationListener : NotificationListenerService() {
             // The notification's own post time, not "now": reading the shade again after a reconnect
             // must give the same alert the same time, or it would be captured a second time.
             val result = runCatching { ingestor.ingest(CaptureSource.NOTIFICATION, sender, text, sbn.postTime) }
-            result.getOrNull()?.let { if (it is IngestResult.Captured && it.shouldNotify) runCatching { notifier.notify(it.id) } }
+            // A payment notifies once: a merged Alert only when the merge first made it worth one (ADR-0012).
+            val notifyId = when (val ingested = result.getOrNull()) {
+                is IngestResult.Captured -> ingested.id.takeIf { ingested.shouldNotify }
+                is IngestResult.Merged -> ingested.id.takeIf { ingested.shouldNotify }
+                else -> null
+            }
+            notifyId?.let { runCatching { notifier.notify(it) } }
             Log.d(TAG, "${sbn.packageName}: " + result.fold({ describe(it) }, { "failed: ${it.javaClass.simpleName}" }))
         }
     }
 
     private fun describe(result: IngestResult): String = when (result) {
         is IngestResult.Captured -> "captured (${result.band})"
+        is IngestResult.Merged -> "merged into a capture (${result.band})"
+        is IngestResult.AttachedLate -> "attached to a resolved capture"
         is IngestResult.Duplicate -> "duplicate"
         is IngestResult.Unparsed -> "not a transaction"
         is IngestResult.Ignored -> "ignored (${result.reason})"

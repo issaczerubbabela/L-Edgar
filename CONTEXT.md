@@ -176,6 +176,9 @@ _Avoid_: message, notification (as the domain noun)
 One payment the app has read from one or more Alerts but not yet turned into a Transaction. Alerts from different Alert sources about the same payment become one Captured transaction (ADR-0012). It waits in the review inbox until the user acts on it.
 _Avoid_: pending transaction, alert, capture (as a standalone noun)
 
+**Not the same payment**:
+The user's decision that a Captured transaction merged from several Alerts is really several payments. It splits the capture into one per Alert, and those are never merged with each other again.
+
 **Not-a-payment alert**:
 An Alert that shows an amount but reports no money moving: a payment request, a mandate set up or revoked, a deduction still to come, an instalment due, a declined or failed payment, a refund only initiated, or an offer. It is dropped: never a Captured transaction and never an Unparsed alert.
 _Avoid_: promo, false positive

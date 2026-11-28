@@ -5,11 +5,12 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.issaczerubbabel.ledgar.capture.categorize.Categorization
 import com.issaczerubbabel.ledgar.capture.categorize.DescriptionGuess
+import com.issaczerubbabel.ledgar.capture.source.AlertSource
 
 /**
  * What the predictor decided for a Captured transaction, kept in its `traceJson`: the step that
  * chose the Category and why, the Suggested description with its alternatives, and an Account
- * guessed from the source app. Only guesses live here, plus [splitFromTransfer]; what the user
+ * guessed from the source app. Only guesses live here, plus [splitFromTransfer] and [keptApartFrom]; what the user
  * changes on a card stays in the inbox until Confirm, so re-guessing this never overwrites a user's choice.
  *
  * Built and read with Gson's tree API rather than reflection, so R8 can't break it.
@@ -28,7 +29,17 @@ data class CaptureTrace(
      * again. The one decision kept here rather than in the inbox, so it survives a restart without a
      * migration; re-guessing carries it over (see [withGuesses]).
      */
-    val splitFromTransfer: Boolean = false
+    val splitFromTransfer: Boolean = false,
+    /**
+     * The Alert sources the user said are "Not the same payment" as this capture, so an Alert from
+     * one of them never merges into it (ADR-0012). Kept across re-guesses like [splitFromTransfer].
+     */
+    val keptApartFrom: Set<AlertSource> = emptySet(),
+    /**
+     * The bank's own merchant text, normalised, when another Alert source named the payee
+     * differently (ADR-0012): a rename saved under it still titles the card.
+     */
+    val alsoKnownAs: String? = null
 ) {
     /** Every guessed Description, the title first. */
     val descriptionGuesses: List<String> get() = listOfNotNull(descriptionGuess) + descriptionAlternatives
@@ -44,6 +55,10 @@ data class CaptureTrace(
         descriptionGuess != null && (rename.isNullOrBlank() || descriptionPerPayment)
 
     /** The capture's title before the bank's own text: the winning one of the guess and the [rename]. */
+    /** The merchant's rename: under [merchantNorm], else under the bank's own text ([alsoKnownAs]). */
+    inline fun renameOf(merchantNorm: String?, renameUnder: (String) -> String?): String? =
+        listOfNotNull(merchantNorm, alsoKnownAs).firstNotNullOfOrNull { name -> renameUnder(name)?.trim()?.takeIf { it.isNotEmpty() } }
+
     fun titleBeforeBankText(rename: String?): String? =
         if (guessWinsOver(rename)) descriptionGuess else rename?.takeIf { it.isNotBlank() }
 
@@ -58,6 +73,8 @@ data class CaptureTrace(
         guessedAccountId?.let { addProperty("guessedAccountId", it) }
         if (descriptionPerPayment) addProperty("perPayment", true)
         if (splitFromTransfer) addProperty("split", true)
+        alsoKnownAs?.let { addProperty("aka", it) }
+        if (keptApartFrom.isNotEmpty()) add("apart", JsonArray().apply { keptApartFrom.map { it.key }.sorted().forEach { add(it) } })
     }.toString()
 
     companion object {
@@ -86,7 +103,11 @@ data class CaptureTrace(
                     .orEmpty(),
                 guessedAccountId = runCatching { obj.get("guessedAccountId")?.takeIf { it.isJsonPrimitive }?.asLong }.getOrNull(),
                 descriptionPerPayment = runCatching { obj.get("perPayment")?.takeIf { it.isJsonPrimitive }?.asBoolean }.getOrNull() == true,
-                splitFromTransfer = runCatching { obj.get("split")?.takeIf { it.isJsonPrimitive }?.asBoolean }.getOrNull() == true
+                splitFromTransfer = runCatching { obj.get("split")?.takeIf { it.isJsonPrimitive }?.asBoolean }.getOrNull() == true,
+                alsoKnownAs = string("aka"),
+                keptApartFrom = obj.get("apart")?.takeIf { it.isJsonArray }?.asJsonArray
+                    ?.mapNotNull { e -> e.takeIf { it.isJsonPrimitive }?.asString?.let(AlertSource::fromKey) }
+                    .orEmpty().toSet()
             )
         }
     }

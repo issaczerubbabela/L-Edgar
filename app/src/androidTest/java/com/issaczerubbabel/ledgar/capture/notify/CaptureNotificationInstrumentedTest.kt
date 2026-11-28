@@ -66,7 +66,7 @@ class CaptureNotificationInstrumentedTest {
             MerchantRule("SHRI UJAGAR FUELS", "DEBIT", "Fuel", "Expense", origin = MerchantRuleOrigin.USER, updatedAt = 0)
         )
         ingestor = CaptureIngestor(
-            db.captureDao(), db.accountAliasDao(), DropdownOptionRepositoryImpl(db.dropdownOptionDao()),
+            db, db.captureDao(), db.accountAliasDao(), DropdownOptionRepositoryImpl(db.dropdownOptionDao()),
             CategorizationPipeline(KeywordDictionary(emptyMap())) { db.merchantRuleDao().get(it) }, settings, db.unparsedAlertDao(),
             RoomCaptureHistorySource(db.expenseDao(), db.accountAliasDao()),
             LedgerMatchFinder(db.expenseDao(), db.captureDao())

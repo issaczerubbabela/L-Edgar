@@ -328,6 +328,7 @@ fun CaptureInboxScreen(
                             onConfirm = { vm.confirm(row) },
                             onLink = { vm.link(row) },
                             onDismiss = { vm.dismiss(row) },
+                            onNotSamePayment = if (row.isMerged) ({ vm.notSamePayment(row) }) else null,
                             // ADR-0008: a shared trip payment becomes a Trip expense, never a full personal Transaction.
                             onAddToTrip = activeTrip?.takeIf { row.type == TransactionType.EXPENSE }?.let { trip -> { onAddToTrip(trip.tripId, row.capture.id) } },
                             modifier = Modifier.animateItem()
@@ -507,6 +508,8 @@ private fun SwipeableCaptureCard(
     /** Same one: offered instead of Confirm when the capture may already be in the Ledger. */
     onLink: () -> Unit,
     onDismiss: () -> Unit,
+    /** Splits a capture merged from several Alerts back into one per Alert; null for a single Alert. */
+    onNotSamePayment: (() -> Unit)?,
     onAddToTrip: (() -> Unit)?,
     modifier: Modifier = Modifier
 ) {
@@ -549,6 +552,7 @@ private fun SwipeableCaptureCard(
         add(CustomAccessibilityAction("Dismiss") { onDismiss(); true })
         add(CustomAccessibilityAction("Edit description") { onExpand(); editingTitle = true; true })
         add(CustomAccessibilityAction("Edit in full") { onEdit(); true })
+        onNotSamePayment?.let { split -> add(CustomAccessibilityAction("Not the same payment, split into separate captures") { split(); true }) }
     }
 
     SwipeToDismissBox(
@@ -598,6 +602,7 @@ private fun SwipeableCaptureCard(
                 onConfirm = confirmOrShowMissing,
                 onLink = onLink,
                 onDismiss = onDismiss,
+                onNotSamePayment = onNotSamePayment,
                 onAddToTrip = onAddToTrip
             )
         } else {
@@ -788,6 +793,7 @@ private fun CaptureCard(
     onConfirm: () -> Unit,
     onLink: () -> Unit,
     onDismiss: () -> Unit,
+    onNotSamePayment: (() -> Unit)? = null,
     onAddToTrip: (() -> Unit)? = null
 ) {
     var showOriginal by remember { mutableStateOf(false) }
@@ -942,17 +948,20 @@ private fun CaptureCard(
                 }
             }
             if (showOriginal) {
-                Text(
-                    capture.rawText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                // Every Alert the capture was read from, each under its source (ADR-0012).
+                row.originals.forEach { original ->
+                    Column(modifier = Modifier.semantics(mergeDescendants = true) {}) {
+                        Text(original.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(original.text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            FlowRow {
                 TextButton(onClick = { showOriginal = !showOriginal }) {
                     Text(if (showOriginal) "Hide original" else "Original text")
                 }
                 TextButton(onClick = onEdit) { Text("Edit…") }
+                if (onNotSamePayment != null) TextButton(onClick = onNotSamePayment) { Text("Not the same payment") }
             }
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),

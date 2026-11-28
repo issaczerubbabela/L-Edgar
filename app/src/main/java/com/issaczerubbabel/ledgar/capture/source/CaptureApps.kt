@@ -39,6 +39,12 @@ object CaptureApps {
     /** True when [sender] is a bank's own app, so an Account guess from that bank's aliases makes sense. */
     fun isBankApp(sender: String): Boolean = sender in bankApps
 
+    /** The labels of UPI apps, whose Alerts name the payee but never the Account. */
+    private val upiApps: Set<String> = setOf("Google Pay", "Paytm")
+
+    /** True when [sender] is a UPI app, whose Alerts name the payee but never the Account. */
+    fun isUpiApp(sender: String): Boolean = sender in upiApps
+
     fun isWatched(packageName: String): Boolean =
         packageName in labels || (BuildConfig.DEBUG && packageName == SHELL)
 
