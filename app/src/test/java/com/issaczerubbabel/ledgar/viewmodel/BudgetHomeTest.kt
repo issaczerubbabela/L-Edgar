@@ -98,7 +98,9 @@ class BudgetHomeTest {
         records: List<ExpenseRecord> = this.records,
         funds: FundsSnapshot = this.funds,
         cycle: BudgetCycle = this.cycle,
-        accounts: List<AccountRecord> = this.accounts
+        accounts: List<AccountRecord> = this.accounts,
+        fundsSince: LocalDate? = null,
+        answeredTopUps: Set<Long> = emptySet()
     ) =
         budgetHome(
             cycle = cycle,
@@ -109,7 +111,9 @@ class BudgetHomeTest {
             book = AccountBook.of(accounts, options, records),
             funds = funds,
             roles = roles,
-            today = today
+            today = today,
+            fundsSince = fundsSince,
+            answeredTopUps = answeredTopUps
         )
 
     @Test
@@ -292,5 +296,17 @@ class BudgetHomeTest {
 
         assertNull(closed.yourMoney)
         assertTrue(closed.hasFunds)
+    }
+
+    @Test
+    fun aCyclePlannedBeforeFundsOffersToRaiseSpendable() {
+        val midCycle = LocalDate.of(2026, 10, 1)
+
+        // ₹10,000 Set aside into the SIP, plus ₹25,000 of Planned contributions still to transfer.
+        assertEquals(35_000.0, state(fundsSince = midCycle).spendableTopUp!!, 0.001)
+        assertNull(state(fundsSince = midCycle, answeredTopUps = setOf(cycle.id)).spendableTopUp)
+        assertNull(state(fundsSince = LocalDate.of(2026, 9, 1)).spendableTopUp)
+        assertNull(state(fundsSince = midCycle, cycle = cycle.copy(closedAt = "2026-10-26")).spendableTopUp)
+        assertNull(state(fundsSince = midCycle, funds = FundsSnapshot.EMPTY).spendableTopUp)
     }
 }
