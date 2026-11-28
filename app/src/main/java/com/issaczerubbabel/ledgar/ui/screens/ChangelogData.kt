@@ -18,6 +18,9 @@ val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
         version = "v1.9.0",
         date = "2026-11-28",
+        fixed = listOf(
+            "Auto-capture: reads Google Pay's real notifications for money received and Autopay"
+        ),
         developer = listOf(
             "Auto-capture design for email, Amazon Pay and merged alerts (#176): Alert, Not-a-payment alert, ADR-0012"
         )
