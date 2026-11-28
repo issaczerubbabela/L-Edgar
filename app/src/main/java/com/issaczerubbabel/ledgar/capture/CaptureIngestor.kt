@@ -149,7 +149,7 @@ class CaptureIngestor @Inject constructor(
         pending.forEach { capture ->
             val parsed = registry.parse(capture.sender, capture.rawText) ?: return@forEach
             val (result, trace) = guess(parsed, capture.sender, capture.accountId, capture.txnTime, inputs)
-            val updated = capture.withGuesses(result, trace)
+            val updated = capture.withGuesses(result, trace, inputs.categoriesByType)
             if (updated != capture) {
                 captureDao.updateGuesses(
                     updated.id, updated.suggestedType, updated.suggestedCategory, updated.suggestedToAccountId, updated.confidence,
@@ -162,20 +162,20 @@ class CaptureIngestor @Inject constructor(
     /** What the guessers need, read once per ingest or re-guess pass. */
     private class Inputs(
         val mapping: Map<String, String>,
-        val expenseCategories: List<String>,
+        /** The user's own Expense and Income Categories, the only ones any guess may name. */
+        val categoriesByType: Map<String, List<String>>,
         val predictor: HistoryPredictor
     )
 
     private suspend fun loadInputs(): Inputs {
-        val expense = categories(TransactionType.EXPENSE_CATEGORY_OPTION)
-        val income = categories(TransactionType.INCOME_CATEGORY_OPTION)
+        val categoriesByType = mapOf(
+            TransactionType.EXPENSE to categories(TransactionType.EXPENSE_CATEGORY_OPTION),
+            TransactionType.INCOME to categories(TransactionType.INCOME_CATEGORY_OPTION)
+        )
         return Inputs(
             mapping = settings.categoryMapping(),
-            expenseCategories = expense,
-            predictor = HistoryPredictor(
-                history.pastTransactions(),
-                mapOf(TransactionType.EXPENSE to expense, TransactionType.INCOME to income)
-            )
+            categoriesByType = categoriesByType,
+            predictor = HistoryPredictor(history.pastTransactions(), categoriesByType)
         )
     }
 
@@ -190,7 +190,7 @@ class CaptureIngestor @Inject constructor(
         inputs: Inputs
     ): Pair<Categorization, CaptureTrace> {
         val at = LocalDateTime.ofInstant(Instant.ofEpochMilli(txnTime), ZoneId.systemDefault())
-        val result = pipeline.categorize(parsed, inputs.mapping, inputs.expenseCategories, inputs.predictor, at)
+        val result = pipeline.categorize(parsed, inputs.mapping, inputs.categoriesByType, inputs.predictor, at)
         val description = inputs.predictor.describe(
             CaptureFacts(result.merchantNorm, result.type, parsed.amount, at),
             // The card shows the bank's text anyway, so it is no guess.
@@ -224,15 +224,23 @@ class CaptureIngestor @Inject constructor(
 /**
  * A waiting capture with a new pass of guesses. A pass with neither a Category nor a Transfer's
  * other Account keeps the suggestion already there (and what explained it), so re-guessing never
- * takes a suggestion away; the Suggested description and the Account guess always follow the new
- * pass. A type, Category or Account the user picked lives in the inbox, never here; a Split
- * ([CaptureTrace.splitFromTransfer]) is kept.
+ * takes a suggestion away, unless its Category is no longer one of the user's [categoriesByType]
+ * (a stale rule's High guess, say): that one goes. The Suggested description and the Account guess
+ * always follow the new pass. A type, Category or Account the user picked lives in the inbox,
+ * never here; a Split ([CaptureTrace.splitFromTransfer]) is kept.
  */
-internal fun CapturedTransaction.withGuesses(result: Categorization, trace: CaptureTrace): CapturedTransaction {
+internal fun CapturedTransaction.withGuesses(
+    result: Categorization,
+    trace: CaptureTrace,
+    categoriesByType: Map<String, Collection<String>>
+): CapturedTransaction {
     val kept = CaptureTrace.parse(traceJson)
     // A Split is the user's decision, not a guess, so a new pass never brings the suggestion back.
     val next = trace.copy(splitFromTransfer = kept.splitFromTransfer)
-    return if (result.category != null || result.transferAccountId != null || (suggestedCategory == null && suggestedToAccountId == null)) {
+    val worthKeeping = suggestedToAccountId != null || suggestedCategory?.let { old ->
+        suggestedType?.let(categoriesByType::get).orEmpty().any { it.equals(old, ignoreCase = true) }
+    } == true
+    return if (result.category != null || result.transferAccountId != null || !worthKeeping) {
         copy(
             suggestedType = result.type,
             suggestedCategory = result.category,

@@ -195,7 +195,7 @@ class CaptureTransferTest {
         val pipeline = CategorizationPipeline(KeywordDictionary(emptyMap())) { db.merchantRuleDao().get(it) }
         val next = pipeline.categorize(
             ParsedTxn(amount = 200.0, direction = Direction.DEBIT, merchantRaw = "SELF TRANSFER", accountHint = "1111", refNumber = null, channel = Channel.IMPS),
-            emptyMap(), emptyList()
+            emptyMap(), emptyMap()
         )
         assertEquals(ConfidenceBand.HIGH, next.band)
         val card = CaptureRows.build(

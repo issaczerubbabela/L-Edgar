@@ -7,7 +7,7 @@ package com.issaczerubbabel.ledgar.capture.categorize
  */
 object CategoryResolver {
 
-    fun resolve(canonical: String, mapping: Map<String, String>, userCategories: List<String>): String? {
+    fun resolve(canonical: String, mapping: Map<String, String>, userCategories: Collection<String>): String? {
         val mapped = mapping[canonical]?.trim().orEmpty()
         if (mapped.isEmpty()) return null
         return userCategories.firstOrNull { it.equals(mapped, ignoreCase = true) }

@@ -11,14 +11,19 @@ import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.entity.AccountAlias
 import com.issaczerubbabel.ledgar.data.local.entity.AccountRecord
 import com.issaczerubbabel.ledgar.data.local.entity.DropdownOption
+import com.issaczerubbabel.ledgar.data.local.entity.MerchantRule
+import com.issaczerubbabel.ledgar.data.local.entity.MerchantRuleOrigin
 import com.issaczerubbabel.ledgar.data.repository.CaptureEdits
 import com.issaczerubbabel.ledgar.data.repository.CaptureRepositoryImpl
 import com.issaczerubbabel.ledgar.data.repository.DropdownOptionRepositoryImpl
 import com.issaczerubbabel.ledgar.util.TransactionType
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -71,11 +76,14 @@ class CaptureReguessTest {
     fun tearDown() = db.close()
 
     /** An HDFC alert for ₹[amount] paid to [payee] on 26 Sep 2026 at [time]. */
-    private suspend fun alert(amount: Int, time: String, payee: String = "OFFICE CANTEEN", account: String = "1234"): Long {
+    private suspend fun alert(amount: Int, time: String, payee: String = "OFFICE CANTEEN", account: String = "1234"): Long =
+        captured(amount, time, payee, account).id
+
+    private suspend fun captured(amount: Int, time: String, payee: String = "OFFICE CANTEEN", account: String = "1234"): IngestResult.Captured {
         val (h, m) = time.split(":").map(String::toInt)
         val arrived = LocalDate.of(2026, 9, 26).atTime(LocalTime.of(h, m)).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val text = "Sent Rs.$amount.00\nFrom HDFC Bank A/C *$account\nTo $payee\nOn 26/09/26\nRef ${ref++}\nNot You?"
-        return (ingestor.ingest(CaptureSource.NOTIFICATION, "HDFC Bank", text, arrived) as IngestResult.Captured).id
+        return ingestor.ingest(CaptureSource.NOTIFICATION, "HDFC Bank", text, arrived) as IngestResult.Captured
     }
 
     private suspend fun confirm(id: Long, category: String, description: String) =
@@ -145,5 +153,62 @@ class CaptureReguessTest {
         assertNull("never resolved, only suggested", capture.accountId)
         assertEquals(accountId, trace(id).guessedAccountId)
         assertNull("no alias until Confirm", db.accountAliasDao().getByAlias("9999"))
+    }
+
+    // A saved rule naming a Category the user no longer has (#158).
+
+    private suspend fun saveRule(category: String) = db.merchantRuleDao().upsert(
+        MerchantRule(
+            merchantNorm = "OFFICE CANTEEN", direction = "DEBIT", category = category, type = TransactionType.EXPENSE,
+            origin = MerchantRuleOrigin.LEARNED, updatedAt = 0
+        )
+    )
+
+    private suspend fun removeCategory(name: String) {
+        val option = db.dropdownOptionDao().getOptionsByType(TransactionType.EXPENSE_CATEGORY_OPTION).first().first { it.name == name }
+        db.dropdownOptionDao().delete(option)
+    }
+
+    @Test
+    fun aRuleNamingARemovedCategoryIsNeverHighAndNeverNotifies() = runBlocking {
+        saveRule("Canteen") // renamed to Food in the Sheet since
+
+        val captured = captured(80, "12:50")
+
+        assertEquals(ConfidenceBand.LOW, captured.band)
+        assertFalse(captured.shouldNotify)
+        assertNull(db.captureDao().getById(captured.id)!!.suggestedCategory)
+        assertEquals("R11 · Saved rule's Category Canteen no longer exists", trace(captured.id).whyText)
+    }
+
+    @Test
+    fun aWaitingCaptureLosesARulesCategoryOnTheNextPassOnceItIsRemoved() = runBlocking {
+        saveRule("Snacks")
+        val waiting = captured(80, "12:50")
+        assertTrue("a current Category is High and notifies", waiting.shouldNotify)
+
+        removeCategory("Snacks")
+        ingestor.reguessPending()
+
+        val capture = db.captureDao().getById(waiting.id)!!
+        assertNull(capture.suggestedCategory)
+        assertEquals("R11", capture.decidedBy)
+        assertEquals("Saved rule's Category Snacks no longer exists", trace(waiting.id).why)
+    }
+
+    @Test
+    fun confirmingWithACurrentCategoryReteachesTheRule() = runBlocking {
+        saveRule("Canteen")
+
+        // Two overrides in a row replace a learned rule's outcome, and three agreeing Confirms learn the new one.
+        repeat(4) { confirm(alert(80 + it, "12:5$it"), "Food", "Lunch") }
+
+        val rule = db.merchantRuleDao().get("OFFICE CANTEEN", "DEBIT")!!
+        assertEquals("Food", rule.category)
+        assertEquals(MerchantRuleOrigin.LEARNED, rule.origin)
+        assertEquals("the rename is kept", "Lunch", rule.description)
+        val next = captured(90, "13:30")
+        assertEquals(ConfidenceBand.HIGH, next.band)
+        assertEquals("Food", db.captureDao().getById(next.id)!!.suggestedCategory)
     }
 }
