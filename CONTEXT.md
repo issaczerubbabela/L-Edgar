@@ -168,9 +168,17 @@ _Avoid_: detected subscription, recurring stream
 
 ## Auto-capture
 
+**Alert**:
+One message about money moving that auto-capture reads: a bank SMS (through Google Messages), a bank or UPI app's notification, or a bank's or Amazon Pay's email (through the Gmail notification). Where it came from is its **Alert source**.
+_Avoid_: message, notification (as the domain noun)
+
 **Captured transaction**:
-A bank or UPI alert the app has parsed but not yet turned into a Transaction. It waits in the review inbox until the user acts on it.
+One payment the app has read from one or more Alerts but not yet turned into a Transaction. Alerts from different Alert sources about the same payment become one Captured transaction (ADR-0012). It waits in the review inbox until the user acts on it.
 _Avoid_: pending transaction, alert, capture (as a standalone noun)
+
+**Not-a-payment alert**:
+An Alert that shows an amount but reports no money moving: a payment request, a mandate set up or revoked, a deduction still to come, an instalment due, a declined or failed payment, a refund only initiated, or an offer. It is dropped: never a Captured transaction and never an Unparsed alert.
+_Avoid_: promo, false positive
 
 **Confirm**:
 Turning a Captured transaction into a real Transaction. Only the user confirms; nothing about auto-capture does this on its own.
@@ -185,11 +193,11 @@ A saved mapping from a normalized merchant name and the bank's direction (debit 
 _Avoid_: category rule
 
 **Account alias**:
-A saved mapping from a bank account's last four digits or a UPI VPA to one of the user's Accounts, used to work out which Account a Captured transaction belongs to.
+A saved mapping to one of the user's Accounts from what an Alert says about where the money moved: a bank account's last digits, or, for an Alert source with no digits (Amazon Pay Balance), the source itself. It is how a Captured transaction gets its Account.
 _Avoid_: account mapping
 
 **Unparsed alert**:
-A bank or UPI alert that showed an amount but that no parser could read. It is kept for 30 days so a change in a bank's wording can be noticed and supported.
+An Alert that showed an amount but that no parser could read, and that isn't a Not-a-payment alert. It is kept for 30 days so a change in a bank's wording can be noticed and supported.
 _Avoid_: failed alert
 
 **Confidence band**:
