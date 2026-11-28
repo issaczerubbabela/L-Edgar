@@ -20,6 +20,7 @@ import com.issaczerubbabel.ledgar.capture.parse.ParserRegistry
 import com.issaczerubbabel.ledgar.capture.parse.ParsingUtils
 import com.issaczerubbabel.ledgar.capture.parse.TxnTime
 import com.issaczerubbabel.ledgar.capture.source.AlertSource
+import com.issaczerubbabel.ledgar.capture.source.BankEmails
 import com.issaczerubbabel.ledgar.capture.source.CaptureApps
 import com.issaczerubbabel.ledgar.data.local.SheetSyncDatabase
 import com.issaczerubbabel.ledgar.data.local.dao.AccountAliasDao
@@ -109,6 +110,14 @@ class CaptureIngestor @Inject constructor(
         nowMillis: Long = System.currentTimeMillis()
     ): IngestResult {
         if (!settings.isEnabled()) return IngestResult.Ignored("Auto-capture is off")
+        // The listener already drops these; checked again so no other sender's email is ever parsed or kept.
+        if (source == CaptureSource.EMAIL) {
+            if (!BankEmails.isKnownSender(sender)) return IngestResult.Ignored("Not a known email sender")
+            if (!settings.readsBankEmails()) return IngestResult.Ignored("Read bank emails is off")
+        } else if (BankEmails.isKnownSender(sender)) {
+            // A chat or app titled like the bank's email sender is not its email.
+            return IngestResult.Ignored("An email sender outside email")
+        }
 
         val parsed = when (val reading = registry.read(sender, text)) {
             is AlertReading.Payment -> reading.txn

@@ -13,7 +13,8 @@ alert) are defined in [CONTEXT.md](../CONTEXT.md).
 ## 1. What the user sees
 
 1. **Turn it on** in More > Auto-capture: switch capture on, grant notification access (an Android system
-   screen), and allow notifications so confirmations can be asked from a notification.
+   screen), and allow notifications so confirmations can be asked from a notification. To read HDFC's alert
+   emails too, turn on **Read bank emails** and follow its three Gmail steps (section 3).
 2. **Map categories once.** The app recognises kinds of merchant (food delivery, groceries, fuel and so on)
    but only ever files into the user's own Categories. The same screen matches each kind to one of them. A
    kind left unmapped shows "Needs a category".
@@ -100,8 +101,9 @@ alert) are defined in [CONTEXT.md](../CONTEXT.md).
 ```mermaid
 graph TD
     SRC["Watched app notifications<br/>banks, Google Pay, Paytm, Google Messages"] --> L[BankNotificationListener]
+    GM["Gmail notifications<br/>known senders, while Read bank emails is on"] -->|"GmailNotification"| L
     L --> ING[CaptureIngestor]
-    ING --> REG["ParserRegistry<br/>Cub, Hdfc, Axis, UpiApp, Generic"]
+    ING --> REG["ParserRegistry<br/>HdfcEmail, Cub, Hdfc, Axis, UpiApp, Generic"]
     REG -->|"ParsedTxn"| CAT[CategorizationPipeline]
     REG -->|"nothing readable, but looks like a bank alert"| UNP[("unparsed_alerts")]
     CAT --> CAP[("captured_transactions<br/>status = PENDING")]
@@ -124,14 +126,14 @@ aliases and unparsed alerts are local only and are not sent to the Sheet.
 
 | Area | Files |
 | --- | --- |
-| `capture/source` | `BankNotificationListener` (the service), `CaptureApps` (the allowlist and sender rules) |
+| `capture/source` | `BankNotificationListener` (the service), `CaptureApps` (the allowlist and sender rules), `BankEmails` (the email senders read and the Gmail filter), `GmailNotification` (what a Gmail notification gives: sender, subject, preview), `AlertSource` |
 | `capture` | `CaptureIngestor` (parse, dedupe, merge, account lookup, categorize, store), `AlertMerge` (what a payment's Alerts say together), `CaptureSettingsSource`, `CaptureConfirmer` (Confirm with Undo, shared by To review and Edit) |
 | `capture/pair` | `SamePaymentMatcher` (one payment's Alerts across sources, ADR-0012), `TransferPairMatcher` (a confirmed Transfer's other half, ADR-0006), `LedgerMatcher` + `LedgerMatchFinder` (the logged Transaction a capture repeats) |
-| `capture/parse` | `ParserRegistry`, `HdfcParser`, `CubParser`, `AxisParser`, `UpiAppParser`, `GenericBankParser`, `ParsingUtils`, `ParsedTxn`, `TxnTime` |
+| `capture/parse` | `ParserRegistry`, `HdfcEmailParser`, `HdfcParser`, `CubParser`, `AxisParser`, `UpiAppParser`, `GenericBankParser`, `ParsingUtils`, `ParsedTxn`, `TxnTime` |
 | `capture/categorize` | `MerchantNormalizer`, `KeywordDictionary`, `CategoryResolver`, `CategorizationPipeline`, `MerchantRuleLearner` |
 | `capture/notify` | `CaptureNotifier`, `CaptureActionReceiver`, `CaptureActionHandler`, `CaptureNotificationText` |
 | `data/local` | entities `CapturedTransaction`, `CaptureAlert`, `MerchantRule`, `AccountAlias`, `UnparsedAlert`; matching DAOs; `CaptureMigration` (v18 to v19, v19 to v20, v26 to v27, v28 to v29) |
-| `data` | `CaptureRepository(Impl)`, `CapturePreferencesRepository` (on/off flag and category mapping, in DataStore) |
+| `data` | `CaptureRepository(Impl)`, `CapturePreferencesRepository` (on/off flag, Read bank emails and when a bank email was last read, and the category mapping, in DataStore) |
 | `viewmodel`, `ui/screens` | `ReviewInboxViewModel` + `CaptureInboxScreen` (cards built by `CaptureRows`, days, filters and the bulk sheet by `CaptureInbox`), `LogViewModel` + `LogScreen` for Edit (`CaptureForm`), `CaptureSettingsViewModel` + `CaptureSettingsScreen`, `UnparsedAlertsViewModel` + `UnparsedAlertsScreen`, `CaptureBadgeViewModel` |
 | `di` | `CaptureModule` (keyword list from `assets/merchant_keywords.json`, the pipeline, bindings) |
 
@@ -141,12 +143,41 @@ aliases and unparsed alerts are local only and are not sent to the Sheet.
 (`com.axis.mobile`), City Union Bank (`com.cub.plus.gui`), Google Pay
 (`com.google.android.apps.nbu.paisa.user`), Paytm (`net.one97.paytm`) and Google Messages
 (`com.google.android.apps.messaging`). Bank SMS arrive through the Messages notification, so the SMS
-permission is never needed. Notifications from any other app are never read. Debug builds also accept the
-adb shell (see section 11); release builds never do.
+permission is never needed. Gmail (`com.google.android.gm`) is in the allowlist too, but nothing of its
+notifications is looked at unless capture and **Read bank emails** are on (below). Notifications from any other app are never read. Debug builds also accept the adb
+shell (see section 11); release builds never do.
 
 **What is read.** The notification's title and big text. For a bank or UPI app the app names itself as the
 sender and the parser sees the title, a newline, then the text (Google Pay puts a received amount only in the
 title); for Messages the notification title is the sender (an ID like `AD-HDFCBK-T`) and only the text is parsed.
+
+**Email** ([ADR-0007](adr/0007-auto-capture-reads-notifications-not-sms.md), update). Read bank emails (More >
+Auto-capture, off by default, a DataStore preference) turns it on. Until capture and the switch are both on,
+the listener doesn't open a Gmail notification at all. `GmailNotification` is the one function that knows
+Gmail's layout, read off a phone with `dumpsys notification --noredact` on 2026-11-28:
+
+| Extra | Holds |
+| --- | --- |
+| `android.title` | The sender's display name (`HDFC Bank InstaAlerts`), or for a conversation of several emails the senders' short names (`HDFC, alerts`, `alerts, HDFC`). HDFC sends every UPI alert with the same subject, so Gmail threads them |
+| `android.text` | The subject |
+| `android.bigText` | The subject, a newline, then the email's text, often the whole alert, not only a short preview; a later email in a thread starts without the greeting |
+| `android.subText` | The label the notification is for (a Gmail label notification) |
+| group summary | `1 new message`, `18 new messages`: flagged `GROUP_SUMMARY`, dropped like any other summary |
+
+A notification is read only when its title is a sender in `BankEmails` (the display name, or a thread title
+made only of that sender's short names) and its sub text is the user's Gmail label, the one their filter on
+the sender addresses applies. So a lookalike display name from another address, which the filter never
+labels, is not read. `Amazon Pay India` is in the filter already but read only once its parser lands (#181).
+Anything else is dropped in the listener: never parsed, stored, logged or listed under Alerts we couldn't
+read. The ingestor checks the sender and the switch again, and ignores the sender's name from any other app.
+The parser sees the subject, a newline, then the text, as source `EMAIL` with the sender's display name, so
+the Alert source is the bank's email ("Email from HDFC") and merges with its SMS (section 5).
+
+The setup under the switch asks the user to create a Gmail filter on `alerts@hdfcbank.bank.in OR
+no-reply@amazonpay.in` (with Copy), apply a label and type its name (`Bank alerts` by default), and turn on
+notifications for that label in the Gmail app, since these emails land in Updates, which doesn't notify. Its
+status line says when a bank email was last read ("Last bank email read: <when>"), or "None yet, check your
+Gmail filter".
 
 **When.** Live, through `onNotificationPosted`, and once on `onListenerConnected` for notifications already in
 the shade. The second matters because Android can stop the service or access can be off for a while, and
@@ -158,7 +189,7 @@ same time, or it would be captured a second time.
 ## 4. Parsing
 
 `ParserRegistry.read` first drops a Not-a-payment alert (section 9), then tries parsers in order and uses
-the first that claims the text: City Union Bank, HDFC, Axis, UPI apps, then a generic fallback. Each returns
+the first that claims the text: HDFC's emails (by sender), City Union Bank, HDFC, Axis, UPI apps, then a generic fallback. Each returns
 a `ParsedTxn` (amount, direction, merchant, account digits, reference, channel, and the alert's date if
 stated).
 
@@ -167,6 +198,7 @@ Formats covered by tests built from real (redacted) alerts:
 | Parser | Formats |
 | --- | --- |
 | HDFC | UPI send (`Sent Rs.70.00 From HDFC Bank A/C *1234 To Name On 26/09/26 Ref ...`); UPI ATM withdrawal; deposit narration (`INR ... deposited in HDFC Bank A/c XX1234 on 25-SEP-26 for PAYER CREDIT`); `Credit Alert! Rs.X credited to HDFC Bank A/c XX1234 ...`; mandate debit (`UPI Mandate: Sent Rs.X from HDFC Bank A/c 1234 To PAYEE ...`); NEFT (`Amt Deducted! Rs.X from your HDFC Bank A/c XX1234 for NEFT txn ...`); NetBanking (`Payment Successful! Rs. X from A/c **…1234 to PAYEE via HDFC Bank NetBanking`, the payee is the merchant); RD (`RD Booked! Your HDFC Bank RD XX5678 ... for INR X` and `INR X debited from HDFC Bank XX1234 ... Info: RD through MOBILE-…5678`), both debits with the RD's digits as `counterpartyAccountHint`, so an Account alias on the RD can suggest a Transfer |
+| HDFC email | Subject, newline, text, from `HDFC Bank InstaAlerts` only. UPI debit (`Rs.2000.00 is debited from your account ending 1234 towards VPA x@validyes (PAYEE) on 28-11-26. UPI transaction reference no.: ...`, the payee in brackets, else the VPA); debit card (`Rs.2399.00 is debited from your HDFC Bank Debit Card ending 5678 at MERCHANT on 18 Nov, 2026 at 15:47:45`, the card's digits as the Account); IMPS (`INR 47,000.00 has been debited from your account ending xx1234 on 25-11-26 and credited to the account ending xx5678 via IMPS. IMPS Reference No: ...`, the other digits as `counterpartyAccountHint`); UPI credits (`Rs. 1.00 is successfully credited to your account **1234 by VPA x@hdfcbank PAYER on 06-03-26. Your UPI transaction reference number is ...`, and `Rs.5.00 has been successfully credited to your HDFC Bank account ending in 1234. Transaction Details: a. Date: 27-11-26 b. Sender: PAYER(VPA: ...) c. UPI Reference No.: ...`); deposit (`You have received a credit in your HDFC Bank account. ... Amount received: INR 1,23,456.00 Account: XX1234 Date: 26-NOV-2026 Reference Details: PAYER CREDIT`). All read off real emails in 2026. Any other HDFC email is claimed but not read, so it lands under Alerts we couldn't read rather than being guessed at by the SMS parser |
 | City Union Bank | `Your a/c no. XXXXXXXX1234 is credited/debited for Rs.X on 14-09-2026 and debited from/credited to a/c no. ... (UPI Ref no ...)`. Direction is always about "Your a/c"; the other account is only a counterparty hint |
 | Axis | UPI merchant debit, recognised by its `UPI/P2M/<ref>/<merchant>` narration because it never says "Axis"; IMPS credit |
 | Google Pay | Money received: title `NAME paid you ₹1.00`, text `Tap to view.` (CREDIT from NAME). Autopay: title `Payment successful`, text `Payment for Autopay of ₹2,000.00 to PAYEE was successful. Tap to view.` (DEBIT to PAYEE). Read off a real phone on 2026-11-28. Neither names the Account. Offers and cashback (`Up to ₹2,500 in welcome rewards`, `Earn flat ₹11 cashback`) are claimed by the parser but never parse, so they don't fall through to the generic parser |
@@ -362,7 +394,9 @@ completely: no capture and no Unparsed alert. The list covers:
 - refunds only initiated (`refund ... initiated`);
 - offers, including Google Pay's reward and loan notifications (`FREE 2GB`, `welcome bonus`,
   `Up to ₹2,500 in welcome rewards`, `EMI starts at`, `Earn flat ₹11 cashback`, `cashback on ... recharge`),
-  and gaming offers (`Rs.50 Bonus to be credited`, `Credited Bonus with Rs.500`, `Prize Pool`).
+  and gaming offers (`Rs.50 Bonus to be credited`, `Credited Bonus with Rs.500`, `Prize Pool`);
+- HDFC's email about a card payment's forex markup (`Debit Card ending in XX5678 was used for an international purchase`),
+  which repeats a payment already alerted from the same source, so it would otherwise be a second capture.
 
 An alert that says money was credited (`has been credited`, `credited to your A/c`, `credited back to`) is
 never a Not-a-payment alert (money still to come, `can be credited to`, and `has been Credited Bonus` don't count), so a refund or cashback actually credited still parses, and so does a mandate's
@@ -370,8 +404,8 @@ real debit (`UPI Mandate: Sent Rs....`), which no phrase names. A capture alread
 added stays in To review; only new alerts are dropped. Keep each phrase narrow, since a wrong match loses a payment without a trace. Some phrases are only tested on
 samples worded after real alerts; swap in the real one when it turns up.
 
-**Unparsed alerts.** An alert no parser could read is kept only if it comes from a watched app or a bank-style SMS sender ID
-(`AB-BANKID` or `AB-BANKID-S`), shows an amount, and is not an OTP. A friend's message, an alert with no amount
+**Unparsed alerts.** An alert no parser could read is kept only if it comes from a watched app, a bank-style SMS sender ID
+(`AB-BANKID` or `AB-BANKID-S`) or a known email sender (`BankEmails`), shows an amount, and is not an OTP. A friend's message, an alert with no amount
 and an OTP are never stored, and neither is a Not-a-payment alert. Entries are deleted after 30 days and when
 capture is turned off. A promotional SMS from a bank-style sender that shows an amount and matches none of
 the Not-a-payment phrases is still kept, since it can't be told apart from a wording change; "Clear all" deals
@@ -381,13 +415,18 @@ with those, and a recurring one is worth a phrase in `NotAPayment`.
 
 | Table | Holds | Sent to the Sheet |
 | --- | --- | --- |
-| `captured_transactions` | Waiting and resolved captures, including the first alert's text | No |
-| `capture_alerts` | Every Alert a capture was read from (Room 28 → 29 gave each existing capture its one) | No |
+| `captured_transactions` | Waiting and resolved captures, including the first alert's text (for an email, its subject and preview) | No |
+| `capture_alerts` | Every Alert a capture was read from, emails included (Room 28 → 29 gave each existing capture its one) | No |
 | `merchant_rules` | Saved and learned rules | No |
 | `account_aliases` | Account digits to Account | No |
-| `unparsed_alerts` | Unreadable alerts, 30 days | No |
+| `unparsed_alerts` | Unreadable alerts, from known email senders too, 30 days | No |
+| DataStore `capture_prefs` | On/off, Read bank emails, the Gmail label, when a bank email was last read, the category mapping | No |
 
 - Only allowlisted apps are read, and a notification's text is never logged.
+- Gmail is read only while Read bank emails is on, and only for the known senders under the user's label: the
+  listener opens no Gmail notification while the switch is off, and drops any other email before parsing it. Turning the switch off ignores Gmail again; captures already made
+  from email stay until resolved. Only the subject and text Gmail puts in its notification are read, never
+  the mailbox: no Gmail permission, API or Apps Script access is involved.
 - Turning capture off clears waiting captures and unparsed alerts. Rules, aliases and the category mapping
   are kept.
 - All processing is on the device.
@@ -404,7 +443,8 @@ with those, and a recurring one is worth a phrase in `NotAPayment`.
 - **Trying it without a payment** (debug builds only): post a notification as the adb shell, for example
   `adb shell "cmd notification post -S bigtext -t 'HDFC' tag 'Sent Rs.70.00 From HDFC Bank A/C *1234 To Shop On 26/09/26 Ref 11111111111'"`.
   For a shell post the title is the sender, so use a bank-style ID such as `AD-HDFCBK-T` to try the
-  unparsed-alerts list, or `Google Pay` for that parser. Grant access with
+  unparsed-alerts list, `Google Pay` for that parser, or `HDFC Bank InstaAlerts` to try the email path (read
+  as an email, so Read bank emails must be on). Grant access with
   `adb shell cmd notification allow_listener <package>/com.issaczerubbabel.ledgar.capture.source.BankNotificationListener`.
 - **Release check.** Release builds use R8, which once broke capture. Gson's `TypeToken` needs the generic
   signature of its anonymous subclass, R8 strips it, and the notification listener then crashed on start
@@ -420,7 +460,13 @@ Deliberate omissions and gaps, so nobody assumes otherwise:
 
 - **Google Pay posts nothing for a payment you send; the bank's alert covers it.** Only money received and
   Autopay come from Google Pay, so City Union Bank's sends, which never name the payee, still have none. Paytm has no sample and is unverified.
-- **Sources.** Only notifications. No SMS permission path, no email capture.
+- **Sources.** Only notifications. No SMS permission path. Email only through Gmail's notification, for HDFC's
+  alerts (Amazon Pay Balance is #181), so an email Gmail doesn't notify for (no filter, a different label, or
+  label notifications off) is never seen, and only the text Gmail puts in the notification is read.
+- **Email on a phone.** Gmail's layout was read off a phone, but the whole path (switch, listener, ingest)
+  hasn't been watched end to end on one with a real payment. A thread title other than the ones seen (`HDFC,
+  alerts`) is dropped silently. HDFC's debit card email shows no reference, so it merges with its SMS only by
+  amount within 10 minutes, and HDFC's credit card emails aren't read.
 - **Categorization.** Rules, history, an on-phone Naive Bayes guesser and keywords, with no network and no
   cloud model. The Naive Bayes counts are rebuilt in memory on each ingest and re-guess rather than stored,
   which is fine for a few thousand Transactions (the snapshot is capped at the latest 5,000); a much larger

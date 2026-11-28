@@ -38,7 +38,9 @@ object NotAPayment {
         phrase("""\bup\s+to\s+$AMOUNT\s+in\b"""),
         phrase("""\bemi\s+starts\s+at\b"""),
         phrase("""\bearn\b.{0,30}?\bcashback\b"""),
-        phrase("""\bcashback\s+on\b.{0,40}?\brecharge\b""")
+        phrase("""\bcashback\s+on\b.{0,40}?\brecharge\b"""),
+        // A notice about a card payment already alerted: "Your HDFC Bank Debit Card ... was used for an international purchase".
+        phrase("""\bwas\s+used\s+for\s+an\s+international\s+purchase\b""")
     )
 
     /**

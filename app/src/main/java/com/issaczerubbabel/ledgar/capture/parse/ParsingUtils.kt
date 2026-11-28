@@ -82,10 +82,15 @@ internal object ParsingUtils {
     fun dateOf(text: String): LocalDate? {
         val match = DATE.find(text) ?: return null
         val (day, monthText, yearText) = match.destructured
-        val month = monthText.toIntOrNull() ?: (MONTHS.indexOf(monthText.lowercase()) + 1).takeIf { it > 0 } ?: return null
-        val year = yearText.toInt().let { if (yearText.length == 2) 2000 + it else it }
+        return dateOf(day, monthText, yearText)
+    }
+
+    /** "18", "Nov" or "11", "2026" or "26" as a date, or null if it is not a real one. */
+    fun dateOf(day: String, monthText: String, yearText: String): LocalDate? {
+        val month = monthText.toIntOrNull() ?: (MONTHS.indexOf(monthText.take(3).lowercase()) + 1).takeIf { it > 0 } ?: return null
+        val year = yearText.toIntOrNull()?.let { if (yearText.length == 2) 2000 + it else it } ?: return null
         return try {
-            LocalDate.of(year, month, day.toInt())
+            LocalDate.of(year, month, day.toIntOrNull() ?: return null)
         } catch (e: DateTimeException) {
             null
         }

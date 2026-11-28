@@ -10,6 +10,12 @@ object CaptureApps {
 
     const val GOOGLE_MESSAGES = "com.google.android.apps.messaging"
 
+    /**
+     * Gmail, read only while Read bank emails is on and only for [BankEmails]' senders
+     * ([GmailNotification]). Not in the labels: an email's sender is the notification title.
+     */
+    const val GMAIL = "com.google.android.gm"
+
     /** Package name to the label the parsers recognise as the sender. */
     private val labels: Map<String, String> = mapOf(
         "com.hdfcbank.android.now" to "HDFC Bank",
@@ -32,9 +38,12 @@ object CaptureApps {
     /** Bank SMS come from IDs like "AD-HDFCBK-T" or "JM-HDFCBN-S"; a person's name never looks like that. */
     private val SMS_SENDER_ID = Regex("""^[A-Za-z]{2}-[A-Za-z0-9]{3,8}(-[A-Za-z0-9])?$""")
 
-    /** True for a watched app's label or a bank-style SMS sender ID: the only alerts worth keeping when unreadable. */
+    /**
+     * True for a watched app's label, a bank-style SMS sender ID or a known email sender
+     * ([BankEmails]): the only alerts worth keeping when unreadable.
+     */
     fun looksLikeBankSender(sender: String): Boolean =
-        sender in labels.values || SMS_SENDER_ID.matches(sender.trim())
+        sender in labels.values || SMS_SENDER_ID.matches(sender.trim()) || BankEmails.isKnownSender(sender)
 
     /** True when [sender] is a bank's own app, so an Account guess from that bank's aliases makes sense. */
     fun isBankApp(sender: String): Boolean = sender in bankApps
@@ -46,7 +55,14 @@ object CaptureApps {
     fun isUpiApp(sender: String): Boolean = sender in upiApps
 
     fun isWatched(packageName: String): Boolean =
-        packageName in labels || (BuildConfig.DEBUG && packageName == SHELL)
+        packageName in labels || packageName == GMAIL || (BuildConfig.DEBUG && packageName == SHELL)
+
+    /**
+     * True for a debug build's adb shell post titled with a known email sender, read as an email so
+     * the email path can be tried without a real payment. Release builds never take it.
+     */
+    fun isDebugEmail(packageName: String, title: String): Boolean =
+        BuildConfig.DEBUG && packageName == SHELL && BankEmails.senderFor(title) != null
 
     /** The label passed to the parsers, or null for text that carries its own sender (SMS). */
     fun labelFor(packageName: String): String? = labels[packageName]?.takeUnless { packageName == GOOGLE_MESSAGES }
