@@ -329,16 +329,18 @@ pure tested list, and `ParserRegistry.read` checks them before any parser runs. 
 completely: no capture and no Unparsed alert. The list covers:
 
 - payment requests (`has requested money`, `requested Rs. ... from you`);
-- deductions or refunds still to come (`will be debited`, `will be deducted`, `will be refunded`);
-- mandates set up, announced or ended (`Mandate Set`, `Mandate Alert`, `mandate ... created` / `revoked`);
+- an amount still to come (`INR 500.00 will be debited`, `will be deducted`, `will be refunded`);
+- mandates set up, announced or ended (`Mandate Set`, `Mandate Alert`, `mandate ... has been created` / `revoked`);
 - instalments due (`RD Installment Due`);
 - declined, failed or expired payments (`TXN DECLINED`, `has failed`, `has expired`);
 - refunds only initiated (`refund ... initiated`);
 - offers, including Google Pay's reward and loan notifications (`FREE 2GB`, `welcome bonus`,
   `Up to ₹2,500 in welcome rewards`, `EMI starts at`, `Earn flat ₹11 cashback`, `cashback on ... recharge`).
 
-A refund or cashback actually credited, and a mandate's real debit (`UPI Mandate: Sent Rs....`), still parse.
-Keep each phrase narrow, since a wrong match loses a payment without a trace. Some phrases are only tested on
+An alert that says money was credited (`has been credited`, `credited to your A/c`, `credited back to`) is
+never a Not-a-payment alert, so a refund or cashback actually credited still parses, and so does a mandate's
+real debit (`UPI Mandate: Sent Rs....`), which no phrase names. A capture already waiting when a phrase is
+added stays in To review; only new alerts are dropped. Keep each phrase narrow, since a wrong match loses a payment without a trace. Some phrases are only tested on
 samples worded after real alerts; swap in the real one when it turns up.
 
 **Unparsed alerts.** An alert no parser could read is kept only if it comes from a watched app or a bank-style SMS sender ID

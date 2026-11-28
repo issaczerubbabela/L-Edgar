@@ -150,11 +150,11 @@ class HdfcParserTest {
         assertEquals("1234", credit.accountHint)
 
         val mandate = parser.parse(
-            "UPI Mandate: Sent Rs.2000.00 from HDFC Bank A/c 1234 To ZERODHA BROKING LTD On 05/11/26 Ref 111111111111 Not You? Call 18002586161"
+            "UPI Mandate: Sent Rs.2000.00 from HDFC Bank A/c 1234 To ACME BROKING LTD On 05/11/26 Ref 111111111111 Not You? Call 18002586161"
         )!!
         assertEquals(2000.0, mandate.amount, 0.001)
         assertEquals(Direction.DEBIT, mandate.direction)
         assertEquals("1234", mandate.accountHint)
-        assertEquals("ZERODHA BROKING LTD", mandate.merchantRaw)
+        assertEquals("ACME BROKING LTD", mandate.merchantRaw)
     }
 }

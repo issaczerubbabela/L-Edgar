@@ -31,6 +31,14 @@ class ParserRegistryTest {
         assertEquals("Ramesh Kumar", gpay.merchantRaw)
     }
 
+    // Synthetic: "deducted" is read as a debit only in HDFC's "Amt Deducted!", never by the generic parser.
+    @Test
+    fun aCreditMentioningADeductionIsStillACredit() {
+        val parsed = registry.parse("XYZBNK", "Salary of Rs.50,000.00 (TDS deducted) credited to your a/c XX5555 on 01-12-26")!!
+
+        assertEquals(Direction.CREDIT, parsed.direction)
+    }
+
     @Test
     fun unknownBankFallsBackToTheGenericParser() {
         val parsed = registry.parse("XYZBNK", "Rs.250.00 debited from your a/c XX5555 at BIG BAZAAR on 01-01-26.")!!
@@ -85,11 +93,11 @@ class ParserRegistryTest {
 
     @Test
     fun aRealPaymentIsReadAsAPayment() {
-        val reading = registry.read("HDFC Bank", "UPI Mandate: Sent Rs.2000.00 from HDFC Bank A/c 1234 To ZERODHA BROKING LTD On 05/11/26 Ref 111111111111")
+        val reading = registry.read("HDFC Bank", "UPI Mandate: Sent Rs.2000.00 from HDFC Bank A/c 1234 To ACME BROKING LTD On 05/11/26 Ref 111111111111")
 
         val txn = (reading as AlertReading.Payment).txn
         assertEquals(2000.0, txn.amount, 0.001)
         assertEquals(Direction.DEBIT, txn.direction)
-        assertEquals("ZERODHA BROKING LTD", txn.merchantRaw)
+        assertEquals("ACME BROKING LTD", txn.merchantRaw)
     }
 }

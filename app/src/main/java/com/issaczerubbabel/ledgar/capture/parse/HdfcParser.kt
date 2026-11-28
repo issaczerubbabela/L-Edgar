@@ -19,41 +19,24 @@ class HdfcParser : TransactionParser {
         val amount = ParsingUtils.amountOf(normalized) ?: return null
         val accountHint = (ParsingUtils.ACCOUNT.find(normalized) ?: BANK_ACCOUNT.find(normalized))?.groupValues?.get(1)
         val refNumber = ParsingUtils.REF.find(normalized)?.groupValues?.get(1)
-        val rdHint = (RD_BOOKED.find(normalized) ?: RD_THROUGH_MOBILE.find(normalized))?.groupValues?.get(1)
+        fun debit(merchantRaw: String?, channel: Channel, counterparty: String? = null) = ParsedTxn(
+            amount = amount,
+            direction = Direction.DEBIT,
+            merchantRaw = merchantRaw,
+            accountHint = accountHint,
+            refNumber = refNumber,
+            channel = channel,
+            counterpartyAccountHint = counterparty
+        )
 
-        if (rdHint != null) {
-            return ParsedTxn(
-                amount = amount,
-                direction = Direction.DEBIT,
-                merchantRaw = null,
-                accountHint = accountHint,
-                refNumber = refNumber,
-                channel = Channel.UNKNOWN,
-                counterpartyAccountHint = rdHint
-            )
+        (RD_BOOKED.find(normalized) ?: RD_THROUGH_MOBILE.find(normalized))?.let { rd ->
+            return debit(merchantRaw = null, channel = Channel.UNKNOWN, counterparty = rd.groupValues[1])
         }
-
         NETBANKING_PAYMENT.find(normalized)?.let { payment ->
-            return ParsedTxn(
-                amount = amount,
-                direction = Direction.DEBIT,
-                merchantRaw = payment.groupValues[1],
-                accountHint = accountHint,
-                refNumber = refNumber,
-                channel = Channel.UNKNOWN
-            )
+            return debit(merchantRaw = payment.groupValues[1], channel = Channel.UNKNOWN)
         }
-
-        if (ATM_WITHDRAWAL.containsMatchIn(normalized)) {
-            return ParsedTxn(
-                amount = amount,
-                direction = Direction.DEBIT,
-                merchantRaw = "ATM Withdrawal",
-                accountHint = accountHint,
-                refNumber = refNumber,
-                channel = Channel.ATM
-            )
-        }
+        if (AMT_DEDUCTED.containsMatchIn(normalized)) return debit(merchantRaw = null, channel = ParsingUtils.channelOf(normalized))
+        if (ATM_WITHDRAWAL.containsMatchIn(normalized)) return debit(merchantRaw = "ATM Withdrawal", channel = Channel.ATM)
 
         val direction = ParsingUtils.directionOf(normalized) ?: return null
 
@@ -89,7 +72,10 @@ class HdfcParser : TransactionParser {
             RegexOption.IGNORE_CASE
         )
 
-        private val ATM_WITHDRAWAL = Regex("""atm\s+withdrawal""", RegexOption.IGNORE_CASE)
+        /** "Amt Deducted! Rs.5000.00 from your HDFC Bank A/c XX1234 for NEFT txn via HDFC Bank Online Banking" */
+        private val AMT_DEDUCTED = Regex("""\bamt\s+deducted\b""", RegexOption.IGNORE_CASE)
+
+        private val ATM_WITHDRAWAL =Regex("""atm\s+withdrawal""", RegexOption.IGNORE_CASE)
 
         /** "Sent Rs.70.00 From HDFC Bank A/C *1234 To Mrs Jane Doe On 26/09/26 ..." */
         private val P2P_RECIPIENT = Regex(

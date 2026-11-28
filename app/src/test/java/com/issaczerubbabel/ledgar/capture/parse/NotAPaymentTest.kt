@@ -32,16 +32,16 @@ class NotAPaymentTest {
     @Test
     fun deductionsStillToComeAreNotPayments() {
         // Not yet seen on the phone.
-        assertDropped("Mandate Alert! Rs.2000.00 will be deducted from HDFC Bank A/c XX1234 on 05/12/26 towards ZERODHA BROKING LTD")
+        assertDropped("Mandate Alert! Rs.2000.00 will be deducted from HDFC Bank A/c XX1234 on 05/12/26 towards ACME BROKING LTD")
         assertDropped("Rs.499.00 will be debited from your A/c XX1234 on 05-12-26 for your subscription")
     }
 
     @Test
     fun mandatesSetUpOrRevokedAreNotPayments() {
         // Not yet seen on the phone.
-        assertDropped("Mandate Set! Rs.2000.00 monthly from HDFC Bank A/c XX1234 to ZERODHA BROKING LTD. UMN 111111111111")
-        assertDropped("Your UPI Mandate of Rs.2000.00 for ZERODHA BROKING LTD has been successfully created")
-        assertDropped("UPI Mandate of Rs.2000.00 towards ZERODHA BROKING LTD from HDFC Bank A/c XX1234 has been revoked")
+        assertDropped("Mandate Set! Rs.2000.00 monthly from HDFC Bank A/c XX1234 to ACME BROKING LTD. UMN 111111111111")
+        assertDropped("Your UPI Mandate of Rs.2000.00 for ACME BROKING LTD has been successfully created")
+        assertDropped("UPI Mandate of Rs.2000.00 towards ACME BROKING LTD from HDFC Bank A/c XX1234 has been revoked")
     }
 
     @Test
@@ -80,10 +80,10 @@ class NotAPaymentTest {
     @Test
     fun realPaymentsAreKept() {
         assertKept("Credit Alert! Rs.500.00 credited to HDFC Bank A/c XX1234 on 12-11-26 from VPA xxxxxxxxxx@ybl (UPI 111111111111)")
-        assertKept("UPI Mandate: Sent Rs.2000.00 from HDFC Bank A/c 1234 To ZERODHA BROKING LTD On 05/11/26 Ref 111111111111")
-        assertKept("Sent Rs.70.00 From HDFC Bank A/C *1234 To Mrs Jane Doe On 26/09/26 Ref 66353123456788")
-        assertKept("Your a/c no. XXXXXXXX1234 is credited for Rs.35.00 on 14-09-2026 and debited from a/c no. XXXXXXXX5424 (UPI Ref no 62575731739387) -CUB")
-        assertKept("INR 100.00 was debited from your A/c no. XX1236 on 19-12-24 at 10:19:54 IST via UPI/P2M/435476373861/Shri Ujagar Fuels. Avail. Bal: INR 5,420.10.")
+        assertKept("UPI Mandate: Sent Rs.2000.00 from HDFC Bank A/c 1234 To ACME BROKING LTD On 05/11/26 Ref 111111111111")
+        assertKept("Sent Rs.70.00 From HDFC Bank A/C *1234 To <NAME> On 26/09/26 Ref 111111111111")
+        assertKept("Your a/c no. XXXXXXXX1234 is credited for Rs.35.00 on 14-09-2026 and debited from a/c no. XXXXXXXX5678 (UPI Ref no 111111111111) -CUB")
+        assertKept("INR 100.00 was debited from your A/c no. XX1234 on 19-12-24 at 10:19:54 IST via UPI/P2M/111111111111/<MERCHANT>. Avail. Bal: INR 1,000.00.")
         assertKept("Amt Deducted! Rs.5000.00 from your HDFC Bank A/c XX1234 for NEFT txn via HDFC Bank Online Banking Not you?Call 18002586161")
     }
 
@@ -93,5 +93,16 @@ class NotAPaymentTest {
         assertKept("Rs.150.00 credited to your A/c XX1234 on 12-11-26 as refund from SWIGGY. Avl bal INR 1,000.00")
         assertKept("Refund of Rs.300.00 credited to HDFC Bank A/c XX1234 on 12-11-26 for your KFC order")
         assertKept("Cashback of ₹11 credited to your bank account XX1234")
+        assertKept("₹20 cashback on your mobile recharge has been credited to your bank account")
+        assertKept("Welcome reward of ₹50 credited to your Amazon Pay balance")
+        assertKept("Refund of Rs.300.00 initiated by AMAZON has been credited to A/c XX1234 on 12-11-26")
+        assertKept("Your txn of Rs.500.00 has failed and the amount has been credited back to A/c XX1234")
+    }
+
+    @Test
+    fun aRealPaymentMentioningAMandateOrAFutureChargeIsKept() {
+        // Not yet seen on the phone.
+        assertKept("Rs.649.00 debited from A/c XX1234 on 12-11-26 for mandate created on 01-11-26 towards NETFLIX")
+        assertKept("Rs.500.00 debited from A/c XX1234 on 12-11-26 to VPA xxxxxxxxxx@ybl. Charges, if any, will be debited separately")
     }
 }

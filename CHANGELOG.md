@@ -8,10 +8,13 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 ## [1.9.0] - 2026-11-28
 
+### Added
+
+- Auto-capture: reads HDFC NEFT, NetBanking and RD debits, which landed under Alerts we couldn't read
+
 ### Fixed
 
 - Auto-capture: payment requests, offers, mandates and refunds still pending no longer show as captures
-- Auto-capture: reads HDFC NEFT, NetBanking and RD debits, which landed under Alerts we couldn't read
 
 ### Developer
 
