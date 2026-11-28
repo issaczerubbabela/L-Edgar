@@ -16,6 +16,13 @@ data class ChangelogRelease(
 
 val changelogReleases: List<ChangelogRelease> = listOf(
     ChangelogRelease(
+        version = "v1.9.0",
+        date = "2026-11-28",
+        developer = listOf(
+            "Auto-capture design for email, Amazon Pay and merged alerts (#176): Alert, Not-a-payment alert, ADR-0012"
+        )
+    ),
+    ChangelogRelease(
         version = "v1.8.1",
         date = "2026-11-28",
         added = listOf(

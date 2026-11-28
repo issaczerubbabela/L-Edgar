@@ -9,5 +9,9 @@ Bank alerts reach the phone as SMS and as notifications from the bank's own app.
 ## Considered options
 
 - **`READ_SMS` with an SMS receiver.** More complete and independent of any notification, but a restricted permission, broader than needed, and a blocker if the app is ever published.
-- **Reading bank emails through the user's Apps Script.** Free and structured, but batch rather than real time and needs the script re-authorised for Gmail. Kept as a possible later source.
+- **Reading bank emails through the user's Apps Script.** Free and structured, but batch rather than real time, needs the script re-authorised for Gmail, and would pass email text through the script and the Sheet. Rejected in favour of reading Gmail's notification (below).
+
+## Update: email through Gmail's notification
+
+Email is read the same way as SMS: Gmail (`com.google.android.gm`) joins the allowlist, and only Alerts from known bank and Amazon Pay sender addresses are read. The notification carries the sender, subject and a preview of about 200 characters, which holds the sentence with the amount, Account and payee for HDFC's and Amazon Pay's alerts. Gmail only notifies for the labels the user chooses, and these alerts land in the Updates category, so the user sets up a Gmail filter that labels them and turns notifications on for that label.
 - **Bank data APIs (Account Aggregator, Plaid and similar).** Structured and accurate, but paid or heavyweight for a personal app.
