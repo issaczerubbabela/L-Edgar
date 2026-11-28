@@ -78,6 +78,19 @@ class NotAPaymentTest {
     }
 
     @Test
+    fun gamingBonusOffersAreNotPayments() {
+        assertDropped(
+            "Dear , Rs.50 Bonus to be credited on My11Circle. MUM vs DEL Prize Pool - 50000 (1Cr) Entry Fees - Rs.49 " +
+                "Click - http://xx.in/xxxx"
+        )
+        assertDropped(
+            "Dear 98XX, Free Rs. 100 welcome bonus can be credited to your Junglee Rummy account. Download Now & Claim: " +
+                "https://xx.im/xxxx"
+        )
+        assertDropped("Congratulation 98XX, Your account has been Credited Bonus with Rs.500 Register For Free xx.in/xxxx")
+    }
+
+    @Test
     fun realPaymentsAreKept() {
         assertKept("Credit Alert! Rs.500.00 credited to HDFC Bank A/c XX1234 on 12-11-26 from VPA xxxxxxxxxx@ybl (UPI 111111111111)")
         assertKept("UPI Mandate: Sent Rs.2000.00 from HDFC Bank A/c 1234 To ACME BROKING LTD On 05/11/26 Ref 111111111111")

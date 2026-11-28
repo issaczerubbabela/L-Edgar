@@ -22,7 +22,7 @@ val changelogReleases: List<ChangelogRelease> = listOf(
             "Auto-capture: reads HDFC NEFT, NetBanking and RD debits, which landed under Alerts we couldn't read"
         ),
         fixed = listOf(
-            "Auto-capture: payment requests, offers, mandates and refunds still pending no longer show as captures"
+            "Auto-capture: payment requests, offers and game bonuses, mandates and pending refunds aren't captured"
         ),
         developer = listOf(
             "Auto-capture design for email, Amazon Pay and merged alerts (#176): Alert, Not-a-payment alert, ADR-0012",

@@ -31,14 +31,23 @@ object NotAPayment {
         // Offers.
         phrase("""\bfree\s*\d+(?:\.\d+)?\s*gb\b"""),
         phrase("""\bwelcome\s+(?:bonus|rewards?)\b"""),
+        // Gaming offers: "Rs.50 Bonus to be credited", "Credited Bonus with Rs.500", "Prize Pool - 50000".
+        phrase("""$AMOUNT\s+bonus\b"""),
+        phrase("""\bcredited\s+bonus\b"""),
+        phrase("""\bprize\s+pool\b"""),
         phrase("""\bup\s+to\s+$AMOUNT\s+in\b"""),
         phrase("""\bemi\s+starts\s+at\b"""),
         phrase("""\bearn\b.{0,30}?\bcashback\b"""),
         phrase("""\bcashback\s+on\b.{0,40}?\brecharge\b""")
     )
 
-    /** Money that did arrive: "has been credited", "credited to HDFC Bank A/c", "credited back to". */
-    private val CREDITED = phrase("""\b(?:has\s+been|is|was)\s+credited\b|\bcredited\s+(?:back\s+)?(?:to|in|into)\b""")
+    /**
+     * Money that did arrive: "has been credited", "credited to HDFC Bank A/c", "credited back to".
+     * Not money still to come ("can be credited to", "to be credited") or a bonus ("has been Credited Bonus").
+     */
+    private val CREDITED = phrase(
+        """\b(?:has\s+been|is|was)\s+credited\b(?!\s+bonus\b)|(?<!\bbe\s)\bcredited\s+(?:back\s+)?(?:to|in|into)\b"""
+    )
 
     fun matches(text: String): Boolean {
         val normalized = ParsingUtils.normalizeWhitespace(text)

@@ -14,7 +14,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 ### Fixed
 
-- Auto-capture: payment requests, offers, mandates and refunds still pending no longer show as captures
+- Auto-capture: payment requests, offers and game bonuses, mandates and pending refunds aren't captured
 
 ### Developer
 
