@@ -164,6 +164,22 @@ class ExpenseSyncQueriesTest {
     }
 
     @Test
+    fun `existsBySyncId finds an imported Transaction ID already on the phone, for CSV re-import dedupe`() = runBlocking {
+        dao.insert(transaction().copy(syncId = "backup-id-1"))
+
+        assertTrue(dao.existsBySyncId("backup-id-1"))
+        assertFalse(dao.existsBySyncId("backup-id-2"))
+    }
+
+    @Test
+    fun `findDuplicate ignores a row pending delete, so a re-import can recreate it`() = runBlocking {
+        val id = dao.insert(transaction())
+        dao.markTransactionDeletedById(id)
+
+        assertNull(dao.findDuplicate(date = "2026-09-24", type = "Expense", category = "Food", amount = 50.0))
+    }
+
+    @Test
     fun `deleting an account's Transactions marks them for a synced delete instead of erasing them`() = runBlocking {
         val accountId = db.accountDao().insert(AccountRecord(groupName = "Bank", accountName = "Savings", initialBalance = 0.0))
         val id = dao.insert(transaction(accountId = accountId, isSynced = true, syncAction = "NONE"))

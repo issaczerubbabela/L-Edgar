@@ -107,6 +107,8 @@ class ExpenseRepositoryImpl @Inject constructor(
     override suspend fun isDuplicate(date: String, type: String, category: String, amount: Double): Boolean =
         dao.findDuplicate(date, type, category, amount) != null
 
+    override suspend fun existsBySyncId(syncId: String): Boolean = dao.existsBySyncId(syncId)
+
     override suspend fun importFromGoogleSheets(): GoogleSheetsImportResult {
         val scriptUrl = preferenceRepository.scriptUrl.first()
             ?: throw SyncUrlNotConfiguredException()

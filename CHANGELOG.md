@@ -30,6 +30,8 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 
 - Accounts: renaming one updates its transactions in the Sheet, and Re-send to Sheet repairs older renames
 - Budget: an expense dated after the Salary cycle ends no longer comes off this cycle's Left to spend
+- Import from CSV: imported transactions reach your Sheet instead of disappearing on the next sync
+- Export to CSV keeps Account, Description and Remarks; re-importing that file no longer duplicates them
 
 ### Developer
 
@@ -39,6 +41,7 @@ which is also what the app shows under More > Changelog. Developer notes appear 
 - Funds: StatsReport counts Set aside as Saved via FundMath and passes the Funds snapshot to the cycle view (#153)
 - Funds: budgetHome and planBuckets build the Budget and Plan state, and every Left to spend gets the Funds snapshot (#41)
 - Funds review: Free counts only Included holdings, releases reduce Saved, one TransactionSnapshot mapper, atomic saveFund
+- CsvParser is now a pure RFC 4180 parser keyed by Account name and Transaction ID, with unit tests (#56)
 
 ## [1.7.0] - 2026-11-27
 
