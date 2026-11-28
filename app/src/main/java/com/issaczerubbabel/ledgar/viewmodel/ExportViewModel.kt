@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.OutputStreamWriter
+import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -118,29 +119,38 @@ class ExportViewModel @Inject constructor(
         accountMap: Map<Long, AccountRecord>
     ) = withContext(Dispatchers.IO) {
         appContext.contentResolver.openOutputStream(uri)?.use { stream ->
-            OutputStreamWriter(stream).use { writer ->
-                writer.appendLine("Date,Type,Category/Account,Amount,Note")
+            OutputStreamWriter(stream, Charsets.UTF_8).use { writer ->
+                writer.write("﻿") // so Excel opens the file as UTF-8 and shows ₹ correctly
+                writer.appendLine(
+                    "Date,Type,Category,Amount,Account,From account,To account,Description,Remarks,Bookmarked,Transaction ID"
+                )
                 records.forEach { record ->
-                    val categoryOrAccount = when (record.type) {
-                        TransactionType.TRANSFER -> {
-                            val from = record.fromAccountId?.let { accountMap[it]?.accountName } ?: "Unknown"
-                            val to = record.toAccountId?.let { accountMap[it]?.accountName } ?: "Unknown"
-                            "Transfer: $from -> $to"
-                        }
-                        TransactionType.ADJUSTMENT -> {
-                            val account = record.accountId?.let { accountMap[it]?.accountName } ?: record.accountName ?: "Unknown"
-                            "${TransactionType.label(record.type)}: $account"
-                        }
-                        else -> record.category
+                    val (account, fromAccount, toAccount) = if (record.type == TransactionType.TRANSFER) {
+                        Triple(
+                            "",
+                            record.fromAccountId?.let { accountMap[it]?.accountName } ?: record.fromAccountName.orEmpty(),
+                            record.toAccountId?.let { accountMap[it]?.accountName } ?: record.toAccountName.orEmpty()
+                        )
+                    } else {
+                        Triple(
+                            record.accountId?.let { accountMap[it]?.accountName } ?: record.accountName.orEmpty(),
+                            "",
+                            ""
+                        )
                     }
-                    val note = record.remarks.ifBlank { record.description }
                     writer.appendLine(
                         listOf(
-                            csvEscape(record.date),
-                            csvEscape(record.type),
-                            csvEscape(categoryOrAccount),
-                            record.amount.toString(),
-                            csvEscape(note)
+                            csvCell(record.date),
+                            csvCell(record.type),
+                            csvCell(record.category),
+                            plainAmount(record.amount),
+                            csvCell(account),
+                            csvCell(fromAccount),
+                            csvCell(toAccount),
+                            csvCell(record.description),
+                            csvCell(record.remarks),
+                            csvCell(if (record.isBookmarked) "Yes" else ""),
+                            csvCell(record.syncId.orEmpty())
                         ).joinToString(",")
                     )
                 }
@@ -148,10 +158,22 @@ class ExportViewModel @Inject constructor(
         } ?: error("Unable to open output stream")
     }
 
-    private fun csvEscape(value: String): String = "\"${value.replace("\"", "\"\"")}\""
+    /** `Double.toString()` can land in scientific notation (e.g. `1.2E7`); a plain string never does. */
+    private fun plainAmount(amount: Double): String = BigDecimal(amount.toString()).toPlainString()
+
+    /**
+     * Quotes a cell and escapes `"` as `""`. A cell starting with `= + - @` would otherwise run as a
+     * formula when the file is opened in a spreadsheet — a risk since merchant names can come from a
+     * bank alert via auto-capture — so it gets a leading `'` to stay plain text.
+     */
+    private fun csvCell(value: String): String {
+        val guarded = if (value.isNotEmpty() && value[0] in FORMULA_PREFIXES) "'$value" else value
+        return "\"${guarded.replace("\"", "\"\"")}\""
+    }
 
     companion object {
         private val FILE_STAMP_FORMATTER: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyyMMdd", Locale.ENGLISH)
+        private val FORMULA_PREFIXES = charArrayOf('=', '+', '-', '@')
     }
 }

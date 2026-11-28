@@ -275,9 +275,14 @@ interface ExpenseDao {
           AND type = :type
           AND category = :category
           AND amount = :amount
+          AND syncAction != 'DELETE'
         LIMIT 1
     """)
     suspend fun findDuplicate(date: String, type: String, category: String, amount: Double): ExpenseRecord?
+
+    /** True if a Transaction with this ID is already on the phone (a CSV re-import of its own backup). */
+    @Query("SELECT EXISTS(SELECT 1 FROM expense_records WHERE syncId = :syncId)")
+    suspend fun existsBySyncId(syncId: String): Boolean
 
     /** Past Descriptions of [type] since [since] (yyyy-MM-dd), newest first, for DescriptionSuggestions. */
     @Query("""

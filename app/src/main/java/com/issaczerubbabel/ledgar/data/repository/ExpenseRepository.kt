@@ -43,6 +43,9 @@ interface ExpenseRepository {
     suspend fun deleteAll()
     suspend fun isDuplicate(date: String, type: String, category: String, amount: Double): Boolean
 
+    /** True if a Transaction with this ID is already on the phone. */
+    suspend fun existsBySyncId(syncId: String): Boolean
+
     /** The last year's Descriptions of [type], for DescriptionSuggestions. */
     suspend fun descriptionUses(type: String): List<DescriptionUse>
     suspend fun importFromGoogleSheets(): GoogleSheetsImportResult

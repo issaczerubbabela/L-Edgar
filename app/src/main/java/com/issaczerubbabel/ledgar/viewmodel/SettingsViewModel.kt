@@ -15,6 +15,7 @@ import com.issaczerubbabel.ledgar.data.preferences.DEFAULT_REMINDER_MINUTE_OF_DA
 import com.issaczerubbabel.ledgar.data.preferences.ReminderPreferences
 import com.issaczerubbabel.ledgar.data.preferences.ThemePreferenceRepository
 import com.issaczerubbabel.ledgar.data.remote.ApiService
+import com.issaczerubbabel.ledgar.data.repository.AccountRepository
 import com.issaczerubbabel.ledgar.data.repository.ExpenseRepository
 import com.issaczerubbabel.ledgar.data.repository.SyncConflict
 import com.issaczerubbabel.ledgar.reminder.DailyReminderScheduler
@@ -80,7 +81,8 @@ class SettingsViewModel @Inject constructor(
     private val syncState: SyncStateRepository,
     private val reminderPreferences: ReminderPreferences,
     private val reminderScheduler: DailyReminderScheduler,
-    private val fundRepository: FundRepository
+    private val fundRepository: FundRepository,
+    private val accountRepository: AccountRepository
 ) : ViewModel() {
 
     init {
@@ -390,7 +392,8 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _csvState.value = ImportState.Loading
             try {
-                val result = CsvParser.parse(context, uri)
+                val accounts = accountRepository.getAllAccountsSnapshot()
+                val result = CsvParser.parse(context, uri, accounts)
                 val (imported, dedupSkipped) = insertRecords(result.records)
                 _csvState.value = ImportState.Success(imported, dedupSkipped + result.skippedLines)
             } catch (e: Exception) {
@@ -414,15 +417,16 @@ class SettingsViewModel @Inject constructor(
     // ── Shared helpers ───────────────────────────────────────────────────────
 
     /**
-     * Insert [records] into Room.
-     * Records matching an existing entry (date + type + category + amount)
-     * are skipped to prevent duplicate imports.
+     * Insert [records] into Room. A record with a Transaction ID already on the phone (a CSV
+     * re-import of this app's own backup) is skipped by that ID; one without is skipped by its
+     * content (date + type + category + amount) matching an existing entry.
      * Returns (importedCount, skippedCount).
      */
     private suspend fun insertRecords(records: List<ExpenseRecord>): Pair<Int, Int> {
         var imported = 0; var skipped = 0
         for (record in records) {
-            val isDup = repository.isDuplicate(record.date, record.type, record.category, record.amount)
+            val isDup = record.syncId?.let { repository.existsBySyncId(it) }
+                ?: repository.isDuplicate(record.date, record.type, record.category, record.amount)
             if (isDup) { skipped++ } else { repository.save(record); imported++ }
         }
         return imported to skipped
