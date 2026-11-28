@@ -13,11 +13,11 @@ alert) are defined in [CONTEXT.md](../CONTEXT.md).
 ## 1. What the user sees
 
 1. **Turn it on** in More > Auto-capture: switch capture on, grant notification access (an Android system
-   screen), and allow notifications so confirmations can be asked from a notification. To read HDFC's alert
-   emails too, turn on **Read bank emails** and follow its three Gmail steps (section 3).
+   screen), and allow notifications so confirmations can be asked from a notification. To read HDFC's and Amazon
+   Pay's alert emails too, turn on **Read bank emails** and follow its three Gmail steps (section 3).
 2. **Map categories once.** The app recognises kinds of merchant (food delivery, groceries, fuel and so on)
-   but only ever files into the user's own Categories. The same screen matches each kind to one of them. A
-   kind left unmapped shows "Needs a category".
+   but only ever files into the user's own Categories. The same screen matches each kind to one of them, and
+   cashback to one of their Income Categories. A kind left unmapped shows "Needs a category".
 3. **Alerts arrive.** Each payment from a watched app becomes a pending capture. Its Alerts from different
    Alert sources (the bank's SMS and Google Pay's "<NAME> paid you", say) become **one** capture with the
    bank's Account and Google Pay's payer (section 5). A banner on the Trans screen
@@ -103,7 +103,7 @@ graph TD
     SRC["Watched app notifications<br/>banks, Google Pay, Paytm, Google Messages"] --> L[BankNotificationListener]
     GM["Gmail notifications<br/>known senders, while Read bank emails is on"] -->|"GmailNotification"| L
     L --> ING[CaptureIngestor]
-    ING --> REG["ParserRegistry<br/>HdfcEmail, Cub, Hdfc, Axis, UpiApp, Generic"]
+    ING --> REG["ParserRegistry<br/>HdfcEmail, AmazonPayEmail, Cub, Hdfc, Axis, UpiApp, Generic"]
     REG -->|"ParsedTxn"| CAT[CategorizationPipeline]
     REG -->|"nothing readable, but looks like a bank alert"| UNP[("unparsed_alerts")]
     CAT --> CAP[("captured_transactions<br/>status = PENDING")]
@@ -127,9 +127,9 @@ aliases and unparsed alerts are local only and are not sent to the Sheet.
 | Area | Files |
 | --- | --- |
 | `capture/source` | `BankNotificationListener` (the service), `CaptureApps` (the allowlist and sender rules), `BankEmails` (the email senders read and the Gmail filter), `GmailNotification` (what a Gmail notification gives: sender, subject, preview), `AlertSource` |
-| `capture` | `CaptureIngestor` (parse, dedupe, merge, account lookup, categorize, store), `AlertMerge` (what a payment's Alerts say together), `CaptureSettingsSource`, `CaptureConfirmer` (Confirm with Undo, shared by To review and Edit) |
+| `capture` | `CaptureIngestor` (parse, dedupe, merge, account lookup, categorize, store), `AlertMerge` (what a payment's Alerts say together), `AccountHint` (an Account alias's key: digits or an Alert source), `CaptureKinds` (cashback), `CaptureSettingsSource`, `CaptureConfirmer` (Confirm with Undo, shared by To review and Edit) |
 | `capture/pair` | `SamePaymentMatcher` (one payment's Alerts across sources, ADR-0012), `TransferPairMatcher` (a confirmed Transfer's other half, ADR-0006), `LedgerMatcher` + `LedgerMatchFinder` (the logged Transaction a capture repeats) |
-| `capture/parse` | `ParserRegistry`, `HdfcEmailParser`, `HdfcParser`, `CubParser`, `AxisParser`, `UpiAppParser`, `GenericBankParser`, `ParsingUtils`, `ParsedTxn`, `TxnTime` |
+| `capture/parse` | `ParserRegistry`, `HdfcEmailParser`, `AmazonPayEmailParser`, `HdfcParser`, `CubParser`, `AxisParser`, `UpiAppParser`, `GenericBankParser`, `ParsingUtils`, `ParsedTxn`, `TxnTime` |
 | `capture/categorize` | `MerchantNormalizer`, `KeywordDictionary`, `CategoryResolver`, `CategorizationPipeline`, `MerchantRuleLearner` |
 | `capture/notify` | `CaptureNotifier`, `CaptureActionReceiver`, `CaptureActionHandler`, `CaptureNotificationText` |
 | `data/local` | entities `CapturedTransaction`, `CaptureAlert`, `MerchantRule`, `AccountAlias`, `UnparsedAlert`; matching DAOs; `CaptureMigration` (v18 to v19, v19 to v20, v26 to v27, v28 to v29) |
@@ -167,11 +167,12 @@ Gmail's layout, read off a phone with `dumpsys notification --noredact` on 2026-
 A notification is read only when its title is a sender in `BankEmails` (the display name, or a thread title
 made only of that sender's short names) and its sub text is the user's Gmail label, the one their filter on
 the sender addresses applies. So a lookalike display name from another address, which the filter never
-labels, is not read. `Amazon Pay India` is in the filter already but read only once its parser lands (#181).
+labels, is not read. The senders read are `HDFC Bank InstaAlerts` and `Amazon Pay India` (#181).
 Anything else is dropped in the listener: never parsed, stored, logged or listed under Alerts we couldn't
 read. The ingestor checks the sender and the switch again, and ignores the sender's name from any other app.
 The parser sees the subject, a newline, then the text, as source `EMAIL` with the sender's display name, so
-the Alert source is the bank's email ("Email from HDFC") and merges with its SMS (section 5).
+the Alert source is the bank's email ("Email from HDFC") and merges with its SMS (section 5). Amazon Pay's
+email is "Email from Amazon Pay India".
 
 The setup under the switch asks the user to create a Gmail filter on `alerts@hdfcbank.bank.in OR
 no-reply@amazonpay.in` (with Copy), apply a label and type its name (`Bank alerts` by default), and turn on
@@ -189,9 +190,9 @@ same time, or it would be captured a second time.
 ## 4. Parsing
 
 `ParserRegistry.read` first drops a Not-a-payment alert (section 9), then tries parsers in order and uses
-the first that claims the text: HDFC's emails (by sender), City Union Bank, HDFC, Axis, UPI apps, then a generic fallback. Each returns
-a `ParsedTxn` (amount, direction, merchant, account digits, reference, channel, and the alert's date if
-stated).
+the first that claims the text: HDFC's and Amazon Pay's emails (by sender), City Union Bank, HDFC, Axis, UPI apps, then a generic fallback. Each returns
+a `ParsedTxn` (amount, direction, merchant, account digits or source, reference, channel, the alert's date if
+stated, and its kind when it names one, a cashback).
 
 Formats covered by tests built from real (redacted) alerts:
 
@@ -199,6 +200,7 @@ Formats covered by tests built from real (redacted) alerts:
 | --- | --- |
 | HDFC | UPI send (`Sent Rs.70.00 From HDFC Bank A/C *1234 To Name On 26/09/26 Ref ...`); UPI ATM withdrawal; deposit narration (`INR ... deposited in HDFC Bank A/c XX1234 on 25-SEP-26 for PAYER CREDIT`); `Credit Alert! Rs.X credited to HDFC Bank A/c XX1234 ...`; mandate debit (`UPI Mandate: Sent Rs.X from HDFC Bank A/c 1234 To PAYEE ...`); NEFT (`Amt Deducted! Rs.X from your HDFC Bank A/c XX1234 for NEFT txn ...`); NetBanking (`Payment Successful! Rs. X from A/c **…1234 to PAYEE via HDFC Bank NetBanking`, the payee is the merchant); RD (`RD Booked! Your HDFC Bank RD XX5678 ... for INR X` and `INR X debited from HDFC Bank XX1234 ... Info: RD through MOBILE-…5678`), both debits with the RD's digits as `counterpartyAccountHint`, so an Account alias on the RD can suggest a Transfer |
 | HDFC email | Subject, newline, text, from `HDFC Bank InstaAlerts` only. UPI debit (`Rs.2000.00 is debited from your account ending 1234 towards VPA x@validyes (PAYEE) on 28-11-26. UPI transaction reference no.: ...`, the payee in brackets, else the VPA); debit card (`Rs.2399.00 is debited from your HDFC Bank Debit Card ending 5678 at MERCHANT on 18 Nov, 2026 at 15:47:45`, the card's digits as the Account); IMPS (`INR 47,000.00 has been debited from your account ending xx1234 on 25-11-26 and credited to the account ending xx5678 via IMPS. IMPS Reference No: ...`, the other digits as `counterpartyAccountHint`); UPI credits (`Rs. 1.00 is successfully credited to your account **1234 by VPA x@hdfcbank PAYER on 06-03-26. Your UPI transaction reference number is ...`, and `Rs.5.00 has been successfully credited to your HDFC Bank account ending in 1234. Transaction Details: a. Date: 27-11-26 b. Sender: PAYER(VPA: ...) c. UPI Reference No.: ...`); deposit (`You have received a credit in your HDFC Bank account. ... Amount received: INR 1,23,456.00 Account: XX1234 Date: 26-NOV-2026 Reference Details: PAYER CREDIT`). All read off real emails in 2026. Any other HDFC email is claimed but not read, so it lands under Alerts we couldn't read rather than being guessed at by the SMS parser |
+| Amazon Pay email | Subject, newline, text, from `Amazon Pay India` only. Money spent from Amazon Pay Balance reaches no bank, so these are its only record. Balance payment (subject `Rs 903.00 was paid on Amazon.in`, text `Thank you for using Amazon Pay Balance. ... Order ID 000-0000000-0000000`): a DEBIT, the subject's merchant, the order id as the reference. Gift card (`Amazon Pay Gift Card added to your Amazon Pay balance`, text `... Received Amount Amazon Pay eGift Card ₹833.00 Reference`): a CREDIT from `Amazon Pay eGift Card`, Income unless a Merchant rule says Transfer. Cashback (`Your cashback of ₹25.00 is here!`, text `Yay! Here's ₹25.00 cashback! ...`): a CREDIT of kind `cashback` (section 6) from `Amazon Pay Cashback`. All three are about the balance, so their Account is by source (section 7). A payment that doesn't say `Amazon Pay Balance` (paid by card or UPI, never seen) isn't read: the bank's alert reports it, and the Order ID would keep the two from merging. A gift card email without its `Received Amount` line isn't read either, so no other amount in it is taken. These were all six Amazon Pay emails in the user's mailbox on 2026-11-28, so no offer has been seen: any other Amazon Pay email is claimed but not read, and lands under Alerts we couldn't read. Amazon Pay UPI (the shopping app's notification) isn't read: the bank's alert covers it |
 | City Union Bank | `Your a/c no. XXXXXXXX1234 is credited/debited for Rs.X on 14-09-2026 and debited from/credited to a/c no. ... (UPI Ref no ...)`. Direction is always about "Your a/c"; the other account is only a counterparty hint |
 | Axis | UPI merchant debit, recognised by its `UPI/P2M/<ref>/<merchant>` narration because it never says "Axis"; IMPS credit |
 | Google Pay | Money received: title `NAME paid you ₹1.00`, text `Tap to view.` (CREDIT from NAME). Autopay: title `Payment successful`, text `Payment for Autopay of ₹2,000.00 to PAYEE was successful. Tap to view.` (DEBIT to PAYEE). Read off a real phone on 2026-11-28. Neither names the Account. Offers and cashback (`Up to ₹2,500 in welcome rewards`, `Earn flat ₹11 cashback`) are claimed by the parser but never parse, so they don't fall through to the generic parser |
@@ -270,7 +272,7 @@ punctuation and company words are dropped, and a phone-number handle becomes `P2
 | R1 | A saved Merchant rule exists for the merchant and the bank's direction: its type and Category, while the Category is still one of the user's, or Transfer and its other Account | 0.98 |
 | R2 | History match: the user's past picks for this merchant agree at least 60% of the time | that share, at most 0.89 |
 | NB | Naive Bayes: the on-phone guesser's top Category clears 0.6 | its probability, at most 0.89 |
-| R7 | A keyword matches and its kind is mapped to a Category the user still has | 0.75 |
+| R7 | A keyword matches and its kind is mapped to a Category the user still has, or for a credit the alert names its kind (cashback) and that is mapped to one of the user's Income Categories (checked before R2 and Naive Bayes) | 0.75 |
 | R11 | Anything else: "Needs a category" | none |
 
 Everything runs on the phone with no network (`CategorizationPipeline`, with R2 and Naive Bayes in
@@ -299,6 +301,13 @@ Transfer comes from a rule alone, and past Transfers only feed the Suggested des
   rule stays and is re-taught by Confirms as usual (two overrides replace a learned rule's outcome); a `USER`
   rule changes only when "Always use" is ticked again.
 - **Credits** are Income and get a Category from a rule, R2 or Naive Bayes, never from a keyword.
+- **Cashback** (`CaptureKinds`). An alert can name its own kind: Amazon Pay's cashback email is the kind
+  `cashback`. More > Auto-capture lists it under Categories with the merchant kinds, offering the user's Income
+  Categories, and a mapped kind suggests its Category at R7 (Check); unmapped, or mapped to a Category since
+  deleted, it shows "Needs a category" and records `cashback` as the kind to map. Only a saved rule comes
+  first: the alert says what it is, so R2 and Naive Bayes don't guess over it (on a phone with history, Naive
+  Bayes otherwise guessed an unmapped cashback as a refund). A merged capture keeps the kind from whichever
+  Alert states it.
 - **Bands.** High is 0.90 or more, Check is 0.60 to 0.89, Low is less or no Category. Only a rule reaches
   High ([ADR-0010](adr/0010-only-a-saved-rule-reaches-high.md)), so a history, Naive Bayes or keyword guess is
   always Check: it never notifies and never starts ticked in the bulk sheet (a Ready one is listed unticked).
@@ -348,8 +357,15 @@ Category. Renaming never changes which rule or Category a capture matches.
 
 An **Account alias** maps the account digits in an alert (`1234`) to one of the user's Accounts. There is no
 prompt: a capture with an unknown number shows "Map account". Picking an Account for it and confirming saves
-the alias, and other waiting captures with that number pick the Account up too. Aliases are by last digits
-only; UPI-address aliases are not built.
+the alias, and other waiting captures with that number pick the Account up too. UPI-address aliases are not
+built.
+
+**Aliases by source** (#181). An Alert source with no digits, Amazon Pay Balance's emails, is its own alias:
+the parser gives `AccountHint.AMAZON_PAY_BALANCE` (stored as `source:Amazon Pay Balance`) where digits would
+go, and everything else is the same as for digits. The card shows "Map account" until the first Confirm saves
+"Amazon Pay Balance → <Account>", its picker reads "Account for Amazon Pay Balance" and the card's details
+"Amazon Pay Balance" instead of "XX1234". It lives in `account_aliases` like a digits alias, so no table
+changed, and the `source:` prefix means it can never be taken for digits. It is local only, like every alias.
 
 Aliases are also the own-account signal for **Transfer pairing**: a waiting capture is only taken as a
 Transfer's other half when its digits are an alias of the Transfer's other Account. A Transfer between two
@@ -418,7 +434,7 @@ with those, and a recurring one is worth a phrase in `NotAPayment`.
 | `captured_transactions` | Waiting and resolved captures, including the first alert's text (for an email, its subject and preview) | No |
 | `capture_alerts` | Every Alert a capture was read from, emails included (Room 28 → 29 gave each existing capture its one) | No |
 | `merchant_rules` | Saved and learned rules | No |
-| `account_aliases` | Account digits to Account | No |
+| `account_aliases` | Account digits, or an Alert source with none (Amazon Pay Balance), to Account | No |
 | `unparsed_alerts` | Unreadable alerts, from known email senders too, 30 days | No |
 | DataStore `capture_prefs` | On/off, Read bank emails, the Gmail label, when a bank email was last read, the category mapping | No |
 
@@ -443,7 +459,7 @@ with those, and a recurring one is worth a phrase in `NotAPayment`.
 - **Trying it without a payment** (debug builds only): post a notification as the adb shell, for example
   `adb shell "cmd notification post -S bigtext -t 'HDFC' tag 'Sent Rs.70.00 From HDFC Bank A/C *1234 To Shop On 26/09/26 Ref 11111111111'"`.
   For a shell post the title is the sender, so use a bank-style ID such as `AD-HDFCBK-T` to try the
-  unparsed-alerts list, `Google Pay` for that parser, or `HDFC Bank InstaAlerts` to try the email path (read
+  unparsed-alerts list, `Google Pay` for that parser, or `HDFC Bank InstaAlerts` or `Amazon Pay India` to try the email path (read
   as an email, so Read bank emails must be on). Grant access with
   `adb shell cmd notification allow_listener <package>/com.issaczerubbabel.ledgar.capture.source.BankNotificationListener`.
 - **Release check.** Release builds use R8, which once broke capture. Gson's `TypeToken` needs the generic
@@ -461,7 +477,7 @@ Deliberate omissions and gaps, so nobody assumes otherwise:
 - **Google Pay posts nothing for a payment you send; the bank's alert covers it.** Only money received and
   Autopay come from Google Pay, so City Union Bank's sends, which never name the payee, still have none. Paytm has no sample and is unverified.
 - **Sources.** Only notifications. No SMS permission path. Email only through Gmail's notification, for HDFC's
-  alerts (Amazon Pay Balance is #181), so an email Gmail doesn't notify for (no filter, a different label, or
+  and Amazon Pay's alerts, so an email Gmail doesn't notify for (no filter, a different label, or
   label notifications off) is never seen, and only the text Gmail puts in the notification is read.
 - **Email on a phone.** Gmail's layout was read off a phone, but the whole path (switch, listener, ingest)
   hasn't been watched end to end on one with a real payment. A thread title other than the ones seen (`HDFC,

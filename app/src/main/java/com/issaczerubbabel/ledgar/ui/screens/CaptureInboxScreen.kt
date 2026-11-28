@@ -13,6 +13,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.stateDescription
+import com.issaczerubbabel.ledgar.capture.AccountHint
 import com.issaczerubbabel.ledgar.viewmodel.BulkItem
 import com.issaczerubbabel.ledgar.viewmodel.CaptureDay
 import com.issaczerubbabel.ledgar.viewmodel.CaptureFilter
@@ -348,12 +349,12 @@ fun CaptureInboxScreen(
             onDismiss = { picker = null }
         )
         is Picker.ForAccount -> OptionPickerSheet(
-            title = p.row.capture.accountHint?.let { "Account for XX$it" } ?: "Account",
+            title = p.row.capture.accountHint?.let { "Account for ${AccountHint.label(it)}" } ?: "Account",
             options = accounts.map { PickerOption(it.id.toString(), it.accountName) },
             selectedKey = p.row.accountId?.toString(),
             onSelect = { vm.setAccount(p.row.capture.id, it.toLong()); picker = null },
             onDismiss = { picker = null },
-            manageHint = p.row.capture.accountHint?.let { "We'll remember XX$it for next time." }
+            manageHint = p.row.capture.accountHint?.let { "We'll remember ${AccountHint.label(it)} for next time." }
         )
         is Picker.ForOtherAccount -> OptionPickerSheet(
             title = if (p.row.isDebit) "Transfer to" else "Transfer from",
@@ -854,7 +855,7 @@ private fun CaptureCard(
             Text(
                 listOfNotNull(
                     whenText(capture.capturedAt, capture.txnTime),
-                    capture.accountHint?.let { "XX$it" },
+                    capture.accountHint?.let(AccountHint::label),
                     capture.channel.takeIf { it != "UNKNOWN" }
                 ).joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,

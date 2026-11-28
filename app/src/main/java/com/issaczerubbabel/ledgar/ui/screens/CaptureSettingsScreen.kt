@@ -92,6 +92,7 @@ fun CaptureSettingsScreen(
     val bankEmailLabel by vm.bankEmailLabel.collectAsStateWithLifecycle()
     val mapping by vm.categoryMapping.collectAsStateWithLifecycle()
     val categories by vm.expenseCategories.collectAsStateWithLifecycle()
+    val incomeCategories by vm.incomeCategories.collectAsStateWithLifecycle()
     var mappingFor by remember { mutableStateOf<String?>(null) }
 
     // The user grants access on a system screen, so look again each time we come back.
@@ -247,7 +248,7 @@ fun CaptureSettingsScreen(
                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 Text("Categories", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
-                    "Match the kinds of merchant auto-capture recognises to your own categories. Anything left unmapped shows up as needing a category.",
+                    "Match the kinds of merchant auto-capture recognises, and cashback, to your own categories. Anything left unmapped shows up as needing a category.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -276,7 +277,8 @@ fun CaptureSettingsScreen(
     mappingFor?.let { key ->
         OptionPickerSheet(
             title = humanize(key),
-            options = listOf(PickerOption("", "Not mapped")) + categories.map { PickerOption(it) },
+            options = listOf(PickerOption("", "Not mapped")) +
+                (if (vm.isIncomeKind(key)) incomeCategories else categories).map { PickerOption(it) },
             selectedKey = mapping[key] ?: "",
             onSelect = { vm.mapCategory(key, it.ifEmpty { null }); mappingFor = null },
             onDismiss = { mappingFor = null }
@@ -307,7 +309,7 @@ private fun ReadBankEmails(
             Column(modifier = Modifier.weight(1f)) {
                 Text("Read bank emails", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Reads HDFC's alert emails from Gmail's notifications. Emails from anyone else are ignored.",
+                    "Reads HDFC's and Amazon Pay's alert emails from Gmail's notifications. Emails from anyone else are ignored.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

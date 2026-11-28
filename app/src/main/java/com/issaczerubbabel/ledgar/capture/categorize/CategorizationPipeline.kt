@@ -41,8 +41,10 @@ data class Categorization(
 
 /**
  * The categorizer, all on the phone: an exact merchant rule (R1, the only step that reaches High,
- * ADR-0010), then the [HistoryPredictor]'s history match (R2) and Naive Bayes, both at most Check,
- * then the keyword dictionary (R7, Expenses only), else "needs category" (R11).
+ * ADR-0010); for a credit whose alert names its kind (a cashback,
+ * [com.issaczerubbabel.ledgar.capture.CaptureKinds]), that kind's mapping (R7) or "needs category";
+ * else the [HistoryPredictor]'s history match (R2) and Naive Bayes, both at most Check, then the
+ * keyword dictionary (R7, Expenses only), else "needs category" (R11).
  *
  * A rule only counts while its Category is still one of the user's own (ADR-0005). Rules outlive a
  * Category deleted in the app or renamed in the Sheet, and such a stale rule would file captures
@@ -99,24 +101,31 @@ class CategorizationPipeline(
         /** A guess's own reason, after the note that the saved rule was passed over. */
         fun why(reason: String) = staleRule?.let { "$it · $reason" } ?: reason
 
+        /** R7 for a [kind] mapped to one of the user's Categories of this type, else R11 naming the kind to map. */
+        fun byKind(kind: String, reason: String): Categorization {
+            val category = CategoryResolver.resolve(kind, categoryMapping, categoriesByType[type].orEmpty())
+            return if (category != null) {
+                Categorization(merchantNorm, type, category, 0.75, "R7", why(reason))
+            } else {
+                Categorization(
+                    merchantNorm, type, null, 0.0, "R11", why("$reason matched, but $kind isn't mapped to a category yet"),
+                    unmappedCanonical = kind
+                )
+            }
+        }
+
+        // The alert says what it is (a cashback) and the user mapped that once, so no history guess overrides it.
+        if (type == TransactionType.INCOME && parsed.kind != null) return byKind(parsed.kind, "The alert says ${parsed.kind}")
+
         predictor.categorize(CaptureFacts(merchantNorm, type, parsed.amount, at), rename)?.let { return it.copy(why = why(it.why)) }
 
+        // Credits get a Category from a rule, history or their own kind, never from a keyword.
         if (type == TransactionType.INCOME) {
             return Categorization(merchantNorm, type, null, 0.0, "R11", staleRule ?: "No saved rule for this payer")
         }
 
         val hit = keywords.match(merchantNorm, parsed.merchantRaw)
             ?: return Categorization(merchantNorm, type, null, 0.0, "R11", staleRule ?: "Nothing recognised")
-
-        val category = CategoryResolver.resolve(hit.canonical, categoryMapping, categoriesByType[TransactionType.EXPENSE].orEmpty())
-        return if (category != null) {
-            Categorization(merchantNorm, type, category, 0.75, "R7", why("Keyword \"${hit.keyword}\""))
-        } else {
-            Categorization(
-                merchantNorm, type, null, 0.0, "R11",
-                why("Keyword \"${hit.keyword}\" matched, but ${hit.canonical} isn't mapped to a category yet"),
-                unmappedCanonical = hit.canonical
-            )
-        }
+        return byKind(hit.canonical, "Keyword \"${hit.keyword}\"")
     }
 }

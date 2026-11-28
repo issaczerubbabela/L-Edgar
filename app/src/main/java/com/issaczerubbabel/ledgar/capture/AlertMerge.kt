@@ -48,7 +48,8 @@ object AlertMerge {
             counterpartyAccountHint = banks.firstNotNullOfOrNull { it.parsed.counterpartyAccountHint },
             refNumber = byArrival.firstNotNullOfOrNull { it.parsed.refNumber },
             channel = (banks + byArrival).map { it.parsed.channel }.firstOrNull { it != Channel.UNKNOWN } ?: Channel.UNKNOWN,
-            txnDate = first.parsed.txnDate
+            txnDate = first.parsed.txnDate,
+            kind = byArrival.firstNotNullOfOrNull { it.parsed.kind }
         )
         return MergedFacts(
             parsed = parsed,
