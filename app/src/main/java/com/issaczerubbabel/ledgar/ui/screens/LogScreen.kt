@@ -116,7 +116,7 @@ fun LogScreen(
                 onSaved()
             } else {
                 val savedDate = vm.lastSavedDate
-                val message = if (savedDate != null && savedDate != LocalDate.now()) {
+                val message = if (savedDate != null && savedDate != vm.today) {
                     "Saved to ${savedDate.format(DateTimeFormatter.ofPattern("EEE, dd MMM"))}"
                 } else {
                     "Transaction saved"
@@ -182,7 +182,7 @@ fun LogScreen(
 
             DatePillRow(
                 date = vm.selectedDate,
-                isToday = vm.selectedDate == LocalDate.now(),
+                isToday = vm.selectedDate == vm.today,
                 contextText = transferContext,
                 onClick = { showDatePicker = true }
             )
